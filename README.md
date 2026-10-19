@@ -1,78 +1,75 @@
-# Agent Team: PM → Dev → QA
+# Agent Team: PM → Dev → Reviewer
 
-A three-agent software team for Claude Code, managed by you (the lead).
-Agents hand off work through task files in `tasks/`; a hook notifies the next agent whenever a task's status changes.
+One product manager, one developer and one reviewer, installed once and usable on **any project on this laptop**.
+You talk to each agent; they hand work to each other through one central task board.
 
 ```
-You ──talk──► pm ──writes spec──► tasks/TASK-001-*.md  (ready-for-dev)
-                                        │  hook → tasks/.inbox/dev.md + desktop notification
-You ──talk──► dev ──builds + unit tests──► (ready-for-qa)
-                                        │  hook → tasks/.inbox/qa.md
-You ──talk──► qa ──e2e tests──► done  ─or─  changes-requested ──► back to dev
+You ──► pm ──interviews you until nothing is unknown──► task (project: ~/code/my-api)
+              readiness check passes + you approve ──► ready-for-dev ──► notifies dev
+You ──► dev ──works in the task's project: simplest code that fits + unit tests──► ready-for-review
+You ──► reviewer ──business need · consistency · simplicity──► done   or   changes-requested ──► dev
 ```
 
-## Setup (once)
-
-1. In this folder run `./setup.sh` — it copies `claude-config/` into `.claude/` and runs `git init` if needed.
-   (To use an existing repo instead, copy this folder's contents into its root and run `./setup.sh` there.)
-2. Requirements: Claude Code, Python 3.8+, git. Nothing to pip install.
-3. Add `tasks/.inbox/` to `.gitignore` (notifications are local); commit everything else.
-
-## Daily use — one terminal per agent
-
-Open three terminal tabs in the repo and start each agent:
+## Install (once, and again after changing anything in this folder)
 
 ```bash
-claude --agent pm     # tab 1
-claude --agent dev    # tab 2
-claude --agent qa     # tab 3
+bash ~/agent-team/install.sh        # wherever this folder lives
 ```
 
-Then just talk to each one:
+It puts the agents and `/board`, `/ship` into `~/.claude/`, and adds the task hook to
+`~/.claude/settings.json` (your existing settings are kept; a backup is saved as `settings.json.bak`).
+If you move this folder, run `install.sh` again from the new place.
+
+Requirements: Claude Code, Python 3, git. Each project must be a git repository.
+
+## Daily use
+
+Open three terminals in the folder that holds your projects (e.g. `~/code`) — the agents can then
+work in any project under it without permission prompts:
+
+```bash
+claude --agent pm         # tab 1
+claude --agent dev        # tab 2
+claude --agent reviewer   # tab 3
+```
 
 | Tab | You say | What happens |
 |-----|---------|--------------|
-| pm  | "Users need to reset their password by email." | PM interviews you, writes `TASK-001`, shows you the spec. |
-| pm  | "Approved." | Status → `ready-for-dev`; dev gets notified. |
-| dev | "Check your inbox." | Dev claims TASK-001, codes on `task/TASK-001-…`, hands to QA. |
-| qa  | "Check your inbox." | QA writes e2e tests per acceptance criterion → `done` or `changes-requested`. |
+| pm | "In `~/code/my-api`: users need to reset their password by email." | PM studies that project, then asks you questions in rounds (with suggested answers) until nothing is unknown. |
+| pm | "approved" | Readiness check runs. Pass → `ready-for-dev`, dev notified. Fail → back to `draft`, with the reasons. |
+| dev | "Check your inbox." | Dev sees tasks from every project, goes to the task's project, builds exactly what's asked (KISS, consistent with that codebase), self-reviews, hands off. |
+| reviewer | "Check your inbox." | Reviewer reads the change in that project and checks business need, consistency, simplicity → `done` or `changes-requested`. |
 
-From any tab (or a fourth "lead" tab):
+- `/board` (in any tab): every task across all projects, plus anything blocked or waiting on you.
+- `/ship TASK-007`: runs dev → reviewer (→ dev …, max 3 rounds) automatically.
+- **Between tasks**, type `/clear` in the dev and reviewer tabs so nothing carries over from another project.
+- Want two projects moving at once? Open a second `claude --agent dev` tab — same agent, separate task.
 
-- `/board` — overview of all tasks, plus anything blocked or done waiting on you.
-- `/ship TASK-001` — hands-off mode: runs dev → qa (→ dev …, max 3 rounds) automatically as subagents.
+## Prefer a browser?
 
-## How the pieces fit
+`bash console/start.sh` opens the **Team Console** at http://127.0.0.1:8420: chat with each agent,
+approve their actions, start and stop them, and see tasks, inboxes and history. See `console/README.md`.
 
-| File | Role |
-|------|------|
-| `CLAUDE.md` | Shared rules + lifecycle every agent obeys |
-| `claude-config/` → `.claude/` | Source for the config below; `setup.sh` installs it |
-| `.claude/agents/{pm,dev,qa}.md` | Each agent's persona, duties and limits |
-| `.claude/settings.json` | Registers the status-change hook |
-| `.claude/commands/{board,ship}.md` | Lead slash commands |
-| `tasks/_TEMPLATE.md` | Task spec template (PM fills top, Dev Log & QA Report below) |
-| `tasks/BOARD.md` | Auto-generated kanban view |
-| `scripts/on_task_change.py` | Hook: routes notifications, regenerates the board |
-| `scripts/inbox.py <role>` | What's waiting for a role |
-| `scripts/new_task.py "<title>"` | Creates the next numbered task |
+## What lives where
 
-**Notification routing:** `ready-for-dev`, `changes-requested` → dev · `ready-for-qa` → qa · `blocked`, `done` → lead.
-
-## Customise
-
-- **E2E stack:** edit step 3 in `.claude/agents/qa.md` (default Playwright for web, HTTP client for APIs).
-- **Models:** change `model:` in each agent file (e.g. `sonnet` for dev to save cost).
-- **Permissions:** add an allow-list to `.claude/settings.json` so agents don't prompt for every `git`/test command.
-- **Fully automatic dev pickup:** run `watch -n 30 python3 scripts/inbox.py dev --keep` in a pane, or schedule `claude -p --agent dev "Check your inbox and work the top task"` with cron.
-
-## Run the app (FastAPI)
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt   # runtime deps only: requirements.txt
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
-curl http://127.0.0.1:8000/                     # → {"message":"Hello World"}
+```
+agent-team/               ← this folder: the only copy of the agents and rules
+├── TEAM.md               shared rules + lifecycle every agent follows
+├── agents/               pm.md · dev.md · reviewer.md   (installed into ~/.claude/agents)
+├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
+├── templates/TASK.md     task spec template
+├── scripts/              new_task · inbox · board · check_ready · on_task_change
+├── tasks/                ← the central board: TASK-*.md for all projects + BOARD.md
+├── console/              ← the Team Console web app (optional)
+└── install.sh
 ```
 
-Run unit tests: `.venv/bin/pytest`
+Your projects get nothing from the kit — only the dev's commits on `task/TASK-…` branches.
+Each task records `project:` (its folder) and `base:` (the branch it starts from and is reviewed against; main/master detected automatically).
+
+**Routing:** `ready-for-dev`, `changes-requested` → dev · `ready-for-review` → reviewer · `blocked`, `done` → you.
+
+## Uninstall
+
+Delete `~/.claude/agents/{pm,dev,reviewer}.md` and `~/.claude/commands/{board,ship}.md`, and remove the
+`on_task_change.py` hook and the agent-team entries under `permissions` in `~/.claude/settings.json`.

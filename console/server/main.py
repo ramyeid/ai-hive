@@ -1,0 +1,247 @@
+"""Agent Team Console: a local web app to run and manage the pm / dev / reviewer agents.
+
+Run with ./start.sh — it serves http://127.0.0.1:8420 (this machine only).
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import secrets
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+from . import board, store
+from .agents import AGENTS, AgentManager
+from .store import CONSOLE
+
+TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
+LOCAL_HOSTS = {"127.0.0.1", "localhost"}
+WEB = CONSOLE / "web"
+
+
+# ---- request bodies ---------------------------------------------------------------
+
+class StartBody(BaseModel):
+    resume: str | None = None
+
+
+class MessageBody(BaseModel):
+    text: str
+
+
+class DecisionBody(BaseModel):
+    decision: str          # allow | always | deny
+    message: str = ""
+
+
+class ModeBody(BaseModel):
+    mode: str              # default | acceptEdits
+
+
+class SettingsBody(BaseModel):
+    workspace: str
+
+
+def create_app(manager: AgentManager | None = None) -> FastAPI:
+    manager = manager or AgentManager()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        watcher = asyncio.create_task(_watch_board(manager))
+        yield
+        watcher.cancel()
+        await manager.stop_all()
+
+    app = FastAPI(title="Agent Team Console", lifespan=lifespan)
+    app.state.manager = manager
+
+    @app.middleware("http")
+    async def local_only(request: Request, call_next):
+        # Blocks other websites from driving your agents (DNS rebinding / CSRF).
+        host = (request.headers.get("host") or "").split(":")[0]
+        if host not in LOCAL_HOSTS:
+            return JSONResponse({"detail": "Local access only."}, status_code=403)
+        if request.url.path.startswith("/api/"):
+            token = request.headers.get("x-token") or request.query_params.get("token")
+            if not secrets.compare_digest(token or "", TOKEN):
+                return JSONResponse({"detail": "Reload the page."}, status_code=401)
+        return await call_next(request)
+
+    def runner(name: str):
+        if name not in AGENTS:
+            raise HTTPException(404, f"No agent called {name}.")
+        return manager.get(name)
+
+    # ---- page --------------------------------------------------------------------
+
+    @app.get("/", response_class=HTMLResponse)
+    async def index():
+        html = (WEB / "index.html").read_text(encoding="utf-8")
+        return html.replace("__TOKEN__", TOKEN)
+
+    app.mount("/static", StaticFiles(directory=WEB), name="static")
+
+    # ---- state & live events -------------------------------------------------------
+
+    @app.get("/api/state")
+    async def state():
+        return {"agents": [r.info() for r in manager.agents.values()],
+                "settings": store.load_settings(), "kit": str(store.KIT)}
+
+    @app.get("/api/events")
+    async def events(request: Request):
+        queue = manager.bus.subscribe()
+
+        async def stream():
+            try:
+                yield "retry: 2000\n\n"
+                while not await request.is_disconnected():
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=15)
+                        yield f"data: {json.dumps(event, default=str)}\n\n"
+                    except asyncio.TimeoutError:
+                        yield ": keep-alive\n\n"
+            finally:
+                manager.bus.unsubscribe(queue)
+
+        return StreamingResponse(stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache"})
+
+    # ---- agents ----------------------------------------------------------------------
+
+
+    async def _do(action):
+        try:
+            await action
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc))
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(500, f"Couldn't reach Claude Code: {exc}")
+
+    @app.post("/api/agents/{name}/start")
+    async def start(name: str, body: StartBody):
+        await _do(runner(name).start(resume=body.resume))
+        return runner(name).info()
+
+    @app.post("/api/agents/{name}/stop")
+    async def stop(name: str):
+        await _do(runner(name).stop())
+        return runner(name).info()
+
+    @app.post("/api/agents/{name}/new")
+    async def new(name: str):
+        await _do(runner(name).new_session())
+        return runner(name).info()
+
+    @app.post("/api/agents/{name}/interrupt")
+    async def interrupt(name: str):
+        await _do(runner(name).interrupt())
+        return runner(name).info()
+
+    @app.post("/api/agents/{name}/message")
+    async def message(name: str, body: MessageBody):
+        if not body.text.strip():
+            raise HTTPException(400, "Write a message first.")
+        await _do(runner(name).send(body.text.strip()))
+        return runner(name).info()
+
+    @app.post("/api/agents/{name}/permissions/{pid}")
+    async def decide(name: str, pid: str, body: DecisionBody):
+        if body.decision not in ("allow", "always", "deny"):
+            raise HTTPException(400, "Decision must be allow, always or deny.")
+        try:
+            runner(name).decide(pid, body.decision, body.message)
+        except KeyError:
+            raise HTTPException(404, "That request was already answered.")
+        return runner(name).info()
+
+    @app.put("/api/agents/{name}/mode")
+    async def mode(name: str, body: ModeBody):
+        try:
+            store.save_settings({"permission_mode": {runner(name).name: body.mode}})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        await _do(runner(name).set_permission_mode(body.mode))
+        return store.load_settings()
+
+    # ---- history ---------------------------------------------------------------------
+
+    @app.get("/api/sessions")
+    async def sessions(agent: str | None = None):
+        return store.list_sessions(agent)
+
+    @app.get("/api/sessions/{session_id}")
+    async def session(session_id: str):
+        meta = store.get_session(session_id)
+        if not meta:
+            raise HTTPException(404, "Session not found.")
+        return {"id": session_id, **meta, "events": store.read_events(session_id)}
+
+    # ---- board -------------------------------------------------------------------------
+
+    @app.get("/api/dashboard")
+    async def dashboard():
+        data = board.summary()
+        sessions = store.list_sessions()
+        data["cost_usd"] = round(sum(s.get("cost_usd") or 0 for s in sessions), 2)
+        data["sessions"] = sessions[:8]
+        return data
+
+    @app.get("/api/tasks")
+    async def tasks():
+        return board.list_tasks()
+
+    @app.get("/api/tasks/{task_id}")
+    async def task(task_id: str):
+        found = board.get_task(task_id)
+        if not found:
+            raise HTTPException(404, "Task not found.")
+        return found
+
+    @app.get("/api/inbox/{role}")
+    async def inbox(role: str):
+        if role not in board.ROLES:
+            raise HTTPException(404, "Unknown inbox.")
+        return board.inbox(role)
+
+    @app.post("/api/inbox/{role}/clear")
+    async def clear(role: str):
+        if role not in board.ROLES:
+            raise HTTPException(404, "Unknown inbox.")
+        board.clear_inbox(role)
+        return board.inbox(role)
+
+    # ---- settings ----------------------------------------------------------------------
+
+
+    @app.put("/api/settings")
+    async def settings(body: SettingsBody):
+        try:
+            return store.save_settings({"workspace": body.workspace})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+    return app
+
+
+async def _watch_board(manager: AgentManager) -> None:
+    """Tell open pages to refresh when a task or inbox file changes on disk."""
+    last = board.signature()
+    while True:
+        await asyncio.sleep(1.5)
+        try:
+            current = board.signature()
+        except OSError:
+            continue
+        if current != last:
+            last = current
+            manager.bus.publish({"kind": "board"})
+
+
+app = create_app()
