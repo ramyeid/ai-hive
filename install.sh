@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the pm / dev / reviewer agents for every project on this laptop.
+# Installs the pm / dev / reviewer agents for every project on this machine.
 # Safe to re-run after any change to this kit (or after moving the kit folder).
 set -euo pipefail
 
@@ -10,7 +10,6 @@ mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox"
 # Agents and slash commands, with this kit's absolute path filled in.
 for f in "$KIT"/agents/*.md;   do sed "s#{{KIT}}#$KIT#g" "$f" > "$CLAUDE_DIR/agents/$(basename "$f")";   done
 for f in "$KIT"/commands/*.md; do sed "s#{{KIT}}#$KIT#g" "$f" > "$CLAUDE_DIR/commands/$(basename "$f")"; done
-rm -f "$CLAUDE_DIR/agents/qa.md"
 
 # Merge the task hook and permissions into ~/.claude/settings.json (keeps everything else).
 python3 - "$KIT" "$CLAUDE_DIR/settings.json" <<'PY'

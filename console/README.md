@@ -6,7 +6,7 @@ talk to each agent, approve what it wants to do, follow tasks across projects, r
 ## Start it
 
 ```bash
-bash ~/Desktop/agent-team/console/start.sh
+bash console/start.sh        # from the repository folder
 ```
 
 The first run creates a Python environment and installs three packages (about a minute).
@@ -14,7 +14,7 @@ Then it opens **http://127.0.0.1:8420** in your browser. Stop it with Ctrl+C.
 
 Requirements:
 - `install.sh` has been run once (it adds the task hook the agents rely on).
-- Python 3.10 or newer (`brew install python@3.12` if you don't have it).
+- Python 3.10 or newer (macOS: `brew install python@3.12`).
 - You're logged in to Claude Code (`claude` works in your terminal). The console uses that same login.
 
 ## What you can do

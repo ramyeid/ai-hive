@@ -1,7 +1,7 @@
 # Agent Team: PM → Dev → Reviewer
 
-One product manager, one developer and one reviewer, installed once and usable on **any project on this laptop**.
-You talk to each agent; they hand work to each other through one central task board.
+One product manager, one developer and one reviewer for Claude Code, installed once and usable on **any project on your machine**.
+You talk to each agent; they hand work to each other through one task board.
 
 ```
 You ──► pm ──interviews you until nothing is unknown──► task (project: ~/code/my-api)
@@ -10,17 +10,26 @@ You ──► dev ──works in the task's project: simplest code that fits + u
 You ──► reviewer ──business need · consistency · simplicity──► done   or   changes-requested ──► dev
 ```
 
-## Install (once, and again after changing anything in this folder)
+## Get started
+
+Requirements: [Claude Code](https://code.claude.com) (logged in), Python 3, git. macOS or Linux.
 
 ```bash
-bash ~/agent-team/install.sh        # wherever this folder lives
+git clone git@github.com:ramyeid/team-agents.git ~/team-agents
+bash ~/team-agents/install.sh
 ```
 
-It puts the agents and `/board`, `/ship` into `~/.claude/`, and adds the task hook to
-`~/.claude/settings.json` (your existing settings are kept; a backup is saved as `settings.json.bak`).
-If you move this folder, run `install.sh` again from the new place.
+`install.sh` puts the agents and the `/board` and `/ship` commands into `~/.claude/`, and adds the task
+hook to `~/.claude/settings.json`. Your existing settings are kept, and a backup is saved as `settings.json.bak`.
+It overwrites any personal agents or commands with the same names (`pm`, `dev`, `reviewer`, `board`, `ship`).
 
-Requirements: Claude Code, Python 3, git. Each project must be a git repository.
+**Updating:** `git pull`, then run `install.sh` again. Do the same if you move the folder.
+
+**Your board is yours.** `tasks/` and the console's `data/` stay on your machine and are not committed:
+task files hold paths from your laptop and details of your projects. Each person has their own board.
+
+**Changing an agent:** edit the files in `agents/`, `TEAM.md` or `templates/`, run `install.sh`, and open a pull
+request so everyone gets the improvement.
 
 ## Daily use
 
@@ -53,13 +62,13 @@ approve their actions, start and stop them, and see tasks, inboxes and history. 
 ## What lives where
 
 ```
-agent-team/               ← this folder: the only copy of the agents and rules
+team-agents/              ← this repository: the only copy of the agents and rules
 ├── TEAM.md               shared rules + lifecycle every agent follows
 ├── agents/               pm.md · dev.md · reviewer.md   (installed into ~/.claude/agents)
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
 ├── templates/TASK.md     task spec template
 ├── scripts/              new_task · inbox · board · check_ready · on_task_change
-├── tasks/                ← the central board: TASK-*.md for all projects + BOARD.md
+├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md (not committed)
 ├── console/              ← the Team Console web app (optional)
 └── install.sh
 ```

@@ -1,2 +1,9 @@
-tasks/.inbox/
+# Personal: each person's task board, notifications and activity log
+tasks/
+
+# Python
 __pycache__/
+*.pyc
+
+# macOS
+.DS_Store

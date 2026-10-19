@@ -14,7 +14,10 @@ if [ ! -x .venv/bin/python ]; then
     fi
   done
   if [ -z "$PY" ]; then
-    echo "Python 3.10 or newer is required. Install it with:  brew install python@3.12"; exit 1
+    echo "Python 3.10 or newer is required."
+    echo "  macOS:          brew install python@3.12"
+    echo "  Ubuntu/Debian:  sudo apt install python3.12 python3.12-venv"
+    exit 1
   fi
   echo "Setting up the console (first run only)…"
   "$PY" -m venv .venv
@@ -22,6 +25,10 @@ if [ ! -x .venv/bin/python ]; then
 fi
 .venv/bin/pip install --quiet -r requirements.txt
 
-( sleep 1.5; command -v open >/dev/null && open "http://127.0.0.1:$PORT" ) &
-echo "Agent Team Console → http://127.0.0.1:$PORT   (Ctrl+C to stop)"
+URL="http://127.0.0.1:$PORT"
+( sleep 1.5
+  if [ "$(uname)" = "Darwin" ]; then open "$URL"
+  elif command -v xdg-open >/dev/null; then xdg-open "$URL" >/dev/null 2>&1
+  fi ) &
+echo "Agent Team Console → $URL   (Ctrl+C to stop)"
 exec .venv/bin/python -m uvicorn server.main:app --host 127.0.0.1 --port "$PORT"
