@@ -26,11 +26,11 @@ approved:               # pm: date the lead explicitly approved the final readba
 <!-- pm: what we are deliberately NOT doing, agreed with the lead -->
 
 ## Reference Implementations
-<!-- pm: existing code the dev MUST read in full before writing anything and take as the model
+<!-- pm: existing code the dev MUST read (the given line ranges) before writing anything and take as the model
      for the new code — follow its patterns and style, NOT a literal copy. Shared logic gets
      reused/extracted, never duplicated.
      At least one row. Paths in backticks are checked automatically and must exist:
-       - relative to the project folder (`app/main.py`), or
+       - relative to the project folder, with the lines that show the pattern (`app/main.py:12-58`), or
        - absolute, for a similar project elsewhere on this machine (`/Users/me/proj/app/routers/users.py`), or
        - a URL.
      Only if nothing comparable exists anywhere: one row containing NEW PATTERN, with the
@@ -45,7 +45,8 @@ approved:               # pm: date the lead explicitly approved the final readba
      typing, tests (location, naming, fixtures), dependencies allowed. -->
 
 ## Technical Notes
-<!-- pm: constraints, affected areas, links. dev may append. -->
+<!-- pm: your research, so nobody repeats it: files and places to change (with line ranges),
+     where things are registered/configured, test setup and the commands to run. dev may append. -->
 
 ## Clarifications
 <!-- pm: every question asked and the lead's answer, in order. The audit trail of decisions. -->

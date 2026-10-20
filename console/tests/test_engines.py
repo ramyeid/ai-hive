@@ -157,7 +157,7 @@ def main():
         c.put("/api/agents/dev/config", json={"provider": "claude", "model": ""}, headers=H)
         c.post("/api/agents/dev/message", json={"text": "hello claude"}, headers=H)
         info = wait(c, "dev", lambda a: a["pending"], "Claude approval")
-        check(info["provider"] == "claude" and info["model"] == "opus", "Claude uses the agent file's model by default")
+        check(info["provider"] == "claude" and info["model"] == "sonnet", "Claude uses the agent file's model by default")
         c.post(f"/api/agents/dev/permissions/{info['pending'][0]['id']}", json={"decision": "allow"}, headers=H)
         wait(c, "dev", lambda a: a["status"] == "idle", "Claude turn")
         c.post("/api/agents/dev/stop", headers=H)
