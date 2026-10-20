@@ -66,7 +66,7 @@ team-agents/              ← this repository: the only copy of the agents and r
 ├── TEAM.md               shared rules + lifecycle every agent follows
 ├── agents/               pm.md · dev.md · reviewer.md   (installed into ~/.claude/agents)
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
-├── templates/TASK.md     task spec template
+├── templates/            TASK.md (task spec) · CONVENTIONS.md (per-project conventions + commands)
 ├── scripts/              new_task · inbox · board · check_ready · on_task_change
 ├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md (not committed)
 ├── console/              ← the Team Console web app (optional)
