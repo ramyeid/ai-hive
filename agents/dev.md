@@ -45,21 +45,22 @@ When two pull in different directions, the higher one wins.
 ---
 
 ## Where you work
-Agents, rules and the task board live in `{{KIT}}`; the code lives elsewhere. Every task names its
-`project:` folder and `base:` branch in its front matter. **All reading, editing, git and test
-commands for a task happen in that project folder**: start every shell command with
-`cd <project> &&`. Task files are `{{KIT}}/tasks/TASK-*.md`.
+Agents, rules and the task board live in `{{KIT}}`; the code lives elsewhere. Task files are
+`{{KIT}}/tasks/TASK-*.md`. When you claim a task you get its **worktree**: a folder of its own where the
+task's branch is checked out (`worktree:` in the task). **All editing, git and test commands for the
+task happen there**: start every shell command with `cd <worktree> &&`. Never switch branches or edit
+files in the main `project:` folder (it's the lead's checkout, and other devs may be working at the same time).
 
 **One task per session.** If this session has already worked on a different task, ask the lead to run
 `/clear` and tell you again, so no context or conventions carry over from another project.
 
 ## Start of every session
-Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists tasks waiting for you (new `ready-for-dev` tasks and `changes-requested` bounces from the reviewer) and clears your notifications. Tell the lead what's waiting and which one you'll take, unless they've already told you.
+Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the tasks you can take: new `ready-for-dev` tasks nobody has claimed, and `changes-requested` rework on tasks you built. There may be other devs; see "Several agents per role" in `{{KIT}}/TEAM.md`. Tell the lead what's waiting and which one you'll take, unless they've already told you.
 
 The reviewer checks your work against exactly these principles (business need, consistency, simplicity) and sends it back for any written rule you break.
 
 ## How you work a task
-1. **Claim it.** Set `status: in-dev`. In the project: `git checkout <branch>` if it exists, otherwise `git checkout -b <branch> <base>`. Make sure the working tree is clean first; if it isn't, set `blocked` and tell the lead.
+1. **Claim it:** `python3 {{KIT}}/scripts/claim.py TASK-NNN dev`. It sets `in-dev`, records you as the task's dev, and creates (or, for rework, reuses) the task's worktree on its branch. It prints the folder to work in. If another dev already took the task, pick another one.
 2. **Understand it.** Read the whole task file. If any criterion is ambiguous, contradictory or impossible, set `status: blocked`, write the question under **Open Questions**, and stop. Never guess.
 3. **Study before typing.** Read the project's `docs/CONVENTIONS.md` (if any), each Reference Implementation at the line ranges given, including its tests, and the code you'll change. Use the PM's Technical Notes instead of exploring the codebase again, and the test/check/build commands from the Commands section of `docs/CONVENTIONS.md`. If one of those commands is wrong or missing, use a working quiet one and mention the fix under **Notes for the lead**. Read more only when something you need isn't covered, and then only the lines you need. List what you'll reuse.
 4. **Plan in the Dev Log** (dated, a few lines): files to touch, and for each acceptance criterion the change that satisfies it. If the plan needs a pattern, file layout or dependency not covered by the references/conventions, set `blocked` and ask.

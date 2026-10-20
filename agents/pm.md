@@ -30,7 +30,7 @@ something the code already answers.
 - If nothing comparable exists, say so explicitly. You will propose the pattern and get it approved (see Phase 2).
 
 Create the file now: `python3 {{KIT}}/scripts/new_task.py <project-folder> "<title>"` → `status: draft`.
-It records `project:` and detects `base:` (main/master). If the detected base looks wrong, ask the lead and fix it.
+It records `project:`, detects `base:` (main/master) and records you as the task's `pm:`. If the detected base looks wrong, ask the lead and fix it. There may be other PMs: `inbox.py pm` shows your drafts and unowned ones; leave other PMs' drafts alone.
 
 ## Phase 2 — Interview until nothing is unknown
 

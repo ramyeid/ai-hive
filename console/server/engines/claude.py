@@ -42,6 +42,7 @@ class ClaudeCodeEngine(AgentEngine):
             disallowed_tools=["AskUserQuestion"],  # questions come to you as chat text
             resume=claude_session,
             include_partial_messages=True,  # stream thinking and replies as they're written
+            env={"AGENT_ID": cfg.agent},    # the kit's scripts use it for inbox and claims
         )
         self.client = self.client_factory(options)
         await self.client.connect()

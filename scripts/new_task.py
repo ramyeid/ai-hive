@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import ROOT, TASKS, task_files
+from tasklib import ROOT, TASKS, agent_id, lock, task_files
 
 
 def base_branch(project: Path) -> str:
@@ -33,21 +33,21 @@ def main() -> None:
 
     title = " ".join(sys.argv[2:]).strip()
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
-    nums = [int(m.group(1)) for p in task_files()
-            if (m := re.match(r"TASK-(\d+)", p.name))]
-    tid = f"TASK-{(max(nums) + 1) if nums else 1:03d}"
-
-    body = (ROOT / "templates" / "TASK.md").read_text(encoding="utf-8")
-    body = (body.replace("TASK-000-short-slug", f"{tid}-{slug}")
-                .replace("TASK-000", tid)
-                .replace("Short imperative title", title)
-                .replace("PROJECT_PATH", str(project))
-                .replace("BASE_BRANCH", base_branch(project))
-                .replace("YYYY-MM-DD", dt.date.today().isoformat()))
-
-    TASKS.mkdir(parents=True, exist_ok=True)
-    path = TASKS / f"{tid}-{slug}.md"
-    path.write_text(body, encoding="utf-8")
+    base = base_branch(project)
+    with lock():   # two PMs creating tasks at once must not get the same number
+        nums = [int(m.group(1)) for p in task_files()
+                if (m := re.match(r"TASK-(\d+)", p.name))]
+        tid = f"TASK-{(max(nums) + 1) if nums else 1:03d}"
+        body = (ROOT / "templates" / "TASK.md").read_text(encoding="utf-8")
+        body = (body.replace("TASK-000-short-slug", f"{tid}-{slug}")
+                    .replace("TASK-000", tid)
+                    .replace("Short imperative title", title)
+                    .replace("PROJECT_PATH", str(project))
+                    .replace("BASE_BRANCH", base)
+                    .replace("PM_ID", agent_id("pm"))
+                    .replace("YYYY-MM-DD", dt.date.today().isoformat()))
+        path = TASKS / f"{tid}-{slug}.md"
+        path.write_text(body, encoding="utf-8")
     print(path)
 
 

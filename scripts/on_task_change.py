@@ -3,7 +3,8 @@
 
 Wired up in .claude/settings.json for Write|Edit|MultiEdit. Reads the hook
 payload from stdin, and if the edited file is a task whose status changed:
-  * appends a line to tasks/.inbox/<role>.md (role from ROUTING)
+  * appends a line to tasks/.inbox/<role>.md (shared pool), or .inbox/agents/<id>.md for rework
+    and re-reviews, which go back to the same dev / reviewer
   * fires a desktop notification (macOS / Linux) if available
   * regenerates tasks/BOARD.md
 Never blocks the agent: always exits 0.
@@ -45,24 +46,24 @@ def log_activity(meta: dict, previous: str | None, status: str) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-def main() -> None:
-    try:
-        payload = json.load(sys.stdin)
-    except json.JSONDecodeError:
-        return
-    fp = (payload.get("tool_input") or {}).get("file_path", "")
-    path = Path(fp).resolve() if fp else None
-    if not path or path.parent != TASKS or not path.name.startswith("TASK-"):
-        return
-    if not path.exists():
-        return
+def recipient(meta: dict, status: str) -> str | None:
+    """Who gets notified: rework goes back to the dev who built it, a re-review to the same
+    reviewer; new work goes to the role's shared pool (any dev / any reviewer can claim it)."""
+    if status == "changes-requested" and meta.get("dev"):
+        return "@" + meta["dev"]
+    if status == "ready-for-review" and meta.get("reviewer"):
+        return "@" + meta["reviewer"]
+    return ROUTING.get(status)
 
+
+def process(path: Path) -> int:
+    """Handle a task file that may have changed status. Returns 2 if the change was refused."""
     meta = parse(path)
     tid, status = meta.get("id", path.stem), meta.get("status", "")
     state = load_state()
     previous = state.get(tid)
     if status == previous:
-        return
+        return 0
 
     # Definition-of-Ready gate: nothing reaches dev with open questions.
     if status == "ready-for-dev":
@@ -82,17 +83,32 @@ def main() -> None:
     save_state(state)
     log_activity(meta, previous, status)
 
-    role = ROUTING.get(status)
-    if role:
-        INBOX.mkdir(parents=True, exist_ok=True)
+    to = recipient(meta, status)
+    if to:
+        # A role name means its shared pool (.inbox/dev.md); an agent ID its own inbox.
+        target = INBOX / "agents" / f"{to[1:]}.md" if to.startswith("@") else INBOX / f"{to}.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
         stamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         line = (f"- [{stamp}] **{tid}** [{project_name(meta)}] {meta.get('title', '')} → `{status}`"
                 f" (was `{previous or 'new'}`) — {path}\n")
-        with (INBOX / f"{role}.md").open("a", encoding="utf-8") as f:
+        with target.open("a", encoding="utf-8") as f:
             f.write(line)
-        desktop_notify(f"{role.upper()}: {tid} [{project_name(meta)}]", f"{meta.get('title', '')} → {status}")
+        desktop_notify(f"{to.lstrip('@').upper()}: {tid} [{project_name(meta)}]", f"{meta.get('title', '')} → {status}")
 
     board.write_board()
+    return 0
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        return 0
+    fp = (payload.get("tool_input") or {}).get("file_path", "")
+    path = Path(fp).resolve() if fp else None
+    if not path or path.parent != TASKS or not path.name.startswith("TASK-") or not path.exists():
+        return 0
+    return process(path)
 
 
 if __name__ == "__main__":

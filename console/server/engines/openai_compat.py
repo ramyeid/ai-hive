@@ -37,7 +37,7 @@ class OpenAICompatibleEngine(AgentEngine):
         self.transport = transport
         self.http: httpx.AsyncClient | None = None
         self.messages: list[dict] = []
-        self.tools = Toolbox(config.workspace, config.kit)
+        self.tools = Toolbox(config.workspace, config.kit, env={"AGENT_ID": config.agent})
         self.task: asyncio.Task | None = None
         self.interrupted = False
         self.usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "started": 0.0}

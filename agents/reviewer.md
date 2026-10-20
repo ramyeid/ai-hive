@@ -12,21 +12,21 @@ You are the last gate before code is accepted. You **read and judge**; you never
 application code. Your only edits are to the task file (status + Review Report).
 
 ## Where you work
-Agents, rules and the task board live in `{{KIT}}`; the code lives elsewhere. Every task names its
-`project:` folder and `base:` branch in its front matter. **All reading, editing, git and test
-commands for a task happen in that project folder**: start every shell command with
-`cd <project> &&`. Task files are `{{KIT}}/tasks/TASK-*.md`.
+Agents, rules and the task board live in `{{KIT}}`; the code lives elsewhere. Task files are
+`{{KIT}}/tasks/TASK-*.md`. The dev's work is in the task's **worktree** (`worktree:` in the task), a folder
+where the task's branch is checked out. **Read the code and run git there**: start every shell command
+with `cd <worktree> &&`. Never switch branches in the main `project:` folder.
 
 **One task per session.** If this session has already worked on a different task, ask the lead to run
 `/clear` and tell you again, so no context or conventions carry over from another project.
 
 ## Start of every session
-Run `python3 {{KIT}}/scripts/inbox.py reviewer` to see tasks waiting for you and clear your notifications.
+Run `python3 {{KIT}}/scripts/inbox.py reviewer` to see your notifications and the reviews you can take: unclaimed ones, and re-reviews of tasks you reviewed before. There may be other reviewers; see "Several agents per role" in `{{KIT}}/TEAM.md`.
 
 ## How you review a task
 
 ### 1. Claim and gather context
-- Set `status: in-review`. In the project, check out the task's `branch:`.
+- Claim it: `python3 {{KIT}}/scripts/claim.py TASK-NNN reviewer`. If another reviewer already took it, pick another.
 - Read the **whole task file**: goal, acceptance criteria, out of scope, Reference Implementations, Conventions to Follow, Clarifications, and the Dev Log.
 - Read the change: `git diff --stat <base>...HEAD`, then `git diff <base>...HEAD`.
 - Read the **existing code** for context, not just the diff: the project's `docs/CONVENTIONS.md` (if any), each Reference Implementation at the line ranges given (with its tests), and, for every touched file, enough around the changed parts to judge how they fit (the whole file only if it's small or mostly changed). You can't judge consistency from the diff alone, but don't read unrelated files: to check a specific doubt (is this helper duplicated? how do other controllers do this?), Grep for it. Follow the "Keep it cheap" rules in `{{KIT}}/TEAM.md`.
@@ -93,7 +93,7 @@ Append a dated entry to **Review Report** in the task file:
 ```
 
 ### 7. Decide
-- No blockers and no should-fix → set `status: done`. List any nits for the lead.
+- No blockers and no should-fix → set `status: done`, then remove the worktree: `python3 {{KIT}}/scripts/worktree.py remove TASK-NNN` (the branch stays, ready for the lead to merge). List any nits for the lead.
 - Any blocker or should-fix → set `status: changes-requested`. That notifies dev.
 - The spec itself is wrong, ambiguous or contradicts the code → set `status: blocked` and write the question under **Open Questions**.
 

@@ -3,12 +3,16 @@
 const TOKEN = window.CONSOLE_TOKEN;
 const view = document.getElementById("view");
 
-const AGENTS = {
+const ROLES = {
   pm: { name: "PM", role: "Product manager", blurb: "Turns your ideas into complete, approved task specs.", quick: ["Show me the board", "What's still in draft?"] },
   dev: { name: "Dev", role: "Developer", blurb: "Builds exactly what the spec asks, in the project's style.", quick: ["Check your inbox"] },
   reviewer: { name: "Reviewer", role: "Reviewer", blurb: "Checks business need, consistency and simplicity.", quick: ["Check your inbox"] },
 };
 const OWNER_LABEL = { pm: "PM", dev: "Dev", reviewer: "Reviewer", lead: "You" };
+// Agents are identified by id: the role, then -2, -3… for extra agents of the same role.
+const roleOf = (id) => state.agents[id]?.role || String(id).split("-")[0];
+const nameOf = (id) => { const r = ROLES[roleOf(id)]; const n = String(id).split("-")[1]; return r ? (n ? `${r.name} ${n}` : r.name) : String(id); };
+const agentIds = () => Object.keys(state.agents);
 const STAGES = [
   { status: "draft", label: "Draft", owner: "pm" },
   { status: "ready-for-dev", label: "Ready for dev", owner: "dev" },
@@ -126,7 +130,7 @@ async function loadState() {
   const data = await api("/api/state");
   state.settings = data.settings;
   state.kit = data.kit;
-  for (const a of data.agents) state.agents[a.name] = a;
+  state.agents = Object.fromEntries(data.agents.map((a) => [a.name, a]));
   renderRail();
 }
 
@@ -158,6 +162,10 @@ function onEvent(event) {
     renderRail();
     refreshIf(["overview"]);
     if (route().page === "agent" && route().id === event.agent.name) renderAgentChrome(event.agent.name);
+    return;
+  }
+  if (event.kind === "team") {
+    loadState().then(() => render(true)).catch(() => {});
     return;
   }
   if (event.kind === "board") {
@@ -233,10 +241,10 @@ function highlightNav(r) {
 }
 
 function renderRail() {
-  document.getElementById("rail-agents").innerHTML = Object.entries(AGENTS).map(([name, a]) => {
+  document.getElementById("rail-agents").innerHTML = agentIds().map((name) => {
     const st = state.agents[name]?.status || "stopped";
-    return `<a class="rail-agent ${name}" data-agent="${name}" href="#/agents/${name}">
-      <span class="who">${a.name}<small>${a.role}</small></span>
+    return `<a class="rail-agent ${roleOf(name)}" data-agent="${name}" href="#/agents/${name}">
+      <span class="who">${esc(nameOf(name))}<small>${ROLES[roleOf(name)].role}</small></span>
       <span class="status ${st}" title="${STATUS_TEXT[st]}">${st === "waiting" ? "Approve" : ""}</span></a>`;
   }).join("");
   highlightNav(route());
@@ -257,13 +265,13 @@ function doing(name) {
 
 async function Overview() {
   const data = await api("/api/dashboard");
-  await Promise.all(Object.keys(AGENTS).filter((n) => state.agents[n]?.session_id && !state.live[n]?.length).map(loadLive));
+  await Promise.all(agentIds().filter((n) => state.agents[n]?.session_id && !state.live[n]?.length).map(loadLive));
 
-  const stations = Object.entries(AGENTS).map(([name, a]) => {
+  const stations = agentIds().map((name) => {
     const ag = state.agents[name] || { status: "stopped" };
     const running = ag.status !== "stopped";
-    return `<section class="station ${name} ${ag.status === "waiting" ? "waiting" : ""}">
-      <header><h2><a href="#/agents/${name}">${a.name}</a></h2><span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span></header>
+    return `<section class="station ${roleOf(name)} ${ag.status === "waiting" ? "waiting" : ""}">
+      <header><h2><a href="#/agents/${name}">${esc(nameOf(name))}</a></h2><span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span></header>
       <p class="model">${esc(modelLabel(name))}</p>
       <p class="doing">${esc(doing(name))}</p>
       <div class="btn-row">
@@ -278,7 +286,7 @@ async function Overview() {
     const items = tasks.filter((t) => t.status === s.status);
     return `<div class="stage ${s.owner}">
       <div class="stage-head"><h3>${s.label}<span class="count">${items.length}</span></h3><small>${s.owner === "lead" ? "Accepted" : `With ${OWNER_LABEL[s.owner]}`}</small></div>
-      ${items.slice(0, 6).map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}</small></a>`).join("")}
+      ${items.slice(0, 6).map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, ${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}
       ${items.length > 6 ? `<a class="muted" href="#/tasks?status=${s.status}">${items.length - 6} more</a>` : ""}
     </div>`;
   };
@@ -286,7 +294,7 @@ async function Overview() {
 
   const needs = [];
   for (const [name, ag] of Object.entries(state.agents)) {
-    for (const p of ag.pending || []) needs.push(`<li><span class="what"><a href="#/agents/${name}">${AGENTS[name].name} wants to run ${esc(p.tool)}</a>: <code>${esc(toolArg(p.tool, p.input).slice(0, 80))}</code></span></li>`);
+    for (const p of ag.pending || []) needs.push(`<li><span class="what"><a href="#/agents/${name}">${esc(nameOf(name))} wants to run ${esc(p.tool)}</a>: <code>${esc(toolArg(p.tool, p.input).slice(0, 80))}</code></span></li>`);
   }
   for (const t of blocked) needs.push(`<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)} is blocked</a>: ${esc(t.title)}</span><span class="when">${ago(t.updated)}</span></li>`);
   if (data.unread.lead) needs.push(`<li><span class="what"><a href="#/inbox/lead">${data.unread.lead} new notification${data.unread.lead > 1 ? "s" : ""} for you</a></span></li>`);
@@ -297,6 +305,7 @@ async function Overview() {
       <p>${tasks.length ? `${tasks.length} task${tasks.length > 1 ? "s" : ""} across ${data.projects.length} project${data.projects.length > 1 ? "s" : ""}.` : "No tasks yet."} Agents work from <code>${esc(state.settings?.workspace)}</code>.</p></div>
       <a class="btn" href="#/agents/pm">Start a new task with the PM</a></div>
     <div class="stations">${stations}</div>
+    <p class="team-link"><a href="#/settings">Add or remove agents</a></p>
     <section class="section"><h2>Who has each task</h2>
       ${tasks.length ? `<div class="pipeline">${blocked.length ? `<div class="stage stage-blocked lead"><div class="stage-head"><h3>Blocked<span class="count">${blocked.length}</span></h3><small>Needs your decision</small></div>${blocked.map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}</small></a>`).join("")}</div>` : ""}${STAGES.map(lane).join("")}</div>`
                      : `<div class="empty">Tell the PM what you need, for example "In ~/code/my-api, users need to reset their password by email." The task will show up here.</div>`}
@@ -334,7 +343,7 @@ async function Tasks() {
       <thead><tr><th>Task</th><th>Project</th><th>Stage</th><th>With</th><th>Spec ready</th><th>Cost so far</th><th>Updated</th></tr></thead>
       <tbody>${shown.map((t) => `<tr data-href="#/tasks/${esc(t.id)}">
         <td><a href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b></a> ${esc(t.title)}</td>
-        <td>${esc(t.project_name)}</td><td>${statusPill(t.status)}</td><td>${OWNER_LABEL[t.owner] || "You"}</td>
+        <td>${esc(t.project_name)}</td><td>${statusPill(t.status)}</td><td>${t.assignee ? esc(nameOf(t.assignee)) : OWNER_LABEL[t.owner] || "You"}</td>
         <td><span class="ready"><span class="bar" aria-hidden="true"><i style="width:${t.ready.total ? Math.round(100 * t.ready.done / t.ready.total) : 0}%"></i></span>${t.ready.done}/${t.ready.total}</span></td>
         <td class="num">${esc(costText(t.cost)) || '<span class="muted">None yet</span>'}</td>
         <td class="num">${ago(t.updated)}</td></tr>`).join("")}</tbody></table></div>`
@@ -356,10 +365,14 @@ async function TaskDetail(r) {
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
         <section><h2>Hand it to an agent</h2><p class="muted">Opens the chat with a message ready to send.</p>
-          <div class="btn-row">${Object.keys(AGENTS).map((n) => `<button class="btn small" data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">${AGENTS[n].name}</button>`).join("")}</div></section>
+          <div class="btn-row">${agentIds().map((n) => `<button class="btn small" data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">${esc(nameOf(n))}</button>`).join("")}</div></section>
         <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
         <section><h2>Details</h2><dl class="facts">
           <dt>Project</dt><dd><code>${esc(t.project)}</code></dd>
+          ${t.pm ? `<dt>PM</dt><dd>${esc(nameOf(t.pm))}</dd>` : ""}
+          ${t.dev ? `<dt>Dev</dt><dd>${esc(nameOf(t.dev))}</dd>` : ""}
+          ${t.reviewer ? `<dt>Reviewer</dt><dd>${esc(nameOf(t.reviewer))}</dd>` : ""}
+          ${t.worktree ? `<dt>Worktree</dt><dd><code>${esc(t.worktree)}</code></dd>` : ""}
           <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
           <dt>Base</dt><dd><code>${esc(t.base)}</code></dd>
           <dt>Priority</dt><dd>${esc(t.priority)}</dd>
@@ -375,7 +388,7 @@ async function TaskDetail(r) {
 function costSection(c) {
   if (!c || !c.rows.length) return `<p class="muted">Nothing spent on this task yet.</p>`;
   const rows = c.rows.map((r) => `<tr><td>${esc(r.model)}<br><small class="muted">${esc(providerOf(r.provider).label)}</small></td>
-      <td><span class="pill ${r.agent}">${AGENTS[r.agent]?.name || esc(r.agent)}</span></td>
+      <td><span class="pill ${roleOf(r.agent)}">${esc(nameOf(r.agent))}</span></td>
       <td class="num">${tokens(r.tokens_in + r.tokens_out)}</td>
       <td class="num">${r.unpriced_tokens && !r.cost_usd ? '<a href="#/settings">Set price</a>' : money(r.cost_usd)}</td></tr>`).join("");
   return `<p class="cost-total">${esc(costText(c) || money(0))}</p>
@@ -388,15 +401,15 @@ function costSection(c) {
 
 async function AgentChat(r) {
   const name = r.id;
-  if (!AGENTS[name]) throw new Error("There's no agent with that name.");
+  if (!state.agents[name]) throw new Error("There's no agent with that name. It may have been removed in Settings.");
   await loadLive(name);
-  const a = AGENTS[name];
-  return `<div class="chat-page ${name}">
+  const a = ROLES[roleOf(name)];
+  return `<div class="chat-page ${roleOf(name)}">
     <header class="agent-head" id="agent-head"></header>
     <div class="transcript" id="transcript"><div id="tx-events"></div><div id="tx-live" aria-live="polite"></div></div>
     <form class="composer" id="composer">
-      <label class="hint" for="composer-text">Message ${a.name}. Enter sends, Shift+Enter adds a line.</label>
-      <textarea id="composer-text" rows="3" placeholder="${name === "pm" ? "Describe what you need, and in which project folder." : "Tell the agent what to do."}">${esc(state.drafts[name] || "")}</textarea>
+      <label class="hint" for="composer-text">Message ${esc(nameOf(name))}. Enter sends, Shift+Enter adds a line.</label>
+      <textarea id="composer-text" rows="3" placeholder="${roleOf(name) === "pm" ? "Describe what you need, and in which project folder." : "Tell the agent what to do."}">${esc(state.drafts[name] || "")}</textarea>
       <div class="row"><div class="quick">${a.quick.map((q) => `<button type="button" class="btn small" data-action="quick" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>
         <button class="btn role" type="submit" id="send">Send</button></div>
     </form></div>`;
@@ -405,7 +418,7 @@ async function AgentChat(r) {
 function renderAgentChrome(name) {
   const head = document.getElementById("agent-head");
   if (!head) return;
-  const a = AGENTS[name];
+  const a = ROLES[roleOf(name)];
   const ag = state.agents[name] || { status: "stopped" };
   const mode = state.settings?.permission_mode?.[name] || "default";
   const running = ag.status !== "stopped";
@@ -423,7 +436,7 @@ function renderAgentChrome(name) {
         <datalist id="models-${name}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
         ${needsKey ? `<span class="warn">No ${esc(prov.label)} API key yet. <a href="#/settings">Add it in Settings</a></span>` : ""}
       </div>`;
-  head.innerHTML = `<div class="title"><h1>${a.name}</h1><p>${a.blurb}</p>${picker}</div>
+  head.innerHTML = `<div class="title"><h1>${esc(nameOf(name))}</h1><p>${a.blurb}</p>${picker}</div>
     <div class="btn-row" style="align-items:center">
       <span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span>
       <label class="mode">Edits <select data-action="mode" data-agent="${name}" aria-label="File edit approvals">
@@ -542,7 +555,7 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
         const d = decisions[e.id];
         if (d) return `<div class="answered">${d.decision === "deny" ? "You denied" : d.decision === "always" ? "You allowed (for the rest of this session)" : "You allowed"} ${esc(e.tool)}${d.message ? `: ${esc(d.message)}` : ""}</div>`;
         if (!pendingIds.has(e.id)) return `<div class="answered">Request for ${esc(e.tool)} expired.</div>`;
-        return `<div class="ask" data-pid="${esc(e.id)}"><h3>${AGENTS[agent]?.name || "The agent"} wants to use ${esc(e.tool)}</h3>
+        return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to use ${esc(e.tool)}</h3>
           <pre>${esc(toolDetail(e.tool, e.input))}</pre>
           <input type="text" class="reason" placeholder="Optional: tell the agent why you deny it" aria-label="Reason">
           <div class="btn-row">
@@ -562,15 +575,17 @@ async function Inbox(r) {
   const role = ["lead", "pm", "dev", "reviewer"].includes(r.id) ? r.id : "lead";
   const data = await api(`/api/inbox/${role}`);
   const label = { lead: "You", pm: "PM", dev: "Dev", reviewer: "Reviewer" };
-  const notes = data.notifications.map((n) => `<li><span class="what"><a href="#/tasks/${esc(n.id)}">${esc(n.id)}</a> ${esc(n.title)} <span class="muted">(${esc(n.project)})</span><br>${statusPill(n.to)} <span class="muted">from ${esc(stageLabel(n.frm))}</span></span><span class="when">${esc(n.ts)}</span></li>`).join("");
-  const waiting = data.waiting.map((t) => `<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">(${esc(t.project_name)})</span></span>${statusPill(t.status)}</li>`).join("");
+  const notes = data.notifications.map((n) => `<li><span class="what"><a href="#/tasks/${esc(n.id)}">${esc(n.id)}</a> ${esc(n.title)} <span class="muted">(${esc(n.project)})</span><br>${statusPill(n.to)} <span class="muted">from ${esc(stageLabel(n.frm))}${n.to !== role ? `, for ${esc(nameOf(n.to))}` : ""}</span></span><span class="when">${esc(n.ts)}</span></li>`).join("");
+  const waiting = data.waiting.map((t) => `<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">(${esc(t.project_name)}${t.assignee ? `, ${esc(nameOf(t.assignee))}` : ""})</span></span>${statusPill(t.status)}</li>`).join("");
+  const askButtons = role === "lead" ? "" : agentIds().filter((n) => roleOf(n) === role).map((n) =>
+    `<button class="btn small" data-action="check-inbox" data-agent="${n}">Ask ${esc(nameOf(n))} to check its inbox</button>`).join("");
   return `<div class="page-head"><div><h1>Inbox</h1><p>Hand-offs land here when a task changes stage. Agents read their own inbox when you tell them to check it.</p></div></div>
     <nav class="tabs">${Object.entries(label).map(([k, v]) => `<a class="${k}" href="#/inbox/${k}" ${k === role ? 'aria-current="page"' : ""}>${v}</a>`).join("")}</nav>
     <div class="two-col">
       <section><h2>New notifications</h2>${notes ? `<ul class="list">${notes}</ul>` : `<p class="muted">Nothing new.</p>`}
         <div class="btn-row" style="margin-top:12px">
           ${notes ? `<button class="btn small" data-action="clear-inbox" data-role="${role}">Mark all as read</button>` : ""}
-          ${role !== "lead" ? `<button class="btn small" data-action="check-inbox" data-agent="${role}">Ask ${label[role]} to check its inbox</button>` : ""}
+          ${askButtons}
         </div></section>
       <section><h2>Waiting on ${label[role] === "You" ? "you" : label[role]}</h2>${waiting ? `<ul class="list">${waiting}</ul>` : `<p class="muted">No tasks are waiting here.</p>`}</section>
     </div>`;
@@ -580,13 +595,13 @@ async function Inbox(r) {
 
 async function History() {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
-  const agent = params.get("agent") || "";
-  const sessions = (await api(`/api/sessions${agent ? `?agent=${agent}` : ""}`)).filter((s) => s.title);
+  const agent = params.get("role") || "";
+  const sessions = (await api("/api/sessions")).filter((s) => s.title && (!agent || (s.role || roleOf(s.agent)) === agent));
   return `<div class="page-head"><div><h1>History</h1><p>Every conversation with your agents. Open one to read it, or continue where it left off.</p></div></div>
-    <nav class="tabs"><a href="#/history" ${!agent ? 'aria-current="page"' : ""}>All</a>${Object.entries(AGENTS).map(([k, a]) => `<a class="${k}" href="#/history?agent=${k}" ${agent === k ? 'aria-current="page"' : ""}>${a.name}</a>`).join("")}</nav>
+    <nav class="tabs"><a href="#/history" ${!agent ? 'aria-current="page"' : ""}>All</a>${Object.entries(ROLES).map(([k, a]) => `<a class="${k}" href="#/history?role=${k}" ${agent === k ? 'aria-current="page"' : ""}>${a.name}</a>`).join("")}</nav>
     ${sessions.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Agent</th><th>Conversation</th><th>Model</th><th>Started</th><th>Last activity</th><th>Turns</th><th>Usage</th></tr></thead>
-      <tbody>${sessions.map((s) => `<tr data-href="#/history/${s.id}"><td><span class="pill ${s.agent}">${AGENTS[s.agent]?.name}</span></td>
+      <tbody>${sessions.map((s) => `<tr data-href="#/history/${s.id}"><td><span class="pill ${roleOf(s.agent)}">${esc(nameOf(s.agent))}</span></td>
         <td><a href="#/history/${s.id}">${esc(s.title)}</a></td><td>${esc(providerOf(s.provider || "claude").label)}${s.model ? `<br><small class="muted">${esc(s.model)}</small>` : ""}</td>
         <td class="num">${esc(new Date(s.started).toLocaleString())}</td>
         <td class="num">${ago(s.updated)}</td><td class="num">${s.turns}</td><td class="num">${s.cost_usd ? `$${s.cost_usd.toFixed(2)}` : s.tokens ? `${s.tokens.toLocaleString()} tokens` : ""}</td></tr>`).join("")}</tbody></table></div>`
@@ -597,11 +612,12 @@ async function SessionView(r) {
   const s = await api(`/api/sessions/${encodeURIComponent(r.id)}`);
   const current = state.agents[s.agent]?.session_id === s.id && state.agents[s.agent]?.status !== "stopped";
   return `<p><a href="#/history" class="muted">All conversations</a></p>
-    <div class="page-head ${s.agent}"><div><h1>${esc(s.title || "Conversation")}</h1>
-      <p><span class="pill ${s.agent}">${AGENTS[s.agent]?.name}</span> started ${esc(new Date(s.started).toLocaleString())}, ${s.turns} turns${s.cost_usd ? `, about $${s.cost_usd.toFixed(2)}` : ""}</p></div>
+    <div class="page-head ${roleOf(s.agent)}"><div><h1>${esc(s.title || "Conversation")}</h1>
+      <p><span class="pill ${roleOf(s.agent)}">${esc(nameOf(s.agent))}</span> started ${esc(new Date(s.started).toLocaleString())}, ${s.turns} turns${s.cost_usd ? `, about $${s.cost_usd.toFixed(2)}` : ""}</p></div>
       ${current ? `<a class="btn" href="#/agents/${s.agent}">Open live chat</a>`
-                : `<button class="btn role ${s.agent}" data-action="resume" data-agent="${s.agent}" data-session="${s.id}">Continue this conversation</button>`}</div>
-    <div class="transcript ${s.agent}" style="overflow:visible">${transcriptHTML(s.events, { agent: s.agent })}</div>`;
+                : !state.agents[s.agent] ? `<span class="muted">${esc(nameOf(s.agent))} was removed from the team.</span>`
+                : `<button class="btn role ${roleOf(s.agent)}" data-action="resume" data-agent="${s.agent}" data-session="${s.id}">Continue this conversation</button>`}</div>
+    <div class="transcript ${roleOf(s.agent)}" style="overflow:visible">${transcriptHTML(s.events, { agent: s.agent })}</div>`;
 }
 
 // ---- settings -----------------------------------------------------------------
@@ -613,6 +629,7 @@ async function Settings() {
   const priced = Object.keys(state.settings.prices || {});
   const models = [...new Set([...seen, ...configured, ...priced])].sort();
   return `<div class="page-head"><div><h1>Settings</h1></div></div>
+    ${teamSection()}
     <form class="form" id="settings-form">
       <label for="workspace">Agents' home folder</label>
       <p class="muted" style="margin:0">Agents start here and can work in any project under it without extra permission prompts. Pick the folder that holds your projects. Takes effect the next time an agent starts.</p>
@@ -632,6 +649,24 @@ async function Settings() {
     <section class="section"><h2>How approvals work</h2>
       <p class="muted" style="max-width:68ch">When an agent wants to edit a file or run a command, it pauses and asks you in its chat. On Claude, anything your Claude Code settings already allow runs without asking. On the other providers, reading and searching inside the agents' home folder and the kit, editing task files and running the kit's own scripts don't ask; everything else does. Choose "Allow automatically" for edits in an agent's chat header to skip edit prompts for that agent.</p></section>
     <section class="section"><h2>Agent kit</h2><dl class="facts"><dt>Kit folder</dt><dd><code>${esc(state.kit)}</code></dd><dt>Task board</dt><dd><code>${esc(state.kit)}/tasks</code></dd></dl></section>`;
+}
+
+function teamSection() {
+  const rows = Object.entries(ROLES).map(([role, r]) => {
+    const ids = agentIds().filter((id) => roleOf(id) === role);
+    return `<div class="team-role ${role}"><h3>${r.name}s <small class="muted">${ids.length}</small></h3>
+      <ul>${ids.map((id) => {
+        const ag = state.agents[id];
+        const choice = state.settings.agents[id] || {};
+        return `<li><a href="#/agents/${id}">${esc(nameOf(id))}</a> <code class="muted">${esc(id)}</code>
+          <span class="muted">${esc(providerOf(choice.provider || "claude").label)}${choice.model ? `, ${esc(choice.model)}` : ""}</span>
+          ${ids.length > 1 ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${ag.status !== "stopped" ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</li>`;
+      }).join("")}</ul>
+      <button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button></div>`;
+  }).join("");
+  return `<section class="section"><h2>Team</h2>
+    <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Choose each agent's provider and model in its chat header.</p>
+    <div class="team">${rows}</div></section>`;
 }
 
 function providerCard(p) {
@@ -707,8 +742,8 @@ const afterRender = {
 // ---- actions (event delegation) -------------------------------------------------
 
 const actions = {
-  start: (el) => act(() => api(`/api/agents/${el.dataset.agent}/start`, { method: "POST", body: {} }), `${AGENTS[el.dataset.agent].name} started.`),
-  stop: (el) => act(() => api(`/api/agents/${el.dataset.agent}/stop`, { method: "POST" }), `${AGENTS[el.dataset.agent].name} stopped.`),
+  start: (el) => act(() => api(`/api/agents/${el.dataset.agent}/start`, { method: "POST", body: {} }), `${nameOf(el.dataset.agent)} started.`),
+  stop: (el) => act(() => api(`/api/agents/${el.dataset.agent}/stop`, { method: "POST" }), `${nameOf(el.dataset.agent)} stopped.`),
   interrupt: (el) => act(() => api(`/api/agents/${el.dataset.agent}/interrupt`, { method: "POST" })),
   new: (el) => act(() => api(`/api/agents/${el.dataset.agent}/new`, { method: "POST" }), "Started a fresh session."),
   async allow(el) {
@@ -723,7 +758,7 @@ const actions = {
   },
   handoff(el) {
     const name = el.dataset.agent;
-    state.drafts[name] = PROMPTS[name]({ id: el.dataset.task, title: el.dataset.title });
+    state.drafts[name] = PROMPTS[roleOf(name)]({ id: el.dataset.task, title: el.dataset.title });
     location.hash = `#/agents/${name}`;
   },
   "save-price": async (el) => {
@@ -734,6 +769,23 @@ const actions = {
     if (body.input !== undefined && (Number.isNaN(body.input) || Number.isNaN(body.output))) return toast("Enter prices as numbers, like 0.27.", true);
     const ok = await act(() => api("/api/prices", { method: "PUT", body }), input === "" && output === "" ? "Price removed." : "Price saved.");
     if (ok) await loadState();
+  },
+  "add-agent": async (el) => {
+    const added = await act(() => api("/api/agents", { method: "POST", body: { role: el.dataset.role } }));
+    if (!added) return;
+    state.settings = added.settings;
+    await loadState();
+    toast(`${nameOf(added.id)} added. Start it from its page.`);
+    render(true);
+  },
+  "remove-agent": async (el) => {
+    const name = el.dataset.agent;
+    if (!confirm(`Remove ${nameOf(name)}? Its past conversations stay in History. Tasks it claimed keep its name; another agent of the role can't take its rework until you reassign it in the task file.`)) return;
+    const removed = await act(() => api(`/api/agents/${name}`, { method: "DELETE" }), `${nameOf(name)} removed.`);
+    if (!removed) return;
+    state.settings = removed.settings;
+    await loadState();
+    render(true);
   },
   "remove-key": async (el) => {
     const saved = await act(() => api(`/api/providers/${el.dataset.provider}`, { method: "PUT", body: { api_key: "" } }), "Key removed.");
@@ -747,7 +799,7 @@ const actions = {
   async resume(el) {
     const name = el.dataset.agent;
     if (state.agents[name]?.status !== "stopped") {
-      if (!confirm(`${AGENTS[name].name} is running another conversation. Stop it and continue this one?`)) return;
+      if (!confirm(`${nameOf(name)} is running another conversation. Stop it and continue this one?`)) return;
       await act(() => api(`/api/agents/${name}/stop`, { method: "POST" }));
     }
     const ok = await act(() => api(`/api/agents/${name}/start`, { method: "POST", body: { resume: el.dataset.session } }));

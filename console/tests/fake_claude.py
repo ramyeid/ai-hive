@@ -18,8 +18,11 @@ def _delta(kind, text):
 
 
 class FakeClient:
+    last_options = None   # the options of the latest client, for tests
+
     def __init__(self, options):
         self.options = options
+        FakeClient.last_options = options
         self.prompt = None
 
     async def connect(self):

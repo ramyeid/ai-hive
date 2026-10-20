@@ -17,12 +17,9 @@ from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT
 
-AGENTS = store.AGENT_NAMES
-
-
-def load_agent(name: str) -> tuple[str, str]:
-    """The agent's instructions (with the kit path filled in) and its default Claude model."""
-    text = (KIT / "agents" / f"{name}.md").read_text(encoding="utf-8")
+def load_agent(role: str) -> tuple[str, str]:
+    """A role's instructions (with the kit path filled in) and its default Claude model."""
+    text = (KIT / "agents" / f"{role}.md").read_text(encoding="utf-8")
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
     front = match.group(1) if match else ""
     model = re.search(r"^model:\s*(\S+)", front, re.M)
@@ -54,7 +51,8 @@ class AgentRunner:
     """One agent as the console sees it. Also the EngineHooks its engine reports to."""
 
     def __init__(self, name: str, bus: EventBus, engine_options: dict | None = None) -> None:
-        self.name = name
+        self.name = name                 # agent id: pm, dev, dev-2, …
+        self.role = store.role_of(name)
         self.bus = bus
         self.engine_options = engine_options or {}
         self.engine: AgentEngine | None = None
@@ -70,7 +68,7 @@ class AgentRunner:
     # ---- state ---------------------------------------------------------------------
 
     def info(self) -> dict:
-        return {"name": self.name, "status": self.status, "session_id": self.session_id,
+        return {"name": self.name, "role": self.role, "status": self.status, "session_id": self.session_id,
                 "error": self.error, "provider": self.provider, "model": self.model,
                 "pending": [{"id": pid, **{k: v for k, v in p.items() if k != "future"}}
                             for pid, p in self.pending.items()]}
@@ -129,12 +127,16 @@ class AgentRunner:
                 raise ValueError("That session doesn't belong to this agent.")
             provider_id, model = meta.get("provider", "claude"), meta.get("model", "")
         else:
-            choice = settings["agents"][self.name]
+            choice = settings["agents"].get(self.name)
+            if not choice:
+                raise ValueError(f"{self.name} has been removed from the team.")
             provider_id, model = choice["provider"], choice["model"]
         provider = PROVIDERS.get(provider_id)
         if not provider:
             raise ValueError(f"Unknown provider: {provider_id}")
-        instructions, default_claude_model = load_agent(self.name)
+        instructions, default_claude_model = load_agent(self.role)
+        instructions += (f"\n\n## Your identity\nYour agent ID is `{self.name}` (role: {self.role}). It's in the "
+                         "`AGENT_ID` environment variable, which the kit's scripts use for your inbox and claims.")
         if provider.engine == "claude":
             model = model or default_claude_model
         api_key, base_url, _ = store.provider_credentials(provider)
@@ -144,7 +146,7 @@ class AgentRunner:
         self.session_id = resume or store.new_session(self.name, provider.id, model)
         self.provider, self.model = provider.id, model
         config = EngineConfig(
-            agent=self.name, instructions=instructions, provider=provider.id, model=model,
+            agent=self.name, role=self.role, instructions=instructions, provider=provider.id, model=model,
             workspace=Path(settings["workspace"]), kit=KIT, session_id=self.session_id,
             resume=bool(resume), permission_mode=settings["permission_mode"].get(self.name, "default"),
             api_key=api_key, base_url=base_url)
@@ -221,7 +223,19 @@ class AgentManager:
     def __init__(self, **engine_options) -> None:
         """engine_options: claude_client_factory / http_transport, used by the tests."""
         self.bus = EventBus()
-        self.agents = {name: AgentRunner(name, self.bus, engine_options) for name in AGENTS}
+        self.engine_options = engine_options
+        self.agents: dict[str, AgentRunner] = {}
+        self.sync()
+
+    def sync(self) -> None:
+        """Match the running agents to the team in Settings (after adding or removing one)."""
+        team = store.load_settings()["agents"]
+        for name in team:
+            self.agents.setdefault(name, AgentRunner(name, self.bus, self.engine_options))
+        for name in [n for n in self.agents if n not in team and self.agents[n].status == "stopped"]:
+            del self.agents[name]
+        order = {role: i for i, role in enumerate(store.ROLES)}
+        self.agents = dict(sorted(self.agents.items(), key=lambda kv: (order.get(kv[1].role, 9), _number(kv[0]))))
 
     def get(self, name: str) -> AgentRunner:
         if name not in self.agents:
@@ -234,3 +248,8 @@ class AgentManager:
                 await runner.stop()
             except Exception:
                 pass
+
+
+def _number(agent_id: str) -> int:
+    tail = agent_id.rsplit("-", 1)[-1]
+    return int(tail) if tail.isdigit() else 1

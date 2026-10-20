@@ -35,11 +35,11 @@ Requirements:
 | Page | What it's for |
 |------|---------------|
 | **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
-| **Agent chats** (PM, Dev, Reviewer) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
+| **Agent chats** (PM, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
-| **Settings** | The folder agents start in (pick the one that holds your projects). |
+| **Settings** | Your team: add or remove PMs, devs and reviewers (e.g. 2 PMs, 3 devs, 2 reviewers). The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
 ## Choosing the AI provider
 
@@ -77,7 +77,9 @@ price under **Settings → Model prices**. Prices apply to past conversations to
 - `server/` is a small FastAPI app. `agents.py` handles what you see (status, history, approvals);
   each conversation runs in an engine from `server/engines/`: `claude.py` (Claude Code through the
   [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/python)) or `openai_compat.py` (OpenAI-style APIs).
-  Both use the agent's instructions from `../agents/`.
+  Both use the agent's instructions from `../agents/`. Each agent runs with its own `AGENT_ID`
+  (`dev-2`…), which the kit's scripts use to claim tasks and route rework (see "Several agents per
+  role" in the main README).
 - When an agent wants to do something your settings don't already allow, it pauses and the request
   appears in its chat. Nothing runs until you allow it. You can switch an agent to allow file
   edits automatically from its chat header.
@@ -91,4 +93,6 @@ price under **Settings → Model prices**. Prices apply to past conversations to
 From this folder, with `.venv` active:
 - `python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
 - `python -m tests.test_costs` checks how costs are charged to tasks.
+- `python -m tests.test_team` checks adding and removing agents.
+- `python3 ../tests/test_multi_agent.py` checks claims, worktrees and routing with several agents per role.
 - `python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.

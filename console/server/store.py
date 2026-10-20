@@ -14,11 +14,12 @@ SESSIONS = DATA / "sessions"
 INDEX = SESSIONS / "index.json"
 SETTINGS = DATA / "settings.json"
 
-AGENT_NAMES = ("pm", "dev", "reviewer")
+ROLES = ("pm", "dev", "reviewer")
 DEFAULT_SETTINGS = {
     "workspace": str(Path.home()),
-    "permission_mode": {name: "default" for name in AGENT_NAMES},
-    "agents": {name: {"provider": "claude", "model": ""} for name in AGENT_NAMES},
+    "permission_mode": {},   # agent id -> default | acceptEdits
+    # agent id -> {role, provider, model}. IDs are the role, then -2, -3… for extra agents.
+    "agents": {role: {"role": role, "provider": "claude", "model": ""} for role in ROLES},
     "providers": {},   # id -> {"api_key": ..., "base_url": ...}; never sent to the browser
     "prices": {},      # model -> {"input": US$ per 1M tokens, "output": US$ per 1M tokens}
 }
@@ -48,10 +49,11 @@ def _write_json(path: Path, data) -> None:
 def load_settings() -> dict:
     saved = _read_json(SETTINGS, {})
     settings = {**DEFAULT_SETTINGS, **saved}
-    settings["permission_mode"] = {**DEFAULT_SETTINGS["permission_mode"],
-                                   **saved.get("permission_mode", {})}
-    settings["agents"] = {name: {**DEFAULT_SETTINGS["agents"][name], **saved.get("agents", {}).get(name, {})}
-                          for name in AGENT_NAMES}
+    agents = saved.get("agents") or DEFAULT_SETTINGS["agents"]
+    settings["agents"] = {aid: {"role": a.get("role") or role_of(aid), "provider": a.get("provider", "claude"),
+                                "model": a.get("model", "")} for aid, a in agents.items()}
+    settings["permission_mode"] = {aid: saved.get("permission_mode", {}).get(aid, "default")
+                                   for aid in settings["agents"]}
     settings["providers"] = saved.get("providers", {})
     settings["prices"] = saved.get("prices", {})
     return settings
@@ -69,7 +71,8 @@ def save_settings(changes: dict) -> dict:
             raise ValueError(f"Unknown permission mode: {mode}")
         settings["permission_mode"][agent] = mode
     for agent, choice in changes.get("agents", {}).items():
-        settings["agents"][agent] = {"provider": choice["provider"], "model": choice.get("model", "").strip()}
+        settings["agents"][agent] = {**settings["agents"][agent], "provider": choice["provider"],
+                                     "model": choice.get("model", "").strip()}
     for model, price in changes.get("prices", {}).items():
         if price is None:
             settings["prices"].pop(model, None)
@@ -82,6 +85,33 @@ def save_settings(changes: dict) -> dict:
                 current[field] = values[field].strip()
     _write_json(SETTINGS, settings)
     return settings
+
+
+def role_of(agent_id: str) -> str:
+    return agent_id.split("-")[0]
+
+
+def add_agent(role: str) -> str:
+    """Add another agent for a role. Returns its ID (dev-2, dev-3, …)."""
+    if role not in ROLES:
+        raise ValueError(f"Unknown role: {role}")
+    settings = load_settings()
+    taken = set(settings["agents"])
+    agent_id = role if role not in taken else next(f"{role}-{n}" for n in range(2, 100) if f"{role}-{n}" not in taken)
+    settings["agents"][agent_id] = {"role": role, "provider": "claude", "model": ""}
+    settings["permission_mode"][agent_id] = "default"
+    _write_json(SETTINGS, settings)
+    return agent_id
+
+
+def remove_agent(agent_id: str) -> None:
+    settings = load_settings()
+    role = settings["agents"][agent_id]["role"]
+    if sum(1 for a in settings["agents"].values() if a["role"] == role) == 1:
+        raise ValueError(f"Keep at least one {role}: the workflow needs every role.")
+    settings["agents"].pop(agent_id)
+    settings["permission_mode"].pop(agent_id, None)
+    _write_json(SETTINGS, settings)
 
 
 def provider_credentials(provider) -> tuple[str, str, bool]:
@@ -119,7 +149,7 @@ def get_session(session_id: str) -> dict | None:
 
 def new_session(agent: str, provider: str = "claude", model: str = "") -> str:
     session_id = uuid.uuid4().hex[:12]
-    _update_index(session_id, {"agent": agent, "provider": provider, "model": model,
+    _update_index(session_id, {"agent": agent, "role": role_of(agent), "provider": provider, "model": model,
                                "started": now(), "updated": now(),
                                "title": "", "claude_session_id": None,
                                "cost_usd": 0.0, "turns": 0})

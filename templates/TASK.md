@@ -6,6 +6,10 @@ base: BASE_BRANCH        # branch to start from and review against
 status: draft
 priority: medium        # low | medium | high | urgent
 branch: task/TASK-000-short-slug
+pm: PM_ID                # who wrote the spec
+dev:                     # set by claim.py: the dev building it (rework comes back to them)
+reviewer:                # set by claim.py: the reviewer (re-reviews come back to them)
+worktree:                # set by claim.py: the folder where the branch is checked out
 created: YYYY-MM-DD
 approved:               # pm: date the lead explicitly approved the final readback — required for ready-for-dev
 ---

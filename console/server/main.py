@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import board, costs, store
-from .agents import AGENTS, AgentManager
+from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
 
@@ -50,6 +50,10 @@ class SettingsBody(BaseModel):
 class AgentConfigBody(BaseModel):
     provider: str
     model: str = ""
+
+
+class NewAgentBody(BaseModel):
+    role: str                      # pm | dev | reviewer
 
 
 class PriceBody(BaseModel):
@@ -97,7 +101,7 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         return await call_next(request)
 
     def runner(name: str):
-        if name not in AGENTS:
+        if name not in manager.agents:
             raise HTTPException(404, f"No agent called {name}.")
         return manager.get(name)
 
@@ -194,6 +198,28 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
             raise HTTPException(400, str(exc))
         await _do(runner(name).set_permission_mode(body.mode))
         return public_settings()
+
+    @app.post("/api/agents")
+    async def add_agent(body: NewAgentBody):
+        try:
+            agent_id = store.add_agent(body.role)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        manager.sync()
+        manager.bus.publish({"kind": "team"})
+        return {"id": agent_id, "agents": [r.info() for r in manager.agents.values()], "settings": public_settings()}
+
+    @app.delete("/api/agents/{name}")
+    async def remove_agent(name: str):
+        if runner(name).status != "stopped":
+            raise HTTPException(409, f"Stop {name} first.")
+        try:
+            store.remove_agent(name)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc))
+        manager.sync()
+        manager.bus.publish({"kind": "team"})
+        return {"agents": [r.info() for r in manager.agents.values()], "settings": public_settings()}
 
     @app.put("/api/agents/{name}/config")
     async def agent_config(name: str, body: AgentConfigBody):

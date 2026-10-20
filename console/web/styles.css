@@ -127,7 +127,14 @@ textarea { resize: vertical; }
 .pill.lead { color: var(--ink); }
 
 /* ---- overview: who holds the ball ---------------------------------------- */
-.stations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.team-link { margin: 10px 0 0; font-size: 13px; }
+.team { margin-bottom: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.team-role { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); padding: 12px 14px; border-top: 3px solid var(--role); }
+.team-role h3 { margin: 0 0 8px; font-size: 15px; }
+.team-role ul { list-style: none; margin: 0 0 10px; padding: 0; }
+.team-role li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.team-role li .btn { margin-left: auto; }
 .station { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border: 1px solid var(--rule); border-top: 4px solid var(--role); border-radius: var(--radius-m); background: var(--panel); }
 .station header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .station h2 a { text-decoration: none; }

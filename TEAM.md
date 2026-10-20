@@ -24,6 +24,18 @@ draft ──► ready-for-dev ──► in-dev ──► ready-for-review ──
 | `done`              | reviewer | Business need met, consistent, simple — accepted     |
 | `blocked`           | anyone   | Needs a decision from the lead; say why in the file  |
 
+## Several agents per role
+
+There can be more than one PM, dev or reviewer (e.g. `pm`, `pm-2`, `dev`, `dev-2`, `dev-3`). Each agent has an
+ID in the `AGENT_ID` environment variable, set by the console (in a terminal: `AGENT_ID=dev-2 claude --agent dev`);
+without it the ID is just the role name. The kit's scripts read it, so commands stay the same for everyone.
+
+- `scripts/inbox.py <role>` shows *your* notifications and the tasks *you* can take.
+- **Claim before working:** `python3 scripts/claim.py TASK-NNN dev` (or `reviewer`). Claims are atomic: if
+  another agent got there first, the script says so; pick another task. Never claim by editing `status:` yourself.
+- A task remembers who wrote, built and reviewed it (`pm:`, `dev:`, `reviewer:`). Rework goes back to the same
+  dev and re-reviews to the same reviewer; nobody else may take them.
+
 ## Rules every agent follows
 
 1. One task = one file: `tasks/TASK-<NNN>-<slug>.md`, created only with `python3 scripts/new_task.py <project-folder> "<title>"`.
@@ -31,7 +43,7 @@ draft ──► ready-for-dev ──► in-dev ──► ready-for-review ──
 2. Only change the `status:` field to a value your role is allowed to set (table above).
 3. Never delete another role's section. Append to your own section; add dated entries.
 4. If anything is ambiguous, set `status: blocked`, write the question under **Open Questions**, and stop. The lead decides.
-5. Work inside the task's `project:` folder, on the git branch named in `branch:`, created from `base:`. Never touch other projects.
+5. Code changes happen only in the task's **worktree** (`worktree:` field): a separate folder where the task's `branch:` is checked out, created from `base:` when the dev claims the task. Never switch branches or edit code in the main `project:` folder; that's the lead's checkout. Never touch other projects.
 6. Keep `tasks/BOARD.md` out of your edits — it is regenerated automatically.
 7. A task only reaches `ready-for-dev` when `scripts/check_ready.py` passes (no open questions, references to follow, Definition of Ready ticked, lead approval dated). The hook enforces this and reverts it to `draft` otherwise.
 8. Consistency beats cleverness: the whole codebase should look like one author wrote it. New code is highly inspired by the task's **Reference Implementations** (same patterns and style, not copy-paste; shared logic is reused, never duplicated) and follows **Conventions to Follow**.

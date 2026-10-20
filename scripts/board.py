@@ -19,8 +19,10 @@ def write_board() -> str:
             continue
         lines.append(f"## {status} ({len(group)})")
         for t in group:
+            who = t.get({"draft": "pm", "in-dev": "dev", "changes-requested": "dev",
+                         "in-review": "reviewer", "ready-for-review": "reviewer"}.get(status, ""), "")
             lines.append(f"- [{t.get('id')}]({t['file']}) **{project_name(t)}** · "
-                         f"{t.get('title')} · {t.get('priority', '')}")
+                         f"{t.get('title')} · {t.get('priority', '')}" + (f" · {who}" if who else ""))
         lines.append("")
     if not tasks:
         lines.append("_No tasks yet. Ask the pm agent to create one._")

@@ -63,9 +63,10 @@ class ToolError(Exception):
 
 
 class Toolbox:
-    def __init__(self, workspace: Path, kit: Path) -> None:
+    def __init__(self, workspace: Path, kit: Path, env: dict | None = None) -> None:
         self.workspace = workspace.resolve()
         self.kit = kit.resolve()
+        self.env = {**os.environ, **(env or {})}
 
     # ---- approval policy ---------------------------------------------------------
 
@@ -171,7 +172,7 @@ class Toolbox:
     async def _bash(self, command: str, timeout: int = 120) -> str:
         timeout = max(1, min(int(timeout or 120), 600))
         proc = await asyncio.create_subprocess_exec(
-            "bash", "-lc", command, cwd=self.workspace,
+            "bash", "-lc", command, cwd=self.workspace, env=self.env,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True)
         try:
             out, _ = await asyncio.wait_for(proc.communicate(), timeout)
@@ -188,7 +189,7 @@ class Toolbox:
         if path.parent != self.kit / "tasks" or not path.name.startswith("TASK-"):
             return ""
         proc = await asyncio.create_subprocess_exec(
-            "python3", str(self.kit / "scripts" / "on_task_change.py"),
+            "python3", str(self.kit / "scripts" / "on_task_change.py"), env=self.env,
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         _, err = await proc.communicate(json.dumps({"tool_input": {"file_path": str(path)}}).encode())
         message = err.decode(errors="replace").strip()

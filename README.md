@@ -52,7 +52,36 @@ claude --agent reviewer   # tab 3
 - `/board` (in any tab): every task across all projects, plus anything blocked or waiting on you.
 - `/ship TASK-007`: runs dev → reviewer (→ dev …, max 3 rounds) automatically.
 - **Between tasks**, type `/clear` in the dev and reviewer tabs so nothing carries over from another project.
-- Want two projects moving at once? Open a second `claude --agent dev` tab — same agent, separate task.
+
+## Several agents per role
+
+Need two PMs, three devs and two reviewers? Give each terminal its own ID with `AGENT_ID`
+(the role, then `-2`, `-3`…):
+
+```bash
+claude --agent pm                          # pm
+AGENT_ID=pm-2 claude --agent pm
+claude --agent dev                         # dev
+AGENT_ID=dev-2 claude --agent dev
+AGENT_ID=dev-3 claude --agent dev
+claude --agent reviewer                    # reviewer
+AGENT_ID=reviewer-2 claude --agent reviewer
+```
+
+In the console, add and remove agents under **Settings → Team**; each one gets its ID automatically.
+
+- **No double work.** An agent claims a task before starting it (`scripts/claim.py`). Claims are
+  atomic, so if two devs reach for the same task, one gets it and the other picks another.
+- **Each dev task gets its own git worktree**, a separate folder on the task's branch, next to the
+  project: `~/code/my-api.worktrees/TASK-007`. Devs never share a checkout, and your own
+  `~/code/my-api` stays on its branch untouched.
+- **Rework goes back to the dev who built it, re-reviews to the same reviewer**, so nobody has to
+  relearn the task. New work goes to a shared pool every agent of the role sees.
+- **When a task is `done`**, the reviewer removes its worktree (`python3 scripts/worktree.py remove
+  TASK-007`). The branch stays: merge it as usual. If it couldn't be removed (uncommitted files),
+  remove it yourself with `git -C ~/code/my-api worktree remove ../my-api.worktrees/TASK-007`.
+- The task file records who has it (`pm:`, `dev:`, `reviewer:`, `worktree:`). If you remove an
+  agent while it holds a task, clear its name in the task file so another agent of the role can take it.
 
 ## Prefer a browser?
 

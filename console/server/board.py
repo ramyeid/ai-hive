@@ -31,8 +31,15 @@ def _summary(path: Path) -> dict:
         "approved": meta.get("approved", ""),
         "updated": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
         "owner": ROUTING.get(meta.get("status", ""), _owner(meta.get("status", ""))),
+        "assignee": meta.get(STAGE_FIELD.get(meta.get("status", ""), ""), ""),
+        "pm": meta.get("pm", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
+        "worktree": meta.get("worktree", ""),
         "ready": {"done": sum(t != " " for t in ticks), "total": len(ticks)},
     }
+
+
+STAGE_FIELD = {"draft": "pm", "in-dev": "dev", "changes-requested": "dev",
+               "ready-for-review": "reviewer", "in-review": "reviewer"}
 
 
 def _owner(status: str) -> str:
@@ -54,23 +61,33 @@ def get_task(task_id: str) -> dict | None:
     return None
 
 
+def _inbox_files(role: str) -> list[tuple[Path, str]]:
+    """The role's shared pool, plus each of its agents' own inbox (rework, re-reviews)."""
+    files = [(INBOX / f"{role}.md", role)]
+    personal = INBOX / "agents"
+    if role != "lead" and personal.exists():
+        files += [(p, p.stem) for p in sorted(personal.glob("*.md")) if p.stem.split("-")[0] == role]
+    return files
+
+
 def inbox(role: str) -> dict:
-    note_file = INBOX / f"{role}.md"
     notes = []
-    if note_file.exists():
-        for line in note_file.read_text(encoding="utf-8").splitlines():
-            m = _NOTE.match(line)
-            if m:
-                notes.append({k: (v or "") for k, v in m.groupdict().items()})
+    for path, to in _inbox_files(role):
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                m = _NOTE.match(line)
+                if m:
+                    notes.append({**{k: (v or "") for k, v in m.groupdict().items()}, "to": to})
+    notes.sort(key=lambda n: n["ts"], reverse=True)
     wanted = {"pm": {"draft"}, "lead": {"blocked"}}.get(role) or {s for s, r in ROUTING.items() if r == role}
     waiting = [t for t in list_tasks() if t["status"] in wanted]
-    return {"role": role, "notifications": list(reversed(notes)), "waiting": waiting}
+    return {"role": role, "notifications": notes, "waiting": waiting}
 
 
 def clear_inbox(role: str) -> None:
-    note_file = INBOX / f"{role}.md"
-    if note_file.exists():
-        note_file.write_text("", encoding="utf-8")
+    for path, _ in _inbox_files(role):
+        if path.exists():
+            path.write_text("", encoding="utf-8")
 
 
 def activity(limit: int = 50) -> list[dict]:
@@ -93,5 +110,5 @@ def summary() -> dict:
 
 def signature() -> str:
     """Changes whenever a task or inbox file changes (used for live refresh)."""
-    files = list(task_files()) + (list(INBOX.glob("*")) if INBOX.exists() else [])
-    return "|".join(f"{p.name}:{p.stat().st_mtime_ns}" for p in sorted(files) if p.exists())
+    files = list(task_files()) + ([p for p in INBOX.rglob("*") if p.is_file()] if INBOX.exists() else [])
+    return "|".join(f"{p}:{p.stat().st_mtime_ns}" for p in sorted(files) if p.exists())
