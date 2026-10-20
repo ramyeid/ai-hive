@@ -20,6 +20,7 @@ DEFAULT_SETTINGS = {
     "permission_mode": {name: "default" for name in AGENT_NAMES},
     "agents": {name: {"provider": "claude", "model": ""} for name in AGENT_NAMES},
     "providers": {},   # id -> {"api_key": ..., "base_url": ...}; never sent to the browser
+    "prices": {},      # model -> {"input": US$ per 1M tokens, "output": US$ per 1M tokens}
 }
 
 
@@ -52,6 +53,7 @@ def load_settings() -> dict:
     settings["agents"] = {name: {**DEFAULT_SETTINGS["agents"][name], **saved.get("agents", {}).get(name, {})}
                           for name in AGENT_NAMES}
     settings["providers"] = saved.get("providers", {})
+    settings["prices"] = saved.get("prices", {})
     return settings
 
 
@@ -68,6 +70,11 @@ def save_settings(changes: dict) -> dict:
         settings["permission_mode"][agent] = mode
     for agent, choice in changes.get("agents", {}).items():
         settings["agents"][agent] = {"provider": choice["provider"], "model": choice.get("model", "").strip()}
+    for model, price in changes.get("prices", {}).items():
+        if price is None:
+            settings["prices"].pop(model, None)
+        else:
+            settings["prices"][model] = {"input": float(price["input"]), "output": float(price["output"])}
     for pid, values in changes.get("providers", {}).items():
         current = settings["providers"].setdefault(pid, {})
         for field in ("api_key", "base_url"):

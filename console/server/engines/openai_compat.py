@@ -40,6 +40,7 @@ class OpenAICompatibleEngine(AgentEngine):
         self.tools = Toolbox(config.workspace, config.kit)
         self.task: asyncio.Task | None = None
         self.interrupted = False
+        self.usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "started": 0.0}
 
     # ---- lifecycle -------------------------------------------------------------------
 
@@ -71,25 +72,30 @@ class OpenAICompatibleEngine(AgentEngine):
     async def run_turn(self, text: str) -> None:
         self.messages.append({"role": "user", "content": text})
         self.interrupted = False
+        self.usage = {"steps": 0, "tokens_in": 0, "tokens_out": 0, "started": time.monotonic()}
         self.task = asyncio.create_task(self._loop())
         try:
             await self.task
         except asyncio.CancelledError:
             self._close_open_tool_calls()
+            self._report(is_error=True)   # what was used before the interrupt still counts
             if not self.interrupted:
                 raise
+        except Exception:
+            self._report(is_error=True)   # e.g. the provider failed mid-turn
+            raise
         finally:
             store.save_messages(self.config.session_id, self.messages)
 
     # ---- the agent loop ------------------------------------------------------------
 
     async def _loop(self) -> None:
-        started, steps, tokens_in, tokens_out = time.monotonic(), 0, 0, 0
-        while steps < MAX_STEPS:
-            steps += 1
+        used = self.usage
+        while used["steps"] < MAX_STEPS:
+            used["steps"] += 1
             message, usage = await self._complete()
-            tokens_in += usage.get("prompt_tokens", 0) or 0
-            tokens_out += usage.get("completion_tokens", 0) or 0
+            used["tokens_in"] += usage.get("prompt_tokens", 0) or 0
+            used["tokens_out"] += usage.get("completion_tokens", 0) or 0
             self.messages.append(message)
             if message.get("reasoning_content"):
                 self.hooks.emit("thinking", text=message["reasoning_content"])
@@ -103,8 +109,13 @@ class OpenAICompatibleEngine(AgentEngine):
             store.save_messages(self.config.session_id, self.messages)
         else:
             self.hooks.emit("error", text=f"Stopped after {MAX_STEPS} steps without finishing. Tell the agent how to continue.")
-        self.hooks.emit("result", duration_ms=int((time.monotonic() - started) * 1000), turns=steps,
-                        cost_usd=None, tokens_in=tokens_in, tokens_out=tokens_out, is_error=False)
+        self._report(is_error=False)
+
+    def _report(self, is_error: bool) -> None:
+        used = self.usage
+        self.hooks.emit("result", duration_ms=int((time.monotonic() - used["started"]) * 1000),
+                        turns=used["steps"], cost_usd=None, tokens_in=used["tokens_in"],
+                        tokens_out=used["tokens_out"], is_error=is_error)
 
     async def _run_tool_call(self, call: dict) -> None:
         name = call["function"]["name"]

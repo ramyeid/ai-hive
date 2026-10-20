@@ -47,6 +47,18 @@ reliably over many steps. Try a new model on a small task first.
 `Provider(...)` entry in `server/engines/__init__.py`. A different kind of API needs a new engine class implementing
 `AgentEngine` (`server/engines/base.py`).
 
+## What each task cost
+
+Every task shows its cost so far, from the PM's spec to the review, broken down by model and agent
+(Tasks page and each task's page). Each agent turn is charged to the task(s) it worked on: task IDs
+you mention, task files it reads or edits, IDs in its commands, or the task the PM creates. A turn
+that touches no task counts toward the task that conversation worked on last; a turn touching
+several tasks is split between them.
+
+Claude costs are Claude Code's own figures (with a subscription login they're an estimate of
+the equivalent API price). OpenAI, DeepSeek, Qwen and Kimi report tokens only: enter each model's
+price under **Settings → Model prices**. Prices apply to past conversations too.
+
 ## How it works
 
 - `server/` is a small FastAPI app. `agents.py` handles what you see (status, history, approvals);
@@ -65,4 +77,5 @@ reliably over many steps. Try a new model on a small task first.
 
 From this folder, with `.venv` active:
 - `python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
+- `python -m tests.test_costs` checks how costs are charged to tasks.
 - `python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.

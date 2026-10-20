@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import board, store
+from . import board, costs, store
 from .agents import AGENTS, AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
@@ -50,6 +50,12 @@ class SettingsBody(BaseModel):
 class AgentConfigBody(BaseModel):
     provider: str
     model: str = ""
+
+
+class PriceBody(BaseModel):
+    model: str
+    input: float | None = None     # US$ per 1M tokens; both None = remove the price
+    output: float | None = None
 
 
 class ProviderBody(BaseModel):
@@ -231,13 +237,30 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
 
     @app.get("/api/tasks")
     async def tasks():
-        return board.list_tasks()
+        spent = costs.summary()["tasks"]
+        empty = {"cost_usd": 0, "unpriced_tokens": 0, "tokens": 0, "rows": []}
+        return [{**t, "cost": spent.get(t["id"], empty)} for t in board.list_tasks()]
+
+    @app.get("/api/costs")
+    async def cost_summary():
+        return costs.summary()
+
+    @app.put("/api/prices")
+    async def price(body: PriceBody):
+        if body.input is None and body.output is None:
+            store.save_settings({"prices": {body.model: None}})
+        elif body.input is None or body.output is None or body.input < 0 or body.output < 0:
+            raise HTTPException(400, "Enter both prices, in US$ per 1M tokens.")
+        else:
+            store.save_settings({"prices": {body.model: {"input": body.input, "output": body.output}}})
+        return costs.summary()
 
     @app.get("/api/tasks/{task_id}")
     async def task(task_id: str):
         found = board.get_task(task_id)
         if not found:
             raise HTTPException(404, "Task not found.")
+        found["cost"] = costs.summary()["tasks"].get(task_id, {"cost_usd": 0, "unpriced_tokens": 0, "tokens": 0, "rows": []})
         return found
 
     @app.get("/api/inbox/{role}")

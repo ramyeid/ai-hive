@@ -91,9 +91,13 @@ class ClaudeCodeEngine(AgentEngine):
                     emit("tool_result", id=block.tool_use_id,
                          is_error=bool(block.is_error), text=_result_text(block.content))
         elif isinstance(message, ResultMessage):
+            usage = message.usage or {}
+            tokens_in = sum(usage.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens",
+                                                        "cache_read_input_tokens"))
             emit("result", claude_session_id=message.session_id,
                  cost_usd=message.total_cost_usd, turns=message.num_turns,
-                 duration_ms=message.duration_ms, is_error=message.is_error)
+                 duration_ms=message.duration_ms, is_error=message.is_error,
+                 tokens_in=tokens_in, tokens_out=usage.get("output_tokens") or 0)
 
     def _stream(self, event: dict) -> None:
         live = self.hooks.live

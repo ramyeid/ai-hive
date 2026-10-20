@@ -244,6 +244,13 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .provider p { margin: 0 0 6px; font-size: 0.86rem; }
 form.provider input { width: 100%; flex: none; }
 .provider .btn-row { margin-top: 8px; }
+.cost-total { margin: 0 0 8px; font-size: 1.15rem; font-weight: 600; }
+.cost-table { font-size: 0.82rem; }
+.cost-table td, .cost-table th { padding: 6px 8px; }
+.cost-table tbody tr { cursor: default; }
+.prices table { width: auto; }
+.prices tbody tr { cursor: default; }
+.prices input { width: 7rem; font-variant-numeric: tabular-nums; }
 .composer { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
 .composer textarea { width: 100%; min-height: 64px; max-height: 240px; }
 .composer .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }

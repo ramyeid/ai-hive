@@ -79,6 +79,14 @@ function ago(iso) {
   return then.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+const money = (x) => (x > 0 && x < 0.01 ? "under $0.01" : `$${(x || 0).toFixed(2)}`);
+const tokens = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : `${n || 0}`);
+function costText(c) {
+  if (!c || (!c.cost_usd && !c.unpriced_tokens)) return "";
+  if (!c.unpriced_tokens) return money(c.cost_usd);
+  return c.cost_usd ? `${money(c.cost_usd)} + ${tokens(c.unpriced_tokens)} tokens unpriced` : `${tokens(c.unpriced_tokens)} tokens, no price set`;
+}
+
 const providerOf = (id) => (state.settings?.providers || []).find((p) => p.id === id) || { id, label: id, models: [] };
 function choiceOf(name) {
   const ag = state.agents[name] || {};
@@ -314,18 +322,21 @@ async function Tasks() {
     (!taskFilter.q || `${t.id} ${t.title}`.toLowerCase().includes(taskFilter.q.toLowerCase())));
   const option = (value, label, current) => `<option value="${esc(value)}" ${value === current ? "selected" : ""}>${esc(label)}</option>`;
 
-  return `<div class="page-head"><div><h1>Tasks</h1><p>Every task across your projects. Task files live in <code>${esc(state.kit)}/tasks</code>.</p></div></div>
+  const unlinked = (await api("/api/costs")).unlinked;
+  return `<div class="page-head"><div><h1>Tasks</h1><p>Every task across your projects. Task files live in <code>${esc(state.kit)}/tasks</code>.</p>
+      ${costText(unlinked) ? `<p>Conversations not linked to any task: ${esc(costText(unlinked))}. <a href="#/history">See History</a></p>` : ""}</div></div>
     <div class="filters">
       <input type="text" id="task-q" placeholder="Search by ID or title" value="${esc(taskFilter.q)}" aria-label="Search tasks">
       <select id="task-project" aria-label="Project">${option("", "All projects", taskFilter.project)}${projects.map((p) => option(p, p, taskFilter.project)).join("")}</select>
       <select id="task-status" aria-label="Status">${option("open", "Open tasks", taskFilter.status)}${option("all", "All tasks", taskFilter.status)}${option("blocked", "Blocked", taskFilter.status)}${STAGES.map((s) => option(s.status, s.label, taskFilter.status)).join("")}</select>
     </div>
     ${shown.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Task</th><th>Project</th><th>Stage</th><th>With</th><th>Spec ready</th><th>Updated</th></tr></thead>
+      <thead><tr><th>Task</th><th>Project</th><th>Stage</th><th>With</th><th>Spec ready</th><th>Cost so far</th><th>Updated</th></tr></thead>
       <tbody>${shown.map((t) => `<tr data-href="#/tasks/${esc(t.id)}">
         <td><a href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b></a> ${esc(t.title)}</td>
         <td>${esc(t.project_name)}</td><td>${statusPill(t.status)}</td><td>${OWNER_LABEL[t.owner] || "You"}</td>
         <td><span class="ready"><span class="bar" aria-hidden="true"><i style="width:${t.ready.total ? Math.round(100 * t.ready.done / t.ready.total) : 0}%"></i></span>${t.ready.done}/${t.ready.total}</span></td>
+        <td class="num">${esc(costText(t.cost)) || '<span class="muted">None yet</span>'}</td>
         <td class="num">${ago(t.updated)}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty">${tasks.length ? "No tasks match these filters." : "No tasks yet. Open the PM and describe what you need."}</div>`}`;
 }
@@ -346,6 +357,7 @@ async function TaskDetail(r) {
       <aside class="task-side">
         <section><h2>Hand it to an agent</h2><p class="muted">Opens the chat with a message ready to send.</p>
           <div class="btn-row">${Object.keys(AGENTS).map((n) => `<button class="btn small" data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">${AGENTS[n].name}</button>`).join("")}</div></section>
+        <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
         <section><h2>Details</h2><dl class="facts">
           <dt>Project</dt><dd><code>${esc(t.project)}</code></dd>
           <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
@@ -358,6 +370,18 @@ async function TaskDetail(r) {
         <section><h2>History</h2>${timeline ? `<ul class="timeline">${timeline}</ul>` : `<p class="muted">No status changes recorded yet.</p>`}</section>
       </aside>
     </div>`;
+}
+
+function costSection(c) {
+  if (!c || !c.rows.length) return `<p class="muted">Nothing spent on this task yet.</p>`;
+  const rows = c.rows.map((r) => `<tr><td>${esc(r.model)}<br><small class="muted">${esc(providerOf(r.provider).label)}</small></td>
+      <td><span class="pill ${r.agent}">${AGENTS[r.agent]?.name || esc(r.agent)}</span></td>
+      <td class="num">${tokens(r.tokens_in + r.tokens_out)}</td>
+      <td class="num">${r.unpriced_tokens && !r.cost_usd ? '<a href="#/settings">Set price</a>' : money(r.cost_usd)}</td></tr>`).join("");
+  return `<p class="cost-total">${esc(costText(c) || money(0))}</p>
+    <div class="table-wrap"><table class="cost-table"><thead><tr><th>Model</th><th>Agent</th><th>Tokens</th><th>Cost</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <p class="hint">From the PM's spec to the review, every agent turn on this task. Claude costs are Claude Code's own figures; other models use the prices in Settings.</p>`;
 }
 
 // ---- agent chat ----------------------------------------------------------------
@@ -584,6 +608,10 @@ async function SessionView(r) {
 
 async function Settings() {
   await loadState();
+  const seen = (await api("/api/costs")).models.filter((m) => m.provider !== "claude").map((m) => m.model);
+  const configured = Object.values(state.settings.agents).filter((a) => a.provider !== "claude" && a.model).map((a) => a.model);
+  const priced = Object.keys(state.settings.prices || {});
+  const models = [...new Set([...seen, ...configured, ...priced])].sort();
   return `<div class="page-head"><div><h1>Settings</h1></div></div>
     <form class="form" id="settings-form">
       <label for="workspace">Agents' home folder</label>
@@ -593,6 +621,14 @@ async function Settings() {
     <section class="section"><h2>AI providers</h2>
       <p class="muted" style="max-width:68ch">Choose the provider and model for each agent in its chat header, while the agent is stopped. Keys are kept on this server in <code>console/data/settings.json</code> and are never shown again in the browser.</p>
       <div class="providers">${state.settings.providers.map(providerCard).join("")}</div></section>
+    <section class="section"><h2>Model prices</h2>
+      <p class="muted" style="max-width:68ch">OpenAI, DeepSeek, Qwen and Kimi report tokens, not money. Enter each model's price from your provider's pricing page, in US$ per 1 million tokens, to see task costs. Changes apply to past conversations too. Claude Code reports its own cost.</p>
+      ${models.length ? `<div class="table-wrap prices"><table><thead><tr><th>Model</th><th>Input, $ per 1M</th><th>Output, $ per 1M</th><th></th></tr></thead><tbody>
+        ${models.map((m) => { const p = state.settings.prices?.[m] || {}; return `<tr><td><code>${esc(m)}</code></td>
+          <td><input type="text" inputmode="decimal" data-price="input" data-model="${esc(m)}" value="${p.input ?? ""}" placeholder="0.00" aria-label="${esc(m)} input price"></td>
+          <td><input type="text" inputmode="decimal" data-price="output" data-model="${esc(m)}" value="${p.output ?? ""}" placeholder="0.00" aria-label="${esc(m)} output price"></td>
+          <td><button class="btn small" data-action="save-price" data-model="${esc(m)}">Save</button></td></tr>`; }).join("")}
+      </tbody></table></div>` : `<p class="muted">Models appear here once an agent is set to a non-Claude model.</p>`}</section>
     <section class="section"><h2>How approvals work</h2>
       <p class="muted" style="max-width:68ch">When an agent wants to edit a file or run a command, it pauses and asks you in its chat. On Claude, anything your Claude Code settings already allow runs without asking. On the other providers, reading and searching inside the agents' home folder and the kit, editing task files and running the kit's own scripts don't ask; everything else does. Choose "Allow automatically" for edits in an agent's chat header to skip edit prompts for that agent.</p></section>
     <section class="section"><h2>Agent kit</h2><dl class="facts"><dt>Kit folder</dt><dd><code>${esc(state.kit)}</code></dd><dt>Task board</dt><dd><code>${esc(state.kit)}/tasks</code></dd></dl></section>`;
@@ -689,6 +725,15 @@ const actions = {
     const name = el.dataset.agent;
     state.drafts[name] = PROMPTS[name]({ id: el.dataset.task, title: el.dataset.title });
     location.hash = `#/agents/${name}`;
+  },
+  "save-price": async (el) => {
+    const m = el.dataset.model;
+    const val = (k) => document.querySelector(`input[data-price="${k}"][data-model="${CSS.escape(m)}"]`).value.trim();
+    const input = val("input"), output = val("output");
+    const body = input === "" && output === "" ? { model: m } : { model: m, input: Number(input), output: Number(output) };
+    if (body.input !== undefined && (Number.isNaN(body.input) || Number.isNaN(body.output))) return toast("Enter prices as numbers, like 0.27.", true);
+    const ok = await act(() => api("/api/prices", { method: "PUT", body }), input === "" && output === "" ? "Price removed." : "Price saved.");
+    if (ok) await loadState();
   },
   "remove-key": async (el) => {
     const saved = await act(() => api(`/api/providers/${el.dataset.provider}`, { method: "PUT", body: { api_key: "" } }), "Key removed.");
