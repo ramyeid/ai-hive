@@ -12,6 +12,19 @@ bash console/start.sh        # from the repository folder
 The first run creates a Python environment and installs three packages (about a minute).
 Then it opens **http://127.0.0.1:8420** in your browser. Stop it with Ctrl+C.
 
+**On a server, or to keep it running after you close the terminal**, run it in the background:
+
+```bash
+bash console/service-start.sh    # starts it; output goes to console/service.log
+bash console/service-stop.sh     # stops it (running agents are stopped first)
+tail -f console/service.log      # follow the log
+```
+
+`service-start.sh` won't start a second copy, and reports the error from the log if the console fails
+to start (for example, when port 8420 is already in use). Use `PORT=8500 bash console/service-start.sh` for
+another port. It doesn't restart the console after a crash or a reboot: for that, run it as a system service
+(systemd on Linux).
+
 Requirements:
 - `install.sh` has been run once (it adds the task hook the agents rely on).
 - Python 3.10 or newer (macOS: `brew install python@3.12`).

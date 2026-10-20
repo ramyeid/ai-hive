@@ -26,9 +26,11 @@ fi
 .venv/bin/pip install --quiet -r requirements.txt
 
 URL="http://127.0.0.1:$PORT"
-( sleep 1.5
-  if [ "$(uname)" = "Darwin" ]; then open "$URL"
-  elif command -v xdg-open >/dev/null; then xdg-open "$URL" >/dev/null 2>&1
-  fi ) &
+if [ -z "${NO_BROWSER:-}" ]; then   # service-start.sh sets NO_BROWSER
+  ( sleep 1.5
+    if [ "$(uname)" = "Darwin" ]; then open "$URL"
+    elif command -v xdg-open >/dev/null; then xdg-open "$URL" >/dev/null 2>&1
+    fi ) &
+fi
 echo "Agent Team Console → $URL   (Ctrl+C to stop)"
 exec .venv/bin/python -m uvicorn server.main:app --host 127.0.0.1 --port "$PORT"
