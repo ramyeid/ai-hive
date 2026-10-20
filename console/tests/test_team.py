@@ -65,7 +65,7 @@ def run():
         # Each agent has its own provider and model.
         c.put("/api/agents/dev-2/config", json={"provider": "deepseek", "model": "deepseek-chat"}, headers=H)
         agents = store.load_settings()["agents"]
-        check(agents["dev-2"] == {"role": "dev", "provider": "deepseek", "model": "deepseek-chat"}
+        check({k: agents["dev-2"][k] for k in ("role", "provider", "model")} == {"role": "dev", "provider": "deepseek", "model": "deepseek-chat"}
               and agents["dev"]["provider"] == "claude", "changing dev-2's model leaves dev alone and keeps its role")
 
         # The agent knows who it is.
@@ -89,6 +89,28 @@ def run():
         check(r.status_code == 409 and "at least one pm" in r.json()["detail"], "the last PM can't be removed")
         check(c.post("/api/agents", json={"role": "dev"}, headers=H).json()["id"] == "dev-3", "freed numbers are reused")
         check(c.post("/api/agents/nobody/start", json={}, headers=H).status_code == 404, "unknown agents are refused")
+
+        # Names: every agent gets a different one from the pool, and can be renamed.
+        agents = store.load_settings()["agents"]
+        given = [a["name"] for a in agents.values()]
+        check(all(n in store.NAMES for n in given) and len(set(given)) == len(given),
+              f"every agent has its own name from the pool ({', '.join(given)})")
+        check(store.load_settings()["agents"] == agents, "names are kept, not re-drawn on every load")
+        check(c.put("/api/agents/dev/name", json={"name": "  Kareem  "}, headers=H).json()["agents"]["dev"]["name"] == "Kareem",
+              "dev renamed to Kareem")
+        r = c.put("/api/agents/pm/name", json={"name": "kareem"}, headers=H)
+        check(r.status_code == 400 and "already" in r.json()["detail"], "two agents can't share a name")
+        check(c.put("/api/agents/pm/name", json={"name": " "}, headers=H).status_code == 400, "empty names are refused")
+        check(store.load_settings()["agents"]["dev"]["role"] == "dev", "renaming keeps the role")
+        c.put("/api/agents/dev/config", json={"provider": "claude", "model": ""}, headers=H)
+        check(store.load_settings()["agents"]["dev"]["name"] == "Kareem", "changing the model keeps the name")
+        c.post("/api/agents/dev/start", json={}, headers=H)
+        for _ in range(200):
+            if "Kareem" in str(FakeClient.last_options.system_prompt):
+                break
+            time.sleep(0.02)
+        check("Your name is Kareem" in str(FakeClient.last_options.system_prompt), "the agent is told its name")
+        c.post("/api/agents/dev/stop", headers=H)
 
 
 if __name__ == "__main__":

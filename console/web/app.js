@@ -11,7 +11,10 @@ const ROLES = {
 const OWNER_LABEL = { pm: "PM", dev: "Dev", reviewer: "Reviewer", lead: "You" };
 // Agents are identified by id: the role, then -2, -3… for extra agents of the same role.
 const roleOf = (id) => state.agents[id]?.role || String(id).split("-")[0];
-const nameOf = (id) => { const r = ROLES[roleOf(id)]; const n = String(id).split("-")[1]; return r ? (n ? `${r.name} ${n}` : r.name) : String(id); };
+// Each agent has a display name (Kareem), given at random and renamed in Settings; shown as "Kareem (PM)".
+const personOf = (id) => { const given = state.settings?.agents?.[id]?.name; if (given) return given;
+  const r = ROLES[roleOf(id)]; const n = String(id).split("-")[1]; return r ? (n ? `${r.name} ${n}` : r.name) : String(id); };
+const nameOf = (id) => { const r = ROLES[roleOf(id)]; const p = personOf(id); return r && p !== r.name && !p.startsWith(`${r.name} `) ? `${p} (${r.name})` : p; };
 const agentIds = () => Object.keys(state.agents);
 const STAGES = [
   { status: "draft", label: "Draft", owner: "pm" },
@@ -244,7 +247,7 @@ function renderRail() {
   document.getElementById("rail-agents").innerHTML = agentIds().map((name) => {
     const st = state.agents[name]?.status || "stopped";
     return `<a class="rail-agent ${roleOf(name)}" data-agent="${name}" href="#/agents/${name}">
-      <span class="who">${esc(nameOf(name))}<small>${ROLES[roleOf(name)].role}</small></span>
+      <span class="who">${esc(personOf(name))}<small>${ROLES[roleOf(name)].role}</small></span>
       <span class="status ${st}" title="${STATUS_TEXT[st]}">${st === "waiting" ? "Approve" : ""}</span></a>`;
   }).join("");
   highlightNav(route());
@@ -436,7 +439,7 @@ function renderAgentChrome(name) {
         <datalist id="models-${name}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
         ${needsKey ? `<span class="warn">No ${esc(prov.label)} API key yet. <a href="#/settings">Add it in Settings</a></span>` : ""}
       </div>`;
-  head.innerHTML = `<div class="title"><h1>${esc(nameOf(name))}</h1><p>${a.blurb}</p>${picker}</div>
+  head.innerHTML = `<div class="title"><h1>${esc(nameOf(name))} <button class="btn small" data-action="rename" data-agent="${name}">Rename</button></h1><p>${a.blurb}</p>${picker}</div>
     <div class="btn-row" style="align-items:center">
       <span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span>
       <label class="mode">Edits <select data-action="mode" data-agent="${name}" aria-label="File edit approvals">
@@ -658,14 +661,15 @@ function teamSection() {
       <ul>${ids.map((id) => {
         const ag = state.agents[id];
         const choice = state.settings.agents[id] || {};
-        return `<li><a href="#/agents/${id}">${esc(nameOf(id))}</a> <code class="muted">${esc(id)}</code>
+        return `<li><input type="text" class="agent-name" data-action="name" data-agent="${id}" value="${esc(personOf(id))}" maxlength="30" aria-label="Name of ${esc(id)}">
+          <a href="#/agents/${id}" class="muted">chat</a> <code class="muted">${esc(id)}</code>
           <span class="muted">${esc(providerOf(choice.provider || "claude").label)}${choice.model ? `, ${esc(choice.model)}` : ""}</span>
           ${ids.length > 1 ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${ag.status !== "stopped" ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</li>`;
       }).join("")}</ul>
       <button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button></div>`;
   }).join("");
   return `<section class="section"><h2>Team</h2>
-    <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Choose each agent's provider and model in its chat header.</p>
+    <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Each agent gets a random name; type over it to rename. Choose each agent's provider and model in its chat header.</p>
     <div class="team">${rows}</div></section>`;
 }
 
@@ -686,6 +690,13 @@ function providerCard(p) {
       <div class="btn-row"><button class="btn primary">Save</button>
         ${p.has_key && !p.key_from_env ? `<button type="button" class="btn danger" data-action="remove-key" data-provider="${p.id}">Remove key</button>` : ""}</div>
     </form>`;
+}
+
+async function renameAgent(name, value) {
+  const saved = await act(() => api(`/api/agents/${name}/name`, { method: "PUT", body: { name: value } }), `Renamed to ${value.trim()}.`);
+  if (saved) state.settings = saved;
+  render(true);
+  renderRail();
 }
 
 async function saveConfig(name, provider, model) {
@@ -770,6 +781,11 @@ const actions = {
     const ok = await act(() => api("/api/prices", { method: "PUT", body }), input === "" && output === "" ? "Price removed." : "Price saved.");
     if (ok) await loadState();
   },
+  async rename(el) {
+    const name = el.dataset.agent;
+    const value = prompt(`New name for ${nameOf(name)}:`, personOf(name));
+    if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
+  },
   "add-agent": async (el) => {
     const added = await act(() => api("/api/agents", { method: "POST", body: { role: el.dataset.role } }));
     if (!added) return;
@@ -821,6 +837,12 @@ document.addEventListener("click", (e) => {
 document.addEventListener("change", async (e) => {
   if (e.target.matches('[data-action="provider"]')) {
     saveConfig(e.target.dataset.agent, e.target.value, "");
+    return;
+  }
+  if (e.target.matches('input[data-action="name"]')) {
+    const name = e.target.dataset.agent;
+    if (e.target.value.trim() && e.target.value.trim() !== personOf(name)) renameAgent(name, e.target.value);
+    else e.target.value = personOf(name);
     return;
   }
   if (e.target.matches('[data-action="model"]')) {

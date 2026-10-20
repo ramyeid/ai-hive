@@ -39,7 +39,7 @@ Requirements:
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
-| **Settings** | Your team: add or remove PMs, devs and reviewers (e.g. 2 PMs, 3 devs, 2 reviewers). The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
+| **Settings** | Your team: add, remove and rename PMs, devs and reviewers (e.g. 2 PMs, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (PM)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
 ## Choosing the AI provider
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,12 @@ INDEX = SESSIONS / "index.json"
 SETTINGS = DATA / "settings.json"
 
 ROLES = ("pm", "dev", "reviewer")
+# Display names, given at random to new agents (rename them in Settings). The ID (dev-2) stays
+# what the scripts and task files use; the name is only what you see.
+NAMES = """Kareem Hossam Aliaa Zeinab Tarek Nour Yasmine Rania Hany Sherif Amr Laila Dina Salma
+Ramy Nadine Maher Samir Hala Mona Farida Hazem Sameh Reem Lina Ziad Shady Nada Hoda Waleed
+Bassem Hesham Malak Jana Tamer Wael Ayman Sherine Dalia Ghada Rasha Heba Nabil Adham Seif
+Yasser Khaled Marwan Nader Rana Lama Karma Ola Mai Hadeer Nesma Mazen Ehab Yara""".split()
 DEFAULT_SETTINGS = {
     "workspace": str(Path.home()),
     "permission_mode": {},   # agent id -> default | acceptEdits
@@ -50,13 +57,36 @@ def load_settings() -> dict:
     saved = _read_json(SETTINGS, {})
     settings = {**DEFAULT_SETTINGS, **saved}
     agents = saved.get("agents") or DEFAULT_SETTINGS["agents"]
-    settings["agents"] = {aid: {"role": a.get("role") or role_of(aid), "provider": a.get("provider", "claude"),
-                                "model": a.get("model", "")} for aid, a in agents.items()}
+    settings["agents"] = {aid: {"role": a.get("role") or role_of(aid), "name": a.get("name", ""),
+                                "provider": a.get("provider", "claude"), "model": a.get("model", "")}
+                          for aid, a in agents.items()}
     settings["permission_mode"] = {aid: saved.get("permission_mode", {}).get(aid, "default")
                                    for aid in settings["agents"]}
     settings["providers"] = saved.get("providers", {})
     settings["prices"] = saved.get("prices", {})
+    unnamed = [a for a in settings["agents"].values() if not a["name"]]
+    for agent in unnamed:   # first run, or agents from before names existed: name them once
+        agent["name"] = pick_name(settings["agents"])
+    if unnamed:
+        _write_json(SETTINGS, settings)
     return settings
+
+
+def pick_name(agents: dict) -> str:
+    taken = {a.get("name", "").lower() for a in agents.values()}
+    free = [n for n in NAMES if n.lower() not in taken]
+    return random.choice(free) if free else f"Agent {len(agents) + 1}"
+
+
+def rename_agent(agent_id: str, name: str) -> None:
+    settings = load_settings()
+    name = " ".join(name.split())
+    if not name or len(name) > 30:
+        raise ValueError("Names need 1 to 30 characters.")
+    if any(a["name"].lower() == name.lower() for aid, a in settings["agents"].items() if aid != agent_id):
+        raise ValueError(f"Another agent is already called {name}.")
+    settings["agents"][agent_id]["name"] = name
+    _write_json(SETTINGS, settings)
 
 
 def save_settings(changes: dict) -> dict:
@@ -98,7 +128,7 @@ def add_agent(role: str) -> str:
     settings = load_settings()
     taken = set(settings["agents"])
     agent_id = role if role not in taken else next(f"{role}-{n}" for n in range(2, 100) if f"{role}-{n}" not in taken)
-    settings["agents"][agent_id] = {"role": role, "provider": "claude", "model": ""}
+    settings["agents"][agent_id] = {"role": role, "name": pick_name(settings["agents"]), "provider": "claude", "model": ""}
     settings["permission_mode"][agent_id] = "default"
     _write_json(SETTINGS, settings)
     return agent_id

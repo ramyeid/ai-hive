@@ -52,6 +52,10 @@ class AgentConfigBody(BaseModel):
     model: str = ""
 
 
+class NameBody(BaseModel):
+    name: str
+
+
 class NewAgentBody(BaseModel):
     role: str                      # pm | dev | reviewer
 
@@ -220,6 +224,16 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         manager.sync()
         manager.bus.publish({"kind": "team"})
         return {"agents": [r.info() for r in manager.agents.values()], "settings": public_settings()}
+
+    @app.put("/api/agents/{name}/name")
+    async def rename_agent(name: str, body: NameBody):
+        runner(name)
+        try:
+            store.rename_agent(name, body.name)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        manager.bus.publish({"kind": "team"})
+        return public_settings()
 
     @app.put("/api/agents/{name}/config")
     async def agent_config(name: str, body: AgentConfigBody):

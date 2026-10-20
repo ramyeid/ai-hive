@@ -135,6 +135,8 @@ textarea { resize: vertical; }
 .team-role ul { list-style: none; margin: 0 0 10px; padding: 0; }
 .team-role li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
 .team-role li .btn { margin-left: auto; }
+.team-role .agent-name { width: 9em; padding: 3px 6px; font: inherit; font-weight: 500; }
+.title h1 .btn { vertical-align: middle; margin-left: 6px; }
 .station { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 14px; border: 1px solid var(--rule); border-top: 4px solid var(--role); border-radius: var(--radius-m); background: var(--panel); }
 .station header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .station h2 a { text-decoration: none; }

@@ -135,7 +135,9 @@ class AgentRunner:
         if not provider:
             raise ValueError(f"Unknown provider: {provider_id}")
         instructions, default_claude_model = load_agent(self.role)
-        instructions += (f"\n\n## Your identity\nYour agent ID is `{self.name}` (role: {self.role}). It's in the "
+        display = store.load_settings()["agents"].get(self.name, {}).get("name", "")
+        instructions += (f"\n\n## Your identity\n{f'Your name is {display}. ' if display else ''}"
+                         f"Your agent ID is `{self.name}` (role: {self.role}). It's in the "
                          "`AGENT_ID` environment variable, which the kit's scripts use for your inbox and claims.")
         if provider.engine == "claude":
             model = model or default_claude_model

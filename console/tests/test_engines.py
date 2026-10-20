@@ -64,7 +64,7 @@ def main():
 
         # --- choosing provider and model ------------------------------------------------
         r = c.put("/api/agents/dev/config", json={"provider": "deepseek", "model": "deepseek-v4-pro"}, headers=H)
-        check(r.json()["agents"]["dev"] == {"role": "dev", "provider": "deepseek", "model": "deepseek-v4-pro"}, "dev set to DeepSeek")
+        check({k: r.json()["agents"]["dev"][k] for k in ("provider", "model")} == {"provider": "deepseek", "model": "deepseek-v4-pro"}, "dev set to DeepSeek")
         r = c.post("/api/agents/kimi/start", json={}, headers=H)
         check(r.status_code == 404, "unknown agent rejected")
         r = c.put("/api/agents/pm/config", json={"provider": "kimi", "model": ""}, headers=H)
