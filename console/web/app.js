@@ -79,6 +79,14 @@ function ago(iso) {
   return then.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+const providerOf = (id) => (state.settings?.providers || []).find((p) => p.id === id) || { id, label: id, models: [] };
+function choiceOf(name) {
+  const ag = state.agents[name] || {};
+  if (ag.status && ag.status !== "stopped" && ag.provider) return { provider: ag.provider, model: ag.model };
+  return state.settings?.agents?.[name] || { provider: "claude", model: "" };
+}
+const modelLabel = (name) => { const c = choiceOf(name); return `${providerOf(c.provider).label}, ${c.model || "default model"}`; };
+
 const ownerOf = (status) => (STAGES.find((s) => s.status === status) || { owner: "lead" }).owner;
 const stageLabel = (status) => (STAGES.find((s) => s.status === status) || { label: status === "blocked" ? "Blocked" : status }).label;
 const statusPill = (status) => `<span class="pill ${status === "blocked" ? "lead" : ownerOf(status)}">${esc(stageLabel(status))}</span>`;
@@ -248,6 +256,7 @@ async function Overview() {
     const running = ag.status !== "stopped";
     return `<section class="station ${name} ${ag.status === "waiting" ? "waiting" : ""}">
       <header><h2><a href="#/agents/${name}">${a.name}</a></h2><span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span></header>
+      <p class="model">${esc(modelLabel(name))}</p>
       <p class="doing">${esc(doing(name))}</p>
       <div class="btn-row">
         <a class="btn small ${ag.status === "waiting" ? "role" : ""}" href="#/agents/${name}">${ag.status === "waiting" ? "Review request" : "Open chat"}</a>
@@ -377,7 +386,20 @@ function renderAgentChrome(name) {
   const mode = state.settings?.permission_mode?.[name] || "default";
   const running = ag.status !== "stopped";
   const busy = ag.status === "working" || ag.status === "waiting";
-  head.innerHTML = `<div class="title"><h1>${a.name}</h1><p>${a.blurb}</p></div>
+  const choice = choiceOf(name);
+  const prov = providerOf(choice.provider);
+  const needsKey = prov.engine !== "claude" && !prov.has_key;
+  const picker = running
+    ? `<p class="model">Running on ${esc(modelLabel(name))}</p>`
+    : `<div class="model-pick">
+        <label>Provider <select data-action="provider" data-agent="${name}">${(state.settings?.providers || []).map((p) =>
+          `<option value="${p.id}" ${p.id === choice.provider ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
+        <label>Model <input type="text" list="models-${name}" data-action="model" data-agent="${name}" value="${esc(choice.model)}"
+          placeholder="${prov.engine === "claude" ? "Default from the agent file" : `For example ${esc(prov.models?.[0] || "")}`}" spellcheck="false"></label>
+        <datalist id="models-${name}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
+        ${needsKey ? `<span class="warn">No ${esc(prov.label)} API key yet. <a href="#/settings">Add it in Settings</a></span>` : ""}
+      </div>`;
+  head.innerHTML = `<div class="title"><h1>${a.name}</h1><p>${a.blurb}</p>${picker}</div>
     <div class="btn-row" style="align-items:center">
       <span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span>
       <label class="mode">Edits <select data-action="mode" data-agent="${name}" aria-label="File edit approvals">
@@ -484,7 +506,7 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
       case "thinking": return `<details class="thinking"><summary>Thought process</summary><div class="thought">${esc(e.text)}</div></details>`;
       case "system": return `<div class="msg system">${esc(e.text.replace(/\.$/, ""))}, ${ago(e.ts)}</div>`;
       case "error": return `<div class="msg error">Something went wrong: ${esc(e.text)}</div>`;
-      case "result": return `<div class="msg result">Finished in ${(e.duration_ms / 1000).toFixed(1)} s${e.cost_usd ? `, about $${e.cost_usd.toFixed(3)}` : ""}${e.is_error ? ", with an error" : ""}</div>`;
+      case "result": return `<div class="msg result">Finished in ${(e.duration_ms / 1000).toFixed(1)} s${e.cost_usd ? `, about $${e.cost_usd.toFixed(3)}` : ""}${e.tokens_in ? `, ${(e.tokens_in + e.tokens_out).toLocaleString()} tokens` : ""}${e.is_error ? ", with an error" : ""}</div>`;
       case "tool": {
         const res = results[e.id];
         const open = state.openTools.has(e.id) ? "open" : "";
@@ -539,10 +561,11 @@ async function History() {
   return `<div class="page-head"><div><h1>History</h1><p>Every conversation with your agents. Open one to read it, or continue where it left off.</p></div></div>
     <nav class="tabs"><a href="#/history" ${!agent ? 'aria-current="page"' : ""}>All</a>${Object.entries(AGENTS).map(([k, a]) => `<a class="${k}" href="#/history?agent=${k}" ${agent === k ? 'aria-current="page"' : ""}>${a.name}</a>`).join("")}</nav>
     ${sessions.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Agent</th><th>Conversation</th><th>Started</th><th>Last activity</th><th>Turns</th><th>Cost</th></tr></thead>
+      <thead><tr><th>Agent</th><th>Conversation</th><th>Model</th><th>Started</th><th>Last activity</th><th>Turns</th><th>Usage</th></tr></thead>
       <tbody>${sessions.map((s) => `<tr data-href="#/history/${s.id}"><td><span class="pill ${s.agent}">${AGENTS[s.agent]?.name}</span></td>
-        <td><a href="#/history/${s.id}">${esc(s.title)}</a></td><td class="num">${esc(new Date(s.started).toLocaleString())}</td>
-        <td class="num">${ago(s.updated)}</td><td class="num">${s.turns}</td><td class="num">${s.cost_usd ? `$${s.cost_usd.toFixed(2)}` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        <td><a href="#/history/${s.id}">${esc(s.title)}</a></td><td>${esc(providerOf(s.provider || "claude").label)}${s.model ? `<br><small class="muted">${esc(s.model)}</small>` : ""}</td>
+        <td class="num">${esc(new Date(s.started).toLocaleString())}</td>
+        <td class="num">${ago(s.updated)}</td><td class="num">${s.turns}</td><td class="num">${s.cost_usd ? `$${s.cost_usd.toFixed(2)}` : s.tokens ? `${s.tokens.toLocaleString()} tokens` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty">No conversations yet.</div>`}`;
 }
 
@@ -567,9 +590,38 @@ async function Settings() {
       <p class="muted" style="margin:0">Agents start here and can work in any project under it without extra permission prompts. Pick the folder that holds your projects. Takes effect the next time an agent starts.</p>
       <div class="row"><input type="text" id="workspace" value="${esc(state.settings.workspace)}"><button class="btn primary">Save</button></div>
     </form>
+    <section class="section"><h2>AI providers</h2>
+      <p class="muted" style="max-width:68ch">Choose the provider and model for each agent in its chat header, while the agent is stopped. Keys are kept on this server in <code>console/data/settings.json</code> and are never shown again in the browser.</p>
+      <div class="providers">${state.settings.providers.map(providerCard).join("")}</div></section>
     <section class="section"><h2>How approvals work</h2>
-      <p class="muted" style="max-width:68ch">When an agent wants to do something your Claude Code settings don't already allow, such as editing a file or running a command, it pauses and asks you in its chat. Choose "Allow automatically" for file edits in an agent's chat header to skip those prompts for that agent.</p></section>
+      <p class="muted" style="max-width:68ch">When an agent wants to edit a file or run a command, it pauses and asks you in its chat. On Claude, anything your Claude Code settings already allow runs without asking. On the other providers, reading and searching inside the agents' home folder and the kit, editing task files and running the kit's own scripts don't ask; everything else does. Choose "Allow automatically" for edits in an agent's chat header to skip edit prompts for that agent.</p></section>
     <section class="section"><h2>Agent kit</h2><dl class="facts"><dt>Kit folder</dt><dd><code>${esc(state.kit)}</code></dd><dt>Task board</dt><dd><code>${esc(state.kit)}/tasks</code></dd></dl></section>`;
+}
+
+function providerCard(p) {
+  if (p.engine === "claude") {
+    return `<div class="provider"><h3>${esc(p.label)}</h3><p class="muted">${esc(p.note)}</p></div>`;
+  }
+  const keyText = p.key_from_env ? `Using <code>${esc(p.key_env)}</code> from the server's environment.`
+    : p.has_key ? `Saved key ends in ${esc(p.key_hint)}.` : "No key yet.";
+  return `<form class="provider form" data-provider="${p.id}">
+      <h3>${esc(p.label)}</h3>
+      ${p.note ? `<p class="muted">${esc(p.note)}</p>` : ""}
+      <label for="key-${p.id}">API key</label>
+      <input type="password" id="key-${p.id}" name="api_key" autocomplete="off" placeholder="${p.has_key ? "Paste a new key to replace it" : `Paste your ${esc(p.label)} API key`}">
+      <p class="hint">${keyText}</p>
+      <label for="url-${p.id}">API address</label>
+      <input type="text" id="url-${p.id}" name="base_url" value="${esc(p.base_url)}" spellcheck="false">
+      <div class="btn-row"><button class="btn primary">Save</button>
+        ${p.has_key && !p.key_from_env ? `<button type="button" class="btn danger" data-action="remove-key" data-provider="${p.id}">Remove key</button>` : ""}</div>
+    </form>`;
+}
+
+async function saveConfig(name, provider, model) {
+  const saved = await act(() => api(`/api/agents/${name}/config`, { method: "PUT", body: { provider, model } }));
+  if (saved) state.settings = saved;
+  renderAgentChrome(name);
+  if (route().page === "overview") render(true);
 }
 
 // ---- after-render wiring --------------------------------------------------------
@@ -601,6 +653,13 @@ const afterRender = {
     document.getElementById("task-status").addEventListener("change", (e) => { taskFilter.status = e.target.value; history.replaceState(null, "", "#/tasks"); rerender(); });
   },
   settings() {
+    document.querySelectorAll("form.provider").forEach((form) => form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const key = form.api_key.value.trim();
+      const saved = await act(() => api(`/api/providers/${form.dataset.provider}`, { method: "PUT",
+        body: { api_key: key || null, base_url: form.base_url.value.trim() } }), "Provider saved.");
+      if (saved) { state.settings = saved; render(true); }
+    }));
     document.getElementById("settings-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const saved = await act(() => api("/api/settings", { method: "PUT", body: { workspace: document.getElementById("workspace").value } }), "Settings saved.");
@@ -631,6 +690,10 @@ const actions = {
     state.drafts[name] = PROMPTS[name]({ id: el.dataset.task, title: el.dataset.title });
     location.hash = `#/agents/${name}`;
   },
+  "remove-key": async (el) => {
+    const saved = await act(() => api(`/api/providers/${el.dataset.provider}`, { method: "PUT", body: { api_key: "" } }), "Key removed.");
+    if (saved) { state.settings = saved; render(true); }
+  },
   "clear-inbox": async (el) => { await act(() => api(`/api/inbox/${el.dataset.role}/clear`, { method: "POST" }), "Marked as read."); render(true); refreshBadge(); },
   "check-inbox": async (el) => {
     const ok = await act(() => api(`/api/agents/${el.dataset.agent}/message`, { method: "POST", body: { text: "Check your inbox." } }));
@@ -659,6 +722,15 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.matches('[data-action="provider"]')) {
+    saveConfig(e.target.dataset.agent, e.target.value, "");
+    return;
+  }
+  if (e.target.matches('[data-action="model"]')) {
+    const name = e.target.dataset.agent;
+    saveConfig(name, choiceOf(name).provider, e.target.value.trim());
+    return;
+  }
   if (e.target.matches('select[data-action="mode"]')) {
     const name = e.target.dataset.agent;
     const saved = await act(() => api(`/api/agents/${name}/mode`, { method: "PUT", body: { mode: e.target.value } }),

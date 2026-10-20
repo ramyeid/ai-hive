@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from . import board, store
 from .agents import AGENTS, AgentManager
+from .engines import PROVIDERS
 from .store import CONSOLE
 
 TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
@@ -44,6 +45,24 @@ class ModeBody(BaseModel):
 
 class SettingsBody(BaseModel):
     workspace: str
+
+
+class AgentConfigBody(BaseModel):
+    provider: str
+    model: str = ""
+
+
+class ProviderBody(BaseModel):
+    api_key: str | None = None     # None = keep, "" = remove
+    base_url: str | None = None    # None = keep, "" = back to the default
+
+
+def public_settings() -> dict:
+    """Settings for the browser: API keys are replaced by hints."""
+    settings = store.load_settings()
+    settings.pop("providers", None)
+    settings["providers"] = store.public_providers(PROVIDERS)
+    return settings
 
 
 def create_app(manager: AgentManager | None = None) -> FastAPI:
@@ -90,7 +109,7 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     @app.get("/api/state")
     async def state():
         return {"agents": [r.info() for r in manager.agents.values()],
-                "settings": store.load_settings(), "kit": str(store.KIT)}
+                "settings": public_settings(), "kit": str(store.KIT)}
 
     @app.get("/api/events")
     async def events(request: Request):
@@ -168,7 +187,24 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         await _do(runner(name).set_permission_mode(body.mode))
-        return store.load_settings()
+        return public_settings()
+
+    @app.put("/api/agents/{name}/config")
+    async def agent_config(name: str, body: AgentConfigBody):
+        agent = runner(name)
+        if body.provider not in PROVIDERS:
+            raise HTTPException(400, f"Unknown provider: {body.provider}")
+        if agent.status != "stopped":
+            raise HTTPException(409, f"Stop {name} first. The provider and model apply when it starts.")
+        store.save_settings({"agents": {name: body.model_dump()}})
+        return public_settings()
+
+    @app.put("/api/providers/{pid}")
+    async def provider(pid: str, body: ProviderBody):
+        if pid not in PROVIDERS or PROVIDERS[pid].engine == "claude":
+            raise HTTPException(404, "Unknown provider.")
+        store.save_settings({"providers": {pid: body.model_dump()}})
+        return public_settings()
 
     # ---- history ---------------------------------------------------------------------
 
@@ -223,7 +259,8 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     @app.put("/api/settings")
     async def settings(body: SettingsBody):
         try:
-            return store.save_settings({"workspace": body.workspace})
+            store.save_settings({"workspace": body.workspace})
+            return public_settings()
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
