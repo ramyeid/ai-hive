@@ -51,6 +51,11 @@ Compare the new code to the references and the surrounding code. The whole codeb
 
 Any deviation from a reference, convention or established pattern → **should-fix**, citing the file it should look like.
 
+**Duplication check (always):** for every new endpoint, service method, query, component or function in the diff, grep the project once for existing code doing the same job on the same data. Compare with the task's **Existing Code to Reuse**:
+- The new code nearly duplicates existing code, and the task's decision isn't a `NEW` the lead agreed to for that code → **should-fix** (evidence: TEAM.md rule 8, "Reuse first"). The fix names the existing code to extend and how, e.g. "add an optional `status` parameter to `OrdersService.List` (`OrdersService.cs:30-58`) and call it from the controller; delete `OrdersService.ListByStatus`."
+- The spec itself chose `NEW` but missed an existing near-match, or extending would change behaviour the spec doesn't cover → set `blocked` and write the question under **Open Questions**.
+- With `EXTEND`: check every existing caller still behaves exactly as before, and that this is tested.
+
 ### 4. Check C: is it simple and well-built?
 KISS first, then clean code and best practice. Flag:
 - **boilerplate or speculation:** an interface/base class/factory with one implementation, a pass-through wrapper, parameters or config "for later", unused code, commented-out code
@@ -85,6 +90,7 @@ Append a dated entry to **Review Report** in the task file:
 |----|----------------|-----------|--------|
 
 **B. Consistency:** ✓ / findings below
+**Duplication:** searched <what>; ✓ no near-duplicates / findings below
 **C. Simplicity & best practice:** ✓ / findings below
 
 **Findings**

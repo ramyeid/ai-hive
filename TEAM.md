@@ -47,7 +47,8 @@ without it the ID is just the role name. The kit's scripts read it, so commands 
 6. Keep `tasks/BOARD.md` out of your edits — it is regenerated automatically.
 7. A task only reaches `ready-for-dev` when `scripts/check_ready.py` passes (no open questions, references to follow, Definition of Ready ticked, lead approval dated). The hook enforces this and reverts it to `draft` otherwise.
 8. Consistency beats cleverness: the whole codebase should look like one author wrote it. New code is highly inspired by the task's **Reference Implementations** (same patterns and style, not copy-paste; shared logic is reused, never duplicated) and follows **Conventions to Follow**.
-9. KISS above all: build exactly what the task asks with the simplest code that works. No boilerplate, no speculative abstractions, no clever code.
+9. **Reuse first.** Before anything new is built, check whether the project already does it or nearly does. Extending existing code (an extra parameter, a small refactor) beats a parallel copy. A near-duplicate is a defect: the PM looks for it in the spec (**Existing Code to Reuse**, checked by the gate), the dev before writing code, the reviewer on every review.
+10. KISS above all: build exactly what the task asks with the simplest code that works. No boilerplate, no speculative abstractions, no clever code.
 
 ## Keep it cheap (every agent)
 

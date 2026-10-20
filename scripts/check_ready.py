@@ -16,7 +16,7 @@ from pathlib import Path
 from tasklib import parse
 
 REQUIRED = ["Problem / Goal", "User Stories", "Acceptance Criteria", "Out of Scope",
-            "Reference Implementations", "Conventions to Follow", "Clarifications"]
+            "Existing Code to Reuse", "Reference Implementations", "Conventions to Follow", "Clarifications"]
 VAGUE = re.compile(r"\b(TBD|TBC|TODO|FIXME|etc\.?)(?=\W|$)|\?\?\?", re.I)
 
 
@@ -30,6 +30,40 @@ def sections(text: str) -> dict[str, str]:
 def table_rows(block: str) -> list[str]:
     rows = [l for l in block.splitlines() if l.strip().startswith("|")]
     return [r for r in rows[1:] if not re.fullmatch(r"\|[\s:|-]*", r.strip())]
+
+
+def missing_paths(row: str, project: Path) -> list[str]:
+    """Backticked paths in a table row that don't exist (URLs are skipped)."""
+    missing = []
+    for p in re.findall(r"`([^`]+)`", row):
+        if "://" in p:
+            continue
+        clean = re.sub(r"(:\d+(-\d+)?|#L\d+.*)$", "", p)
+        target = Path(clean).expanduser()
+        target = target if target.is_absolute() else project / target
+        if not target.exists():
+            missing.append(p)
+    return missing
+
+
+def reuse_problems(block: str, project: Path) -> list[str]:
+    """The PM must have looked for code that already does this, and decided extend / reuse / new."""
+    problems = []
+    searched = re.search(r"\*\*Searched:\*\*(.*?)(?=\n\s*\||\*\*Decision|\Z)", block, re.S)
+    if not searched or not searched.group(1).strip():
+        problems.append("Existing Code to Reuse: **Searched:** is empty: list the searches you ran for code that already does this.")
+    rows = table_rows(block)
+    if not rows:
+        problems.append("Existing Code to Reuse: no rows. Add each similar piece of code found, or one row saying nothing similar exists.")
+    for row in rows:
+        for p in missing_paths(row, project):
+            problems.append(f"Existing code path does not exist: `{p}`")
+    decision = re.search(r"\*\*Decision:\*\*\s*(EXTEND|REUSE|NEW)\b(.*)", block)
+    if not decision:
+        problems.append("Existing Code to Reuse: **Decision:** must start with EXTEND, REUSE or NEW.")
+    elif len(decision.group(2).strip(" -—:.")) < 15:
+        problems.append(f"Existing Code to Reuse: say what to {decision.group(1).lower()} and why, after the decision.")
+    return problems
 
 
 def check(path: Path) -> list[str]:
@@ -57,6 +91,9 @@ def check(path: Path) -> list[str]:
     if "Clarifications" in sec and not table_rows(sec["Clarifications"]):
         problems.append("Clarifications log is empty — no questions were asked and answered.")
 
+    if sec.get("Existing Code to Reuse"):
+        problems += reuse_problems(sec["Existing Code to Reuse"], project)
+
     refs = table_rows(sec.get("Reference Implementations", ""))
     if not refs:
         problems.append("No Reference Implementations — dev has nothing to mirror.")
@@ -64,14 +101,8 @@ def check(path: Path) -> list[str]:
         paths = re.findall(r"`([^`]+)`", row)
         if not paths and "NEW PATTERN" not in row:
             problems.append(f"Reference row has no `path` in backticks: {row.strip()}")
-        for p in paths:
-            if "://" in p:
-                continue
-            clean = re.sub(r"(:\d+(-\d+)?|#L\d+.*)$", "", p)
-            target = Path(clean).expanduser()
-            target = target if target.is_absolute() else project / target
-            if not target.exists():
-                problems.append(f"Reference path does not exist: `{p}`")
+        for p in missing_paths(row, project):
+            problems.append(f"Reference path does not exist: `{p}`")
 
     open_q = re.findall(r"^\s*- \[ \]\s*(.+)$", sec.get("Open Questions", ""), re.M)
     for q in open_q:

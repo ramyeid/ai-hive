@@ -29,6 +29,22 @@ approved:               # pm: date the lead explicitly approved the final readba
 ## Out of Scope
 <!-- pm: what we are deliberately NOT doing, agreed with the lead -->
 
+## Existing Code to Reuse
+<!-- pm: answer this FIRST: does the project already do this, or nearly? Search every layer for code doing
+     the same job on the same data (routes, controllers, services, queries, DTOs, UI components, API clients).
+     A near-match is not a style reference: it's code to EXTEND (a parameter, a small refactor) instead of
+     building a parallel copy. Fill in:
+     **Searched:** the searches you ran, e.g. `grep -ril "invoice" src/`, routes under `/api/invoices`
+     a table row per match (paths in backticks are checked and must exist), or one row saying nothing similar exists
+     **Decision:** EXTEND <what, how> | REUSE <what> | NEW <why nothing above fits>, confirmed by the lead.
+     For EXTEND, list every existing caller and how it stays working. -->
+**Searched:**
+
+| Existing code | What it already does | Overlap with this task |
+|---------------|----------------------|------------------------|
+
+**Decision:**
+
 ## Reference Implementations
 <!-- pm: existing code the dev MUST read (the given line ranges) before writing anything and take as the model
      for the new code — follow its patterns and style, NOT a literal copy. Shared logic gets
@@ -71,6 +87,7 @@ approved:               # pm: date the lead explicitly approved the final readba
 - [ ] Interfaces: API contracts, UI states and copy — covered or confirmed N/A
 - [ ] Non-functional: performance, security, logging, config/env vars — covered or confirmed N/A
 - [ ] Out of scope agreed with the lead
+- [ ] Existing code searched; extend/reuse/new decided with the lead (no near-duplicate will be built)
 - [ ] Reference implementations and conventions listed — dev knows which patterns and style to follow
 - [ ] Every acceptance criterion is verifiable with concrete inputs and expected outputs
 - [ ] Dev self-audit done: no implementation decision is left to the dev's judgement

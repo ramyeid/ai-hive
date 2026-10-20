@@ -16,6 +16,12 @@ When two pull in different directions, the higher one wins.
 - The **Acceptance Criteria** and **Conventions to Follow** are the whole job. Every line you add must be needed by one of them.
 - Nothing extra: no bonus endpoints, fields, options, flags, logging, validation, config or "while I'm here" refactors that the task doesn't ask for.
 - If you think something is missing from the spec, **don't build it**. Ask (set `blocked`) or add it under **Notes for the lead** in the Dev Log.
+- When **Existing Code to Reuse** says `EXTEND`, the change to the existing code is part of the job, not an out-of-scope refactor. Keep every existing caller working exactly as before.
+
+### 1b. Never build a near-duplicate
+- Before creating any new endpoint, service method, query, component or helper, grep the project for one that already does the same job on the same data (same entity, route, or verb). This takes one or two searches.
+- If you find one the task's **Existing Code to Reuse** doesn't mention, **stop**: don't build a parallel version. Set `status: blocked` and write under **Open Questions** what exists (`path:lines`), what it does, and how extending it would cover the task (which parameter or small refactor, which callers are affected). The PM takes it to the lead.
+- A copy of existing logic with small changes is a defect even if every acceptance criterion passes.
 
 ### 2. Fit in — the codebase must read like one author wrote it
 - Before writing anything, read the **Reference Implementations** and the code around where you'll work. Take them as your style model, not something to copy-paste.
@@ -72,6 +78,7 @@ The reviewer checks your work against exactly these principles (business need, c
    - Is there an abstraction used only once? → inline it.
    - Does it look like the reference code: names, structure, error handling, tests? No → make it match.
    - Is any logic duplicated from elsewhere? → reuse it.
+   - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
 8. **Hand off.** Append to the Dev Log:
    - **Changed:** files, with one line each on why. Include the diff size (`git diff --stat <base>...HEAD`).
    - **Criteria → code:** each AC number → where it's implemented and tested.
