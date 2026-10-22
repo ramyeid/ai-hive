@@ -2,35 +2,36 @@
 id: TASK-000
 title: Short imperative title
 project: PROJECT_PATH     # set by new_task.py — all work for this task happens in this folder
-base: BASE_BRANCH        # branch to start from and review against
+base: BASE_BRANCH        # branch to start from and review against: the lead's choice, any branch
 status: draft
 priority: medium        # low | medium | high | urgent
 branch: task/TASK-000-short-slug
-pm: PM_ID                # who wrote the spec
+techlead: TECHLEAD_ID                # who wrote the spec
 dev:                     # set by claim.py: the dev building it (rework comes back to them)
 reviewer:                # set by claim.py: the reviewer (re-reviews come back to them)
 worktree:                # set by claim.py: the folder where the branch is checked out
+blocked_by:              # set automatically when the task goes to blocked: the agent that blocked it
 created: YYYY-MM-DD
-approved:               # pm: date the lead explicitly approved the final readback — required for ready-for-dev
+approved:               # techlead: date the lead explicitly approved the final readback — required for ready-for-dev
 ---
 
 ## Problem / Goal
-<!-- pm: why this matters, who it's for, what success looks like (measurable) -->
+<!-- techlead: why this matters, who it's for, what success looks like (measurable) -->
 
 ## User Stories
-<!-- pm: As a <user>, I want <capability>, so that <benefit>. -->
+<!-- techlead: As a <user>, I want <capability>, so that <benefit>. -->
 
 ## Acceptance Criteria
-<!-- pm: numbered, testable, Given/When/Then, with exact inputs and expected outputs.
+<!-- techlead: numbered, testable, Given/When/Then, with exact inputs and expected outputs.
      Dev builds and tests exactly these; the reviewer verifies exactly these. Example:
      1. **Given** a logged-in user with role `viewer`, **when** they send `DELETE /items/42`,
         **then** the response is `403` with body `{"detail": "Forbidden"}`. -->
 
 ## Out of Scope
-<!-- pm: what we are deliberately NOT doing, agreed with the lead -->
+<!-- techlead: what we are deliberately NOT doing, agreed with the lead -->
 
 ## Existing Code to Reuse
-<!-- pm: answer this FIRST: does the project already do this, or nearly? Search every layer for code doing
+<!-- techlead: answer this FIRST: does the project already do this, or nearly? Search every layer for code doing
      the same job on the same data (routes, controllers, services, queries, DTOs, UI components, API clients).
      A near-match is not a style reference: it's code to EXTEND (a parameter, a small refactor) instead of
      building a parallel copy. Fill in:
@@ -46,7 +47,7 @@ approved:               # pm: date the lead explicitly approved the final readba
 **Decision:**
 
 ## Reference Implementations
-<!-- pm: existing code the dev MUST read (the given line ranges) before writing anything and take as the model
+<!-- techlead: existing code the dev MUST read (the given line ranges) before writing anything and take as the model
      for the new code — follow its patterns and style, NOT a literal copy. Shared logic gets
      reused/extracted, never duplicated.
      At least one row. Paths in backticks are checked automatically and must exist:
@@ -59,17 +60,17 @@ approved:               # pm: date the lead explicitly approved the final readba
 |-----------|------------------|----------------|
 
 ## Conventions to Follow
-<!-- pm: concrete rules taken from the references above (+ the project's docs/CONVENTIONS.md if it exists).
+<!-- techlead: concrete rules taken from the references above (+ the project's conventions notes, if any).
      Each rule specific enough that a reviewer can answer yes/no. Cover at least:
      naming, file/folder placement, structure/layering, error handling, logging,
      typing, tests (location, naming, fixtures), dependencies allowed. -->
 
 ## Technical Notes
-<!-- pm: your research, so nobody repeats it: files and places to change (with line ranges),
+<!-- techlead: your research, so nobody repeats it: files and places to change (with line ranges),
      where things are registered/configured, test setup and the commands to run. dev may append. -->
 
 ## Clarifications
-<!-- pm: every question asked and the lead's answer, in order. The audit trail of decisions. -->
+<!-- techlead: every question asked and the lead's answer, in order. The audit trail of decisions. -->
 | # | Question | Lead's answer |
 |---|----------|---------------|
 
@@ -78,7 +79,7 @@ approved:               # pm: date the lead explicitly approved the final readba
      A task cannot become ready-for-dev while any "- [ ]" remains here. -->
 
 ## Definition of Ready
-<!-- pm: tick only when actually true. Every box must be [x] before ready-for-dev (checked automatically). -->
+<!-- techlead: tick only when actually true. Every box must be [x] before ready-for-dev (checked automatically). -->
 - [ ] Goal and measurable success confirmed by the lead
 - [ ] Every user role / actor and their permissions named
 - [ ] Happy path described step by step

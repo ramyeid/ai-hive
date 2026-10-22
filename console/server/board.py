@@ -10,11 +10,11 @@ from pathlib import Path
 from .store import KIT
 
 sys.path.insert(0, str(KIT / "scripts"))
-from tasklib import INBOX, ORDER, ROUTING, TASKS, parse, project_name, task_files  # noqa: E402
+from tasklib import INBOX, ORDER, ROUTING, TASKS, holder, parse, project_name, task_files  # noqa: E402
 
-ROLES = ("pm", "dev", "reviewer", "lead")
+ROLES = ("techlead", "dev", "reviewer", "lead")
 _NOTE = re.compile(r"^- \[(?P<ts>[^\]]+)\] \*\*(?P<id>[^*]+)\*\* (?:\[(?P<project>[^\]]+)\] )?"
-                   r"(?P<title>.*?) → `(?P<to>[^`]+)` \(was `(?P<frm>[^`]+)`\)")
+                   r"(?P<title>.*?) → `(?P<to>[^`]+)` \(was `(?P<frm>[^`]+)`\)(?: by (?P<by>\S+)| \((?P<who>[^)]+)\))?")
 
 
 def _summary(path: Path) -> dict:
@@ -31,19 +31,16 @@ def _summary(path: Path) -> dict:
         "approved": meta.get("approved", ""),
         "updated": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
         "owner": ROUTING.get(meta.get("status", ""), _owner(meta.get("status", ""))),
-        "assignee": meta.get(STAGE_FIELD.get(meta.get("status", ""), ""), ""),
-        "pm": meta.get("pm", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
+        "assignee": holder(meta),   # the agent working on it now; for blocked, who blocked it
+        "blocked_by": meta.get("blocked_by", ""),
+        "techlead": meta.get("techlead", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
         "worktree": meta.get("worktree", ""),
         "ready": {"done": sum(t != " " for t in ticks), "total": len(ticks)},
     }
 
 
-STAGE_FIELD = {"draft": "pm", "in-dev": "dev", "changes-requested": "dev",
-               "ready-for-review": "reviewer", "in-review": "reviewer"}
-
-
 def _owner(status: str) -> str:
-    return {"draft": "pm", "in-dev": "dev", "in-review": "reviewer"}.get(status, "lead")
+    return {"draft": "techlead", "in-dev": "dev", "in-review": "reviewer"}.get(status, "lead")
 
 
 def list_tasks() -> list[dict]:
@@ -77,9 +74,9 @@ def inbox(role: str) -> dict:
             for line in path.read_text(encoding="utf-8").splitlines():
                 m = _NOTE.match(line)
                 if m:
-                    notes.append({**{k: (v or "") for k, v in m.groupdict().items()}, "to": to})
+                    notes.append({**{k: (v or "") for k, v in m.groupdict().items()}, "recipient": to})
     notes.sort(key=lambda n: n["ts"], reverse=True)
-    wanted = {"pm": {"draft"}, "lead": {"blocked"}}.get(role) or {s for s, r in ROUTING.items() if r == role}
+    wanted = {"techlead": {"draft"}, "lead": {"blocked"}}.get(role) or {s for s, r in ROUTING.items() if r == role}
     waiting = [t for t in list_tasks() if t["status"] in wanted]
     return {"role": role, "notifications": notes, "waiting": waiting}
 

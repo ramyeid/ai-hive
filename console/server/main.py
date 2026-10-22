@@ -1,4 +1,4 @@
-"""Agent Team Console: a local web app to run and manage the pm / dev / reviewer agents.
+"""Agent Team Console: a local web app to run and manage the techlead / dev / reviewer agents.
 
 Run with ./start.sh — it serves http://127.0.0.1:8420 (this machine only).
 """
@@ -18,6 +18,8 @@ from . import board, costs, store
 from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
+
+import migrate  # noqa: E402  (kit scripts are on sys.path via board)
 
 TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
@@ -57,7 +59,7 @@ class NameBody(BaseModel):
 
 
 class NewAgentBody(BaseModel):
-    role: str                      # pm | dev | reviewer
+    role: str                      # techlead | dev | reviewer
 
 
 class PriceBody(BaseModel):
@@ -80,6 +82,7 @@ def public_settings() -> dict:
 
 
 def create_app(manager: AgentManager | None = None) -> FastAPI:
+    migrate.main()   # upgrade data from older versions of the kit (safe to repeat)
     manager = manager or AgentManager()
 
     @asynccontextmanager

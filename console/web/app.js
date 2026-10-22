@@ -4,20 +4,27 @@ const TOKEN = window.CONSOLE_TOKEN;
 const view = document.getElementById("view");
 
 const ROLES = {
-  pm: { name: "PM", role: "Product manager", blurb: "Turns your ideas into complete, approved task specs.", quick: ["Show me the board", "What's still in draft?"] },
+  techlead: { name: "Tech Lead", role: "Tech lead / staff engineer", blurb: "Designs the change against the codebase and turns it into a complete, approved task spec.", quick: ["Show me the board", "What's still in draft?"] },
   dev: { name: "Dev", role: "Developer", blurb: "Builds exactly what the spec asks, in the project's style.", quick: ["Check your inbox"] },
   reviewer: { name: "Reviewer", role: "Reviewer", blurb: "Checks business need, consistency and simplicity.", quick: ["Check your inbox"] },
 };
-const OWNER_LABEL = { pm: "PM", dev: "Dev", reviewer: "Reviewer", lead: "You" };
+const OWNER_LABEL = { techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer", lead: "You" };
 // Agents are identified by id: the role, then -2, -3… for extra agents of the same role.
 const roleOf = (id) => state.agents[id]?.role || String(id).split("-")[0];
-// Each agent has a display name (Kareem), given at random and renamed in Settings; shown as "Kareem (PM)".
+// Each agent has a display name (Kareem), given at random and renamed in Settings; shown as "Kareem (Tech Lead)".
 const personOf = (id) => { const given = state.settings?.agents?.[id]?.name; if (given) return given;
   const r = ROLES[roleOf(id)]; const n = String(id).split("-")[1]; return r ? (n ? `${r.name} ${n}` : r.name) : String(id); };
 const nameOf = (id) => { const r = ROLES[roleOf(id)]; const p = personOf(id); return r && p !== r.name && !p.startsWith(`${r.name} `) ? `${p} (${r.name})` : p; };
 const agentIds = () => Object.keys(state.agents);
+// Who has the task right now, in words: "Salma (Dev)", "You, blocked by Salma (Dev)", "the next free Dev".
+const holderText = (t) => {
+  if (t.status === "blocked") return t.assignee ? `You, blocked by ${nameOf(t.assignee)}` : "You";
+  if (t.assignee) return nameOf(t.assignee);
+  if (t.owner === "lead") return "You";
+  return `the next free ${OWNER_LABEL[t.owner] || t.owner}`;
+};
 const STAGES = [
-  { status: "draft", label: "Draft", owner: "pm" },
+  { status: "draft", label: "Draft", owner: "techlead" },
   { status: "ready-for-dev", label: "Ready for dev", owner: "dev" },
   { status: "in-dev", label: "In development", owner: "dev" },
   { status: "changes-requested", label: "Changes requested", owner: "dev" },
@@ -289,7 +296,7 @@ async function Overview() {
     const items = tasks.filter((t) => t.status === s.status);
     return `<div class="stage ${s.owner}">
       <div class="stage-head"><h3>${s.label}<span class="count">${items.length}</span></h3><small>${s.owner === "lead" ? "Accepted" : `With ${OWNER_LABEL[s.owner]}`}</small></div>
-      ${items.slice(0, 6).map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, ${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}
+      ${items.slice(0, 6).map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, ${t.status === "blocked" ? "blocked by " : ""}${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}
       ${items.length > 6 ? `<a class="muted" href="#/tasks?status=${s.status}">${items.length - 6} more</a>` : ""}
     </div>`;
   };
@@ -299,19 +306,19 @@ async function Overview() {
   for (const [name, ag] of Object.entries(state.agents)) {
     for (const p of ag.pending || []) needs.push(`<li><span class="what"><a href="#/agents/${name}">${esc(nameOf(name))} wants to run ${esc(p.tool)}</a>: <code>${esc(toolArg(p.tool, p.input).slice(0, 80))}</code></span></li>`);
   }
-  for (const t of blocked) needs.push(`<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)} is blocked</a>: ${esc(t.title)}</span><span class="when">${ago(t.updated)}</span></li>`);
+  for (const t of blocked) needs.push(`<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)} is blocked${t.assignee ? ` by ${esc(nameOf(t.assignee))}` : ""}</a>: ${esc(t.title)}</span><span class="when">${ago(t.updated)}</span></li>`);
   if (data.unread.lead) needs.push(`<li><span class="what"><a href="#/inbox/lead">${data.unread.lead} new notification${data.unread.lead > 1 ? "s" : ""} for you</a></span></li>`);
 
   const activity = data.activity.slice(0, 10).map((a) => `<li><span class="what"><a href="#/tasks/${esc(a.id)}">${esc(a.id)}</a> ${esc(a.title)} <span class="muted">(${esc(a.project)})</span><br>${statusPill(a.to)}</span><span class="when">${ago(a.ts)}</span></li>`).join("");
 
   return `<div class="page-head"><div><h1>Overview</h1>
       <p>${tasks.length ? `${tasks.length} task${tasks.length > 1 ? "s" : ""} across ${data.projects.length} project${data.projects.length > 1 ? "s" : ""}.` : "No tasks yet."} Agents work from <code>${esc(state.settings?.workspace)}</code>.</p></div>
-      <a class="btn" href="#/agents/pm">Start a new task with the PM</a></div>
+      <a class="btn" href="#/agents/techlead">Start a new task with the Tech Lead</a></div>
     <div class="stations">${stations}</div>
     <p class="team-link"><a href="#/settings">Add or remove agents</a></p>
     <section class="section"><h2>Who has each task</h2>
-      ${tasks.length ? `<div class="pipeline">${blocked.length ? `<div class="stage stage-blocked lead"><div class="stage-head"><h3>Blocked<span class="count">${blocked.length}</span></h3><small>Needs your decision</small></div>${blocked.map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}</small></a>`).join("")}</div>` : ""}${STAGES.map(lane).join("")}</div>`
-                     : `<div class="empty">Tell the PM what you need, for example "In ~/code/my-api, users need to reset their password by email." The task will show up here.</div>`}
+      ${tasks.length ? `<div class="pipeline">${blocked.length ? `<div class="stage stage-blocked lead"><div class="stage-head"><h3>Blocked<span class="count">${blocked.length}</span></h3><small>Needs your decision</small></div>${blocked.map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, blocked by ${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}</div>` : ""}${STAGES.map(lane).join("")}</div>`
+                     : `<div class="empty">Tell the Tech Lead what you need, for example "In ~/code/my-api, users need to reset their password by email." The task will show up here.</div>`}
     </section>
     <div class="two-col section">
       <section><h2>Needs you</h2>${needs.length ? `<ul class="list needs">${needs.join("")}</ul>` : `<p class="muted">Nothing is waiting on you.</p>`}</section>
@@ -346,24 +353,24 @@ async function Tasks() {
       <thead><tr><th>Task</th><th>Project</th><th>Stage</th><th>With</th><th>Spec ready</th><th>Cost so far</th><th>Updated</th></tr></thead>
       <tbody>${shown.map((t) => `<tr data-href="#/tasks/${esc(t.id)}">
         <td><a href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b></a> ${esc(t.title)}</td>
-        <td>${esc(t.project_name)}</td><td>${statusPill(t.status)}</td><td>${t.assignee ? esc(nameOf(t.assignee)) : OWNER_LABEL[t.owner] || "You"}</td>
+        <td>${esc(t.project_name)}</td><td>${statusPill(t.status)}</td><td>${esc(holderText(t))}</td>
         <td><span class="ready"><span class="bar" aria-hidden="true"><i style="width:${t.ready.total ? Math.round(100 * t.ready.done / t.ready.total) : 0}%"></i></span>${t.ready.done}/${t.ready.total}</span></td>
         <td class="num">${esc(costText(t.cost)) || '<span class="muted">None yet</span>'}</td>
         <td class="num">${ago(t.updated)}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="empty">${tasks.length ? "No tasks match these filters." : "No tasks yet. Open the PM and describe what you need."}</div>`}`;
+      : `<div class="empty">${tasks.length ? "No tasks match these filters." : "No tasks yet. Open the Tech Lead and describe what you need."}</div>`}`;
 }
 
 const PROMPTS = {
-  pm: (t) => `Let's continue on ${t.id} (${t.title}).`,
+  techlead: (t) => `Let's continue on ${t.id} (${t.title}).`,
   dev: (t) => `Work on ${t.id} per your instructions.`,
   reviewer: (t) => `Review ${t.id} per your instructions.`,
 };
 
 async function TaskDetail(r) {
   const t = await api(`/api/tasks/${encodeURIComponent(r.id)}`);
-  const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}</span></li>`).join("");
+  const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}</span></li>`).join("");
   return `<p><a href="#/tasks" class="muted">All tasks</a></p>
-    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${t.owner === "lead" ? "you" : OWNER_LABEL[t.owner]}</p></div></div>
+    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div></div>
     <div class="task-layout">
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
@@ -372,7 +379,7 @@ async function TaskDetail(r) {
         <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
         <section><h2>Details</h2><dl class="facts">
           <dt>Project</dt><dd><code>${esc(t.project)}</code></dd>
-          ${t.pm ? `<dt>PM</dt><dd>${esc(nameOf(t.pm))}</dd>` : ""}
+          ${t.techlead ? `<dt>Tech Lead</dt><dd>${esc(nameOf(t.techlead))}</dd>` : ""}
           ${t.dev ? `<dt>Dev</dt><dd>${esc(nameOf(t.dev))}</dd>` : ""}
           ${t.reviewer ? `<dt>Reviewer</dt><dd>${esc(nameOf(t.reviewer))}</dd>` : ""}
           ${t.worktree ? `<dt>Worktree</dt><dd><code>${esc(t.worktree)}</code></dd>` : ""}
@@ -397,7 +404,7 @@ function costSection(c) {
   return `<p class="cost-total">${esc(costText(c) || money(0))}</p>
     <div class="table-wrap"><table class="cost-table"><thead><tr><th>Model</th><th>Agent</th><th>Tokens</th><th>Cost</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <p class="hint">From the PM's spec to the review, every agent turn on this task. Claude costs are Claude Code's own figures; other models use the prices in Settings.</p>`;
+    <p class="hint">From the Tech Lead's spec to the review, every agent turn on this task. Claude costs are Claude Code's own figures; other models use the prices in Settings.</p>`;
 }
 
 // ---- agent chat ----------------------------------------------------------------
@@ -412,7 +419,7 @@ async function AgentChat(r) {
     <div class="transcript" id="transcript"><div id="tx-events"></div><div id="tx-live" aria-live="polite"></div></div>
     <form class="composer" id="composer">
       <label class="hint" for="composer-text">Message ${esc(nameOf(name))}. Enter sends, Shift+Enter adds a line.</label>
-      <textarea id="composer-text" rows="3" placeholder="${roleOf(name) === "pm" ? "Describe what you need, and in which project folder." : "Tell the agent what to do."}">${esc(state.drafts[name] || "")}</textarea>
+      <textarea id="composer-text" rows="3" placeholder="${roleOf(name) === "techlead" ? "Describe what you need, and in which project folder." : "Tell the agent what to do."}">${esc(state.drafts[name] || "")}</textarea>
       <div class="row"><div class="quick">${a.quick.map((q) => `<button type="button" class="btn small" data-action="quick" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>
         <button class="btn role" type="submit" id="send">Send</button></div>
     </form></div>`;
@@ -575,11 +582,11 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
 // ---- inbox ------------------------------------------------------------------
 
 async function Inbox(r) {
-  const role = ["lead", "pm", "dev", "reviewer"].includes(r.id) ? r.id : "lead";
+  const role = ["lead", "techlead", "dev", "reviewer"].includes(r.id) ? r.id : "lead";
   const data = await api(`/api/inbox/${role}`);
-  const label = { lead: "You", pm: "PM", dev: "Dev", reviewer: "Reviewer" };
-  const notes = data.notifications.map((n) => `<li><span class="what"><a href="#/tasks/${esc(n.id)}">${esc(n.id)}</a> ${esc(n.title)} <span class="muted">(${esc(n.project)})</span><br>${statusPill(n.to)} <span class="muted">from ${esc(stageLabel(n.frm))}${n.to !== role ? `, for ${esc(nameOf(n.to))}` : ""}</span></span><span class="when">${esc(n.ts)}</span></li>`).join("");
-  const waiting = data.waiting.map((t) => `<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">(${esc(t.project_name)}${t.assignee ? `, ${esc(nameOf(t.assignee))}` : ""})</span></span>${statusPill(t.status)}</li>`).join("");
+  const label = { lead: "You", techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer" };
+  const notes = data.notifications.map((n) => `<li><span class="what"><a href="#/tasks/${esc(n.id)}">${esc(n.id)}</a> ${esc(n.title)} <span class="muted">(${esc(n.project)})</span><br>${statusPill(n.to)} <span class="muted">from ${esc(stageLabel(n.frm))}${n.by ? `, blocked by ${esc(nameOf(n.by))}` : n.who ? `, ${esc(nameOf(n.who))}` : ""}${n.recipient !== role ? `, for ${esc(nameOf(n.recipient))}` : ""}</span></span><span class="when">${esc(n.ts)}</span></li>`).join("");
+  const waiting = data.waiting.map((t) => `<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">(${esc(t.project_name)}, ${esc(holderText(t))})</span></span>${statusPill(t.status)}</li>`).join("");
   const askButtons = role === "lead" ? "" : agentIds().filter((n) => roleOf(n) === role).map((n) =>
     `<button class="btn small" data-action="check-inbox" data-agent="${n}">Ask ${esc(nameOf(n))} to check its inbox</button>`).join("");
   return `<div class="page-head"><div><h1>Inbox</h1><p>Hand-offs land here when a task changes stage. Agents read their own inbox when you tell them to check it.</p></div></div>

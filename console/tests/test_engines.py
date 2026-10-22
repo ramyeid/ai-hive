@@ -67,8 +67,8 @@ def main():
         check({k: r.json()["agents"]["dev"][k] for k in ("provider", "model")} == {"provider": "deepseek", "model": "deepseek-v4-pro"}, "dev set to DeepSeek")
         r = c.post("/api/agents/kimi/start", json={}, headers=H)
         check(r.status_code == 404, "unknown agent rejected")
-        r = c.put("/api/agents/pm/config", json={"provider": "kimi", "model": ""}, headers=H)
-        r = c.post("/api/agents/pm/start", json={}, headers=H)
+        r = c.put("/api/agents/techlead/config", json={"provider": "kimi", "model": ""}, headers=H)
+        r = c.post("/api/agents/techlead/start", json={}, headers=H)
         check(r.status_code == 409 and "API key" in r.json()["detail"], f"starting without a key explains what's missing ({r.json()['detail']})")
 
         # --- a full streamed turn on DeepSeek -------------------------------------------
@@ -146,12 +146,12 @@ def main():
         c.post("/api/agents/reviewer/stop", headers=H)
 
         # --- provider errors are explained -------------------------------------------------
-        c.put("/api/agents/pm/config", json={"provider": "deepseek", "model": "missing-model"}, headers=H)
-        c.post("/api/agents/pm/message", json={"text": "hi"}, headers=H)
-        wait(c, "pm", lambda a: a["status"] == "idle", "pm error turn")
+        c.put("/api/agents/techlead/config", json={"provider": "deepseek", "model": "missing-model"}, headers=H)
+        c.post("/api/agents/techlead/message", json={"text": "hi"}, headers=H)
+        wait(c, "techlead", lambda a: a["status"] == "idle", "techlead error turn")
         err = [e for e in events(c, c.get("/api/state", headers=H).json()["agents"][0]["session_id"]) if e["kind"] == "error"]
         check(err and "404" in err[0]["text"] and "model name" in err[0]["text"], "a wrong model name gives a clear error")
-        c.post("/api/agents/pm/stop", headers=H)
+        c.post("/api/agents/techlead/stop", headers=H)
 
         # --- Claude still works through the same interface ----------------------------------
         c.put("/api/agents/dev/config", json={"provider": "claude", "model": ""}, headers=H)
@@ -176,7 +176,7 @@ def main():
         project = workspace / "proj"
         subprocess.run(["git", "init", "-q", str(project)], check=True)
         path = Path(subprocess.run([sys.executable, str(kit / "scripts/new_task.py"), str(project), "Hook test"],
-                                   capture_output=True, text=True, check=True).stdout.strip())
+                                   capture_output=True, text=True, check=True).stdout.splitlines()[0])
         out, is_error = await box.run("Edit", {"file_path": str(path), "old_string": "status: draft", "new_string": "status: ready-for-dev"})
         check("BLOCKED" in out and "status: draft" in path.read_text(), "task hook runs: unready spec bounced back to draft")
         path.unlink()

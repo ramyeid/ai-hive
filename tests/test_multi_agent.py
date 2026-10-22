@@ -50,13 +50,13 @@ def main():
         subprocess.run([sys.executable, str(kit / "scripts/on_task_change.py")],
                        input=f'{{"tool_input": {{"file_path": "{path}"}}}}', text=True, capture_output=True)
 
-    # Two PMs creating tasks at the same moment get different numbers.
+    # Two Tech Leads creating tasks at the same moment get different numbers.
     with ThreadPoolExecutor(10) as pool:
-        made = list(pool.map(lambda i: run("new_task.py", project, f"Task {i}", agent=f"pm-{i % 2 + 1}"), range(10)))
-    ids = [Path(r.stdout.strip()).name[:8] for r in made]
+        made = list(pool.map(lambda i: run("new_task.py", project, f"Task {i}", agent=f"techlead-{i % 2 + 1}"), range(10)))
+    ids = [Path(r.stdout.splitlines()[0]).name[:8] for r in made]
     check(len(set(ids)) == 10, f"10 tasks created in parallel got 10 different numbers ({sorted(ids)[0]}..{sorted(ids)[-1]})")
-    task = Path(made[0].stdout.strip())
-    check(field(task, "pm") in ("pm-1", "pm-2"), "the task records which PM wrote it")
+    task = Path(made[0].stdout.splitlines()[0])
+    check(field(task, "techlead") in ("techlead-1", "techlead-2"), "the task records which Tech Lead wrote it")
 
     # Two devs race for the same task: exactly one wins.
     set_status(task, "ready-for-dev")   # the readiness gate bounces it (spec is empty) ...
@@ -80,7 +80,7 @@ def main():
           "the main project folder stays on main (the lead's checkout is untouched)")
 
     # Second task for the other dev: separate worktree, no interference.
-    other = Path(made[1].stdout.strip())
+    other = Path(made[1].stdout.splitlines()[0])
     other.write_text(other.read_text().replace("status: draft", "status: ready-for-dev", 1))
     loser_id = "dev-2" if winner == "dev" else "dev"
     r = run("claim.py", other.name[:8], "dev", agent=loser_id)
@@ -123,6 +123,49 @@ def main():
     # No AGENT_ID (a single terminal agent): falls back to the role name.
     r = run("inbox.py", "dev")
     check(r.returncode == 0 and "notifications for dev" in r.stdout, "without AGENT_ID the agent is just 'dev'")
+
+    # Base branch: whatever the lead uses, never forced to main.
+    git("checkout", "-q", "-b", "develop")
+    (project / "dev_only.py").write_text("x = 1\n")
+    git("add", ".")
+    git("-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "develop work")
+    made = run("new_task.py", project, "On develop", agent="techlead")
+    on_dev = Path(made.stdout.splitlines()[0])
+    check(field(on_dev, "base") == "develop", "a new task's base is the branch the lead has checked out (develop)")
+    check("Conventions notes:" in made.stdout and "not written yet" in made.stdout,
+          "new_task prints where the conventions notes go, and that a missing file is fine")
+    on_dev.write_text(on_dev.read_text().replace("status: draft", "status: ready-for-dev", 1))
+    r = run("claim.py", on_dev.name[:8], "dev", agent="dev")
+    check(r.returncode == 0 and (Path(field(on_dev, "worktree")) / "dev_only.py").exists(),
+          "the dev's worktree starts from develop, not main")
+    git("update-ref", "refs/remotes/origin/release-2", "main")   # a base that only exists on the remote
+    remote = Path(run("new_task.py", project, "From release", agent="techlead").stdout.splitlines()[0])
+    remote.write_text(remote.read_text().replace("base: develop", "base: release-2", 1).replace("status: draft", "status: ready-for-dev", 1))
+    r = run("claim.py", remote.name[:8], "dev", agent="dev-2")
+    check(r.returncode == 0 and not (Path(field(remote, "worktree")) / "dev_only.py").exists(),
+          "a base that exists only on origin is used as origin/<base>")
+    git("checkout", "-q", "main")
+
+    # Blocked: the task says who blocked it, and the lead's notification too.
+    set_status(on_dev, "blocked")
+    check(field(on_dev, "blocked_by") == "dev", "a blocked task records which agent blocked it")
+    lead = run("inbox.py", "lead").stdout
+    check(f"{on_dev.name[:8]}" in lead and "by dev" in lead, "the lead's notification says who blocked it")
+    check("blocked by dev" in (kit / "tasks/BOARD.md").read_text(), "the board shows who blocked it")
+    set_status(on_dev, "in-dev")
+    check(field(on_dev, "blocked_by") == "", "unblocking clears it")
+    check(f"{on_dev.name[:8]}" in (kit / "tasks/BOARD.md").read_text().split("## in-dev")[1] and "· dev" in
+          (kit / "tasks/BOARD.md").read_text().split("## in-dev")[1], "in-progress tasks show who's working on them")
+
+    # Upgrading from the PM era: task fields, inboxes.
+    old = kit / "tasks" / "TASK-900-old.md"
+    old.write_text(on_dev.read_text().replace("techlead: techlead", "pm: pm-2", 1))
+    (kit / "tasks/.inbox/pm.md").write_text("- old note\n")
+    run("migrate.py")
+    check(field(old, "techlead") == "techlead-2" and "\npm:" not in old.read_text(), "migrate.py renames pm: pm-2 to techlead: techlead-2")
+    check((kit / "tasks/.inbox/techlead.md").read_text().endswith("- old note\n") and not (kit / "tasks/.inbox/pm.md").exists(),
+          "the old PM inbox is carried over")
+    check(run("migrate.py").returncode == 0 and field(old, "techlead") == "techlead-2", "running it again changes nothing")
     print(f"\nAll {checks} checks passed.")
 
 

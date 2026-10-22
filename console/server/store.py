@@ -15,7 +15,7 @@ SESSIONS = DATA / "sessions"
 INDEX = SESSIONS / "index.json"
 SETTINGS = DATA / "settings.json"
 
-ROLES = ("pm", "dev", "reviewer")
+ROLES = ("techlead", "dev", "reviewer")
 # Display names, given at random to new agents (rename them in Settings). The ID (dev-2) stays
 # what the scripts and task files use; the name is only what you see.
 NAMES = """Kareem Hossam Aliaa Zeinab Tarek Nour Yasmine Rania Hany Sherif Amr Laila Dina Salma

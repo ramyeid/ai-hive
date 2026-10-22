@@ -22,7 +22,7 @@ VAGUE = re.compile(r"\b(TBD|TBC|TODO|FIXME|etc\.?)(?=\W|$)|\?\?\?", re.I)
 
 def sections(text: str) -> dict[str, str]:
     body = re.sub(r"<!--.*?-->", "", text, flags=re.S)      # ignore guidance comments
-    body = body.split("\n## Dev Log", 1)[0]                   # pm's part only
+    body = body.split("\n## Dev Log", 1)[0]                   # techlead's part only
     parts = re.split(r"^## +(.+?)\s*$", body, flags=re.M)
     return {parts[i].strip(): parts[i + 1].strip() for i in range(1, len(parts) - 1, 2)}
 
@@ -47,7 +47,7 @@ def missing_paths(row: str, project: Path) -> list[str]:
 
 
 def reuse_problems(block: str, project: Path) -> list[str]:
-    """The PM must have looked for code that already does this, and decided extend / reuse / new."""
+    """The Tech Lead must have looked for code that already does this, and decided extend / reuse / new."""
     problems = []
     searched = re.search(r"\*\*Searched:\*\*(.*?)(?=\n\s*\||\*\*Decision|\Z)", block, re.S)
     if not searched or not searched.group(1).strip():

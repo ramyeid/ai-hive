@@ -9,18 +9,22 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import ROOT, TASKS, agent_id, lock, task_files
+from tasklib import ROOT, TASKS, agent_id, conventions_hint, lock, task_files
 
 
 def base_branch(project: Path) -> str:
-    """main or master if it exists, else the current branch, else main."""
+    """The branch the lead has checked out (their working base: main, develop, a release…),
+    else main or master. The lead can change `base:` in the task at any time."""
     def git(*args: str) -> subprocess.CompletedProcess:
         return subprocess.run(["git", "-C", str(project), *args],
                               capture_output=True, text=True)
+    current = git("branch", "--show-current").stdout.strip()
+    if current and not current.startswith("task/"):
+        return current
     for name in ("main", "master"):
         if git("rev-parse", "--verify", "--quiet", name).returncode == 0:
             return name
-    return git("branch", "--show-current").stdout.strip() or "main"
+    return current or "main"
 
 
 def main() -> None:
@@ -34,7 +38,7 @@ def main() -> None:
     title = " ".join(sys.argv[2:]).strip()
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
     base = base_branch(project)
-    with lock():   # two PMs creating tasks at once must not get the same number
+    with lock():   # two Tech Leads creating tasks at once must not get the same number
         nums = [int(m.group(1)) for p in task_files()
                 if (m := re.match(r"TASK-(\d+)", p.name))]
         tid = f"TASK-{(max(nums) + 1) if nums else 1:03d}"
@@ -44,11 +48,13 @@ def main() -> None:
                     .replace("Short imperative title", title)
                     .replace("PROJECT_PATH", str(project))
                     .replace("BASE_BRANCH", base)
-                    .replace("PM_ID", agent_id("pm"))
+                    .replace("TECHLEAD_ID", agent_id("techlead"))
                     .replace("YYYY-MM-DD", dt.date.today().isoformat()))
         path = TASKS / f"{tid}-{slug}.md"
         path.write_text(body, encoding="utf-8")
     print(path)
+    print(f"Base branch: {base}  (change `base:` in the task if the lead wants another)")
+    print(conventions_hint(project))
 
 
 if __name__ == "__main__":

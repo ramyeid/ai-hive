@@ -51,13 +51,13 @@ def run():
     store.SETTINGS.unlink(missing_ok=True)
     app = create_app(AgentManager(claude_client_factory=FakeClient, http_transport=fake_openai_transport([])))
     with TestClient(app, base_url="http://127.0.0.1:8420") as c:
-        check(names(c) == ["pm", "dev", "reviewer"], "a fresh install has one agent per role")
+        check(names(c) == ["techlead", "dev", "reviewer"], "a fresh install has one agent per role")
 
-        for role in ["pm", "dev", "dev", "reviewer"]:
+        for role in ["techlead", "dev", "dev", "reviewer"]:
             r = c.post("/api/agents", json={"role": role}, headers=H)
             check(r.status_code == 200, f"added a {role}: {r.json().get('id')}")
-        check(names(c) == ["pm", "pm-2", "dev", "dev-2", "dev-3", "reviewer", "reviewer-2"],
-              "two PMs, three devs, two reviewers, listed by role")
+        check(names(c) == ["techlead", "techlead-2", "dev", "dev-2", "dev-3", "reviewer", "reviewer-2"],
+              "two Tech Leads, three devs, two reviewers, listed by role")
         state = c.get("/api/state", headers=H).json()
         check(next(a for a in state["agents"] if a["name"] == "dev-3")["role"] == "dev", "each agent reports its role")
         check(c.post("/api/agents", json={"role": "qa"}, headers=H).status_code == 400, "unknown roles are refused")
@@ -84,9 +84,9 @@ def run():
         check(c.delete("/api/agents/dev-3", headers=H).status_code == 200, "a stopped agent can be removed")
         check("dev-3" not in names(c) and "dev-3" not in store.load_settings()["agents"], "it's gone from the team and settings")
 
-        c.delete("/api/agents/pm-2", headers=H)
-        r = c.delete("/api/agents/pm", headers=H)
-        check(r.status_code == 409 and "at least one pm" in r.json()["detail"], "the last PM can't be removed")
+        c.delete("/api/agents/techlead-2", headers=H)
+        r = c.delete("/api/agents/techlead", headers=H)
+        check(r.status_code == 409 and "at least one techlead" in r.json()["detail"], "the last Tech Lead can't be removed")
         check(c.post("/api/agents", json={"role": "dev"}, headers=H).json()["id"] == "dev-3", "freed numbers are reused")
         check(c.post("/api/agents/nobody/start", json={}, headers=H).status_code == 404, "unknown agents are refused")
 
@@ -98,9 +98,9 @@ def run():
         check(store.load_settings()["agents"] == agents, "names are kept, not re-drawn on every load")
         check(c.put("/api/agents/dev/name", json={"name": "  Kareem  "}, headers=H).json()["agents"]["dev"]["name"] == "Kareem",
               "dev renamed to Kareem")
-        r = c.put("/api/agents/pm/name", json={"name": "kareem"}, headers=H)
+        r = c.put("/api/agents/techlead/name", json={"name": "kareem"}, headers=H)
         check(r.status_code == 400 and "already" in r.json()["detail"], "two agents can't share a name")
-        check(c.put("/api/agents/pm/name", json={"name": " "}, headers=H).status_code == 400, "empty names are refused")
+        check(c.put("/api/agents/techlead/name", json={"name": " "}, headers=H).status_code == 400, "empty names are refused")
         check(store.load_settings()["agents"]["dev"]["role"] == "dev", "renaming keeps the role")
         c.put("/api/agents/dev/config", json={"provider": "claude", "model": ""}, headers=H)
         check(store.load_settings()["agents"]["dev"]["name"] == "Kareem", "changing the model keeps the name")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Show what's waiting for this agent (or the lead), and mark notifications as read.
 
-Usage: python3 scripts/inbox.py pm|dev|reviewer|lead [--keep]
+Usage: python3 scripts/inbox.py techlead|dev|reviewer|lead [--keep]
 
 The agent's ID comes from $AGENT_ID (e.g. dev-2), defaulting to the role name. It sees:
 - its own notifications (rework and re-reviews sent back to it): .inbox/agents/<id>.md
@@ -37,7 +37,7 @@ def unread_pool(role: str, me: str, keep: bool) -> str:
 
 def main() -> None:
     if len(sys.argv) < 2 or sys.argv[1] not in (*ROLES, "lead"):
-        sys.exit("usage: inbox.py pm|dev|reviewer|lead [--keep]")
+        sys.exit("usage: inbox.py techlead|dev|reviewer|lead [--keep]")
     role, keep = sys.argv[1], "--keep" in sys.argv
     INBOX.mkdir(parents=True, exist_ok=True)
 
@@ -54,7 +54,7 @@ def main() -> None:
         own_file.write_text("", encoding="utf-8")
 
     # Source of truth is the task files, not the notifications.
-    wanted = {"pm": {"draft"}, "lead": {"blocked"}}.get(role) or {s for s, r in ROUTING.items() if r == role}
+    wanted = {"techlead": {"draft"}, "lead": {"blocked"}}.get(role) or {s for s, r in ROUTING.items() if r == role}
     queue = [t for t in (parse(p) for p in task_files())
              if t.get("status") in wanted and (role == "lead" or t.get(role, "") in ("", me))]
     print(f"\n## Tasks you can take ({me})\n")

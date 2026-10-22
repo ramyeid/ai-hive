@@ -1,7 +1,9 @@
 # Conventions: <project name>
 
-<!-- Written by the pm agent with the lead, kept in the project at docs/CONVENTIONS.md.
-     Every agent reads this instead of rediscovering the codebase. Keep it short and concrete:
+<!-- Notes on how this project is built, derived from its existing code. Written by the first agent that needs
+     them, kept in the kit (tasks/conventions/<project>.md), never committed to the project.
+     Every agent reads this instead of rediscovering the codebase. The code is the source of truth:
+     if the notes and the code disagree, follow the code and fix the notes. Keep it short and concrete:
      rules a reviewer can answer yes/no to, with one example file (and line range) each. -->
 
 ## Stack

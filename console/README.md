@@ -1,6 +1,6 @@
 # Team Console
 
-A local web app for running and managing the pm / dev / reviewer agents:
+A local web app for running and managing the techlead / dev / reviewer agents:
 talk to each agent, approve what it wants to do, follow tasks across projects, read inboxes and past conversations.
 
 ## Start it
@@ -35,11 +35,11 @@ Requirements:
 | Page | What it's for |
 |------|---------------|
 | **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
-| **Agent chats** (PM, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
+| **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
-| **Settings** | Your team: add, remove and rename PMs, devs and reviewers (e.g. 2 PMs, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (PM)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
+| **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
 ## Choosing the AI provider
 
@@ -62,9 +62,9 @@ reliably over many steps. Try a new model on a small task first.
 
 ## What each task cost
 
-Every task shows its cost so far, from the PM's spec to the review, broken down by model and agent
+Every task shows its cost so far, from the Tech Lead's spec to the review, broken down by model and agent
 (Tasks page and each task's page). Each agent turn is charged to the task(s) it worked on: task IDs
-you mention, task files it reads or edits, IDs in its commands, or the task the PM creates. A turn
+you mention, task files it reads or edits, IDs in its commands, or the task the Tech Lead creates. A turn
 that touches no task counts toward the task that conversation worked on last; a turn touching
 several tasks is split between them.
 

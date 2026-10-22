@@ -1,4 +1,4 @@
-"""Runs the pm / dev / reviewer agents and connects them to the browser.
+"""Runs the techlead / dev / reviewer agents and connects them to the browser.
 
 An AgentRunner owns what you see: status, history, live updates and approval
 cards. The conversation itself is handled by an engine (see engines/), chosen
@@ -51,7 +51,7 @@ class AgentRunner:
     """One agent as the console sees it. Also the EngineHooks its engine reports to."""
 
     def __init__(self, name: str, bus: EventBus, engine_options: dict | None = None) -> None:
-        self.name = name                 # agent id: pm, dev, dev-2, …
+        self.name = name                 # agent id: techlead, dev, dev-2, …
         self.role = store.role_of(name)
         self.bus = bus
         self.engine_options = engine_options or {}

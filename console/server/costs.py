@@ -7,9 +7,9 @@ charges every turn to the task(s) it worked on:
 - task IDs the lead mentions in the message ("Work on TASK-004"),
 - task files the agent reads, writes or edits,
 - task IDs in the agent's shell commands,
-- the task the PM creates with new_task.py.
+- the task the Tech Lead creates with new_task.py.
 
-A turn that touches no task (e.g. answering the PM's questions) is charged to the
+A turn that touches no task (e.g. answering the Tech Lead's questions) is charged to the
 task(s) the same conversation worked on last. A turn touching several tasks is
 split evenly. Anything left is reported as "not linked to a task".
 

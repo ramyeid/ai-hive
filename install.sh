@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
-# Installs the pm / dev / reviewer agents for every project on this machine.
+# Installs the techlead / dev / reviewer agents for every project on this machine.
 # Safe to re-run after any change to this kit (or after moving the kit folder).
 set -euo pipefail
 
 KIT="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox"
+
+# Upgrade task and console data from older versions of the kit (safe to repeat).
+python3 "$KIT/scripts/migrate.py"
+# The PM agent became the Tech Lead: remove our old agent file (only if it's ours).
+if [ -f "$CLAUDE_DIR/agents/pm.md" ] && grep -q "$KIT/TEAM.md" "$CLAUDE_DIR/agents/pm.md"; then
+  rm "$CLAUDE_DIR/agents/pm.md"
+fi
 
 # Agents and slash commands, with this kit's absolute path filled in.
 for f in "$KIT"/agents/*.md;   do sed "s#{{KIT}}#$KIT#g" "$f" > "$CLAUDE_DIR/agents/$(basename "$f")";   done
@@ -49,4 +56,4 @@ echo "    hook + permissions → $CLAUDE_DIR/settings.json (backup: settings.jso
 echo "    task board: $KIT/tasks"
 echo
 echo "Use it: cd into the folder that holds your projects, then"
-echo "    claude --agent pm   |   claude --agent dev   |   claude --agent reviewer"
+echo "    claude --agent techlead   |   claude --agent dev   |   claude --agent reviewer"

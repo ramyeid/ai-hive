@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TASKS = ROOT / "tasks"
 INBOX = TASKS / ".inbox"
 STATE = INBOX / ".state.json"
+CONVENTIONS = TASKS / "conventions"   # per-project conventions notes, kept here, never in the projects
 
 # Which role gets pinged when a task enters a status.
 ROUTING = {
@@ -38,7 +39,31 @@ def parse(path: Path) -> dict:
                 k, v = line.split(":", 1)
                 meta[k.strip()] = v.split("#", 1)[0].strip()
     meta["file"] = path.name
+    if "pm" in meta and not meta.get("techlead"):   # tasks written before the Tech Lead rename
+        meta["techlead"] = meta["pm"]
     return meta
+
+
+# Which task field names the agent holding a task, by status.
+HOLDER = {"draft": "techlead", "in-dev": "dev", "changes-requested": "dev",
+          "ready-for-review": "reviewer", "in-review": "reviewer", "blocked": "blocked_by"}
+
+
+def holder(meta: dict) -> str:
+    """The agent working on the task now ('' if nobody yet). For blocked: who blocked it."""
+    return meta.get(HOLDER.get(meta.get("status", ""), ""), "")
+
+
+def conventions_file(project: str | Path) -> Path:
+    return CONVENTIONS / f"{Path(project).name}.md"
+
+
+def conventions_hint(project: str | Path) -> str:
+    path = conventions_file(project)
+    if path.exists():
+        return f"Conventions notes: {path} (read them first)"
+    return (f"Conventions notes: {path} (not written yet: derive the conventions from the code and, "
+            f"if you studied it, write them there from {ROOT / 'templates/CONVENTIONS.md'})")
 
 
 def project_name(meta: dict) -> str:
@@ -61,7 +86,7 @@ def save_state(state: dict) -> None:
     STATE.write_text(json.dumps(state, indent=2))
 
 
-ROLES = ("pm", "dev", "reviewer")
+ROLES = ("techlead", "dev", "reviewer")
 
 
 def role_of(agent_id: str) -> str:

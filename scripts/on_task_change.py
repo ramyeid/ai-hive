@@ -19,7 +19,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import INBOX, ROUTING, TASKS, load_state, parse, project_name, save_state
+import os
+
+from tasklib import HOLDER, INBOX, ROUTING, TASKS, holder, load_state, parse, project_name, save_state, set_fields
 import board
 import check_ready
 
@@ -41,7 +43,7 @@ def log_activity(meta: dict, previous: str | None, status: str) -> None:
     INBOX.mkdir(parents=True, exist_ok=True)
     entry = {"ts": dt.datetime.now().isoformat(timespec="seconds"), "id": meta.get("id"),
              "title": meta.get("title"), "project": project_name(meta),
-             "from": previous, "to": status}
+             "from": previous, "to": status, "by": holder(meta)}
     with (INBOX / "activity.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -79,6 +81,16 @@ def process(path: Path) -> int:
                   + "\n".join(f"  - {p}" for p in problems), file=sys.stderr)
             return 2
 
+    # Record who blocked it: the agent that made the change, else whoever held the task before.
+    if status == "blocked":
+        by = os.environ.get("AGENT_ID") or meta.get(HOLDER.get(previous or "", ""), "")
+        if by != meta.get("blocked_by", ""):
+            set_fields(path, blocked_by=by)
+            meta = parse(path)
+    elif meta.get("blocked_by"):
+        set_fields(path, blocked_by="")
+        meta = parse(path)
+
     state[tid] = status
     save_state(state)
     log_activity(meta, previous, status)
@@ -89,11 +101,13 @@ def process(path: Path) -> int:
         target = INBOX / "agents" / f"{to[1:]}.md" if to.startswith("@") else INBOX / f"{to}.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         stamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+        who = holder(meta)
+        by = f" by {who}" if who and status == "blocked" else f" ({who})" if who else ""
         line = (f"- [{stamp}] **{tid}** [{project_name(meta)}] {meta.get('title', '')} → `{status}`"
-                f" (was `{previous or 'new'}`) — {path}\n")
+                f" (was `{previous or 'new'}`){by} — {path}\n")
         with target.open("a", encoding="utf-8") as f:
             f.write(line)
-        desktop_notify(f"{to.lstrip('@').upper()}: {tid} [{project_name(meta)}]", f"{meta.get('title', '')} → {status}")
+        desktop_notify(f"{to.lstrip('@').upper()}: {tid} [{project_name(meta)}]", f"{meta.get('title', '')} → {status}{by}")
 
     board.write_board()
     return 0

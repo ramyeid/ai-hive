@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import agent_id, find_task, lock, parse, set_fields
+from tasklib import agent_id, conventions_hint, find_task, lock, parse, set_fields
 import on_task_change
 
 CLAIMABLE = {"dev": {"ready-for-dev", "changes-requested"}, "reviewer": {"ready-for-review"}}
@@ -26,14 +26,30 @@ def worktree_for(meta: dict) -> Path:
     return project.parent / f"{project.name}.worktrees" / meta["id"]
 
 
+def start_point(project: str, base: str, exists) -> str:
+    """Where the task branch starts: the base as the lead named it, whatever branch that is.
+    If it only exists on the remote (e.g. `develop` never checked out here), use origin's copy."""
+    if exists(base):
+        return base
+    subprocess.run(["git", "-C", project, "fetch", "--quiet", "origin", base], capture_output=True)
+    if exists(f"origin/{base}"):
+        return f"origin/{base}"
+    sys.exit(f"The base branch `{base}` doesn't exist locally or on origin, so the worktree can't be created.\n"
+             "Ask the lead which branch they meant, set `base:` in the task, and claim again.")
+
+
 def ensure_worktree(meta: dict) -> Path:
     path = worktree_for(meta)
     if path.exists():
         return path
-    project, branch, base = meta["project"], meta["branch"], meta.get("base") or "main"
-    has_branch = subprocess.run(["git", "-C", project, "rev-parse", "--verify", "--quiet", branch],
-                                capture_output=True).returncode == 0
-    cmd = ["git", "-C", project, "worktree", "add", str(path)] + ([branch] if has_branch else ["-b", branch, base])
+    project, branch = meta["project"], meta["branch"]
+    exists = lambda ref: subprocess.run(["git", "-C", project, "rev-parse", "--verify", "--quiet", ref],
+                                        capture_output=True).returncode == 0
+    if exists(branch):
+        cmd = ["git", "-C", project, "worktree", "add", str(path), branch]
+    else:
+        base = start_point(project, meta.get("base") or "main", exists)
+        cmd = ["git", "-C", project, "worktree", "add", str(path), "-b", branch, base]
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode != 0:
         sys.exit(f"Couldn't create the worktree for {meta['id']}: {done.stderr.strip()}\n"
@@ -71,6 +87,7 @@ def main() -> None:
     if meta.get("worktree"):
         print(f"Work in: {meta['worktree']}  (branch {meta['branch']}, from {meta.get('base')})")
         print(f"Start every command with: cd {meta['worktree']} &&")
+    print(conventions_hint(meta["project"]))
 
 
 if __name__ == "__main__":

@@ -36,8 +36,8 @@ def main():
     store.INDEX, store.SETTINGS = store.SESSIONS / "index.json", tmp / "settings.json"
     kit = "/kit"
 
-    # PM on Claude writes TASK-007 over three turns.
-    session("pm", "claude", "opus", [
+    # Tech Lead on Claude writes TASK-007 over three turns.
+    session("techlead", "claude", "opus", [
         ("init", {"model": "claude-opus-5-5"}),
         ("user", {"text": "Create a task in ~/code/api: export users"}),
         ("tool", {"id": "t1", "name": "Bash", "input": {"command": f"python3 {kit}/scripts/new_task.py ~/code/api 'Export users'"}}),
@@ -72,10 +72,10 @@ def main():
 
     s = costs.summary()
     t7 = s["tasks"]["TASK-007"]
-    pm = next(r for r in t7["rows"] if r["agent"] == "pm")
-    check(abs(pm["cost_usd"] - 0.16) < 1e-9 and pm["turns"] == 3,
-          "PM: creating, editing and an 'approved' reply with no task named all count for TASK-007")
-    check(pm["model"] == "claude-opus-5-5", "the model is the one the provider actually ran, not the alias")
+    techlead = next(r for r in t7["rows"] if r["agent"] == "techlead")
+    check(abs(techlead["cost_usd"] - 0.16) < 1e-9 and techlead["turns"] == 3,
+          "Tech Lead: creating, editing and an 'approved' reply with no task named all count for TASK-007")
+    check(techlead["model"] == "claude-opus-5-5", "the model is the one the provider actually ran, not the alias")
     dev7 = next(r for r in t7["rows"] if r["agent"] == "dev")
     check(dev7["unpriced_tokens"] == 1_600_000 and dev7["cost_usd"] == 0,
           "without a price, DeepSeek tokens are counted but not costed")
@@ -88,7 +88,7 @@ def main():
           "with a price set, cost = tokens × price (applies to past turns too)")
     dev8 = next(r for r in t8["rows"] if r["agent"] == "dev")
     check(abs(dev8["cost_usd"] - 0.05) < 1e-9, "a turn touching two tasks is split between them")
-    check(abs(t7["cost_usd"] - (0.16 + 1.55)) < 1e-9, f"TASK-007 total across PM (Claude) and dev (DeepSeek): {t7['cost_usd']}")
+    check(abs(t7["cost_usd"] - (0.16 + 1.55)) < 1e-9, f"TASK-007 total across Tech Lead (Claude) and dev (DeepSeek): {t7['cost_usd']}")
     rev8 = next(r for r in t8["rows"] if r["agent"] == "reviewer")
     check(rev8["unpriced_tokens"] == 4000 and rev8["turns"] == 1, "reviewer's TASK-008 review counted, unpriced (Kimi has no price)")
     check(s["unlinked"]["tokens"] == 2000, "inbox check listing several tasks isn't charged to them: shown as not linked")

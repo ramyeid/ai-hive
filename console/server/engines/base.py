@@ -30,7 +30,7 @@ class EngineHooks(Protocol):
 
 @dataclass
 class EngineConfig:
-    agent: str                 # agent id: pm, dev, dev-2, …
+    agent: str                 # agent id: techlead, dev, dev-2, …
     instructions: str          # the agent's .md body, kit path filled in
     provider: str              # key in PROVIDERS
     model: str                 # "" = the provider's / agent file's default
@@ -41,7 +41,7 @@ class EngineConfig:
     permission_mode: str       # default | acceptEdits
     api_key: str = ""
     base_url: str = ""
-    role: str = ""             # pm | dev | reviewer
+    role: str = ""             # techlead | dev | reviewer
 
 
 class AgentEngine(ABC):
