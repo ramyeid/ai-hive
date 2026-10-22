@@ -55,10 +55,11 @@ def holder(meta: dict) -> str:
 
 
 def knowledge_hint(project: str | Path) -> str:
-    path = KNOWLEDGE / f"{Path(project).name}.md"
-    if path.exists():
-        return (f"Knowledge: {path} (read it before searching the code; "
-                f"`python3 {ROOT}/scripts/knowledge.py status {project}` shows what changed since it was written)")
+    folder = KNOWLEDGE / Path(project).name
+    if folder.exists():
+        files = ", ".join(sorted(p.name for p in folder.glob("*.md")))
+        return (f"Knowledge: {folder}/ ({files}). Read index.md, then the service files the task touches, before "
+                f"searching the code; `python3 {ROOT}/scripts/knowledge.py status {project}` shows what changed since.")
     return f"Knowledge: none yet for {Path(project).name}. The conventions are whatever the existing code does."
 
 

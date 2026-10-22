@@ -97,10 +97,10 @@ team-agents/              ← this repository: the only copy of the agents and r
 ├── TEAM.md               shared rules + lifecycle every agent follows
 ├── agents/               techlead.md · dev.md · reviewer.md   (installed into ~/.claude/agents)
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
-├── templates/            TASK.md (task spec) · KNOWLEDGE.md (template for each service's knowledge file)
+├── templates/            TASK.md (task spec) · KNOWLEDGE_INDEX.md · KNOWLEDGE_SERVICE.md (knowledge files)
 ├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · on_task_change …
 ├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md (not committed)
-├── knowledge/            ← the Tech Lead's memory of each service it has worked on (not committed)
+├── knowledge/            ← the Tech Lead's memory: one folder per repository it has worked on (not committed)
 ├── console/              ← the Team Console web app (optional)
 └── install.sh
 ```
@@ -108,10 +108,12 @@ team-agents/              ← this repository: the only copy of the agents and r
 Your projects get nothing from the kit — only the dev's commits on `task/TASK-…` branches.
 Each task records `project:` (its folder) and `base:` (the branch it starts from and is reviewed against; the Tech Lead proposes the branch you have checked out and asks you to confirm it).
 
-**Knowledge:** each time the Tech Lead writes a spec, it records what it learned about that service in
-`knowledge/<service>.md`: purpose, code map, APIs, entities, connections, conventions and commands, and the
-commit it describes. The next task on that service starts from that file, re-checking only what changed in
-git since then, instead of re-reading the code. Read them in the console's **Knowledge** page.
+**Knowledge:** each time the Tech Lead writes a spec, it records what it learned in `knowledge/<repo>/`:
+`index.md` for the repository (and everything, for a single-service repo), plus one file per service of a
+monorepo, each covering its own folders. Files hold purpose, code map, APIs, entities, connections,
+conventions and commands, and the commit they describe. The next task starts from them, re-checking only
+what changed in git in those folders since, instead of re-reading the code. Read them in the console's
+**Knowledge** page.
 
 **Routing:** `ready-for-dev`, `changes-requested` → dev · `ready-for-review` → reviewer · `blocked`, `done` → you.
 

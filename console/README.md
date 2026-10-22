@@ -38,7 +38,7 @@ Requirements:
 | **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
-| **Knowledge** | The Tech Lead's memory of each service (`knowledge/<service>.md`): purpose, code map, APIs, entities, conventions, task history. Shows how many files changed in the project since it was written. Read-only. |
+| **Knowledge** | The Tech Lead's memory of each repository (`knowledge/<repo>/`): an index, plus one file per service of a monorepo, with purpose, code map, APIs, entities, conventions and task history. Each file shows how many files changed in its own folders since it was written. Read-only. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
 | **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 

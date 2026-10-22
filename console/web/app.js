@@ -234,7 +234,7 @@ async function render(quiet = false) {
     const scrollY = window.scrollY;
     parkTerminal();   // keep the shell alive while other pages are shown
     view.innerHTML = html;
-    if (quiet) window.scrollTo(0, scrollY);
+    window.scrollTo(0, quiet ? scrollY : 0);   // a new page opens at the top; a refresh keeps your place
     afterRender[r.page]?.(r);
   } catch (err) {
     if (seq === renderSeq) view.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
@@ -730,28 +730,36 @@ function freshness(k) {
   return `<span class="pill reviewer">${k.changed} file${k.changed > 1 ? "s" : ""} changed since</span>`;
 }
 
+const knowledgeHref = (repo, name) => `#/knowledge/${encodeURIComponent(repo)}${name && name !== "index" ? `/${encodeURIComponent(name)}` : ""}`;
+const knowledgeLabel = (f) => f.kind === "index" ? "Index" : f.name;
+
 async function KnowledgeList() {
-  const items = await api("/api/knowledge");
+  const repos = await api("/api/knowledge");
+  const table = (repo) => `<div class="table-wrap"><table>
+      <thead><tr><th>File</th><th>Covers</th><th>Freshness</th><th>Commit</th><th>Updated</th><th>By</th><th>Size</th></tr></thead>
+      <tbody>${repo.files.map((f) => `<tr data-href="${knowledgeHref(repo.repo, f.name)}">
+        <td><a href="${knowledgeHref(repo.repo, f.name)}">${esc(knowledgeLabel(f))}</a></td>
+        <td>${f.scope.length ? f.scope.map((s) => `<code>${esc(s)}</code>`).join(" ") : `<span class="muted">${f.kind === "index" ? "whole repo" : "not set"}</span>`}</td>
+        <td>${freshness(f)}</td><td><code>${esc(f.commit || "")}</code>${f.branch ? ` <small class="muted">${esc(f.branch)}</small>` : ""}</td>
+        <td class="num">${esc(f.updated || "")}</td><td>${f.updated_by ? esc(nameOf(f.updated_by)) : ""}</td><td class="num">${f.lines} lines</td></tr>`).join("")}</tbody></table></div>`;
   return `<div class="page-head"><div><h1>Knowledge</h1>
-      <p>The Tech Lead's memory of each service: what it learned while writing specs, so the next task starts here instead of re-reading the code. Each file records the commit it describes; "changed since" counts the files changed in the project after that, which the Tech Lead re-checks before relying on it.</p></div></div>
-    ${items.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Service</th><th>Freshness</th><th>Commit</th><th>Updated</th><th>By</th><th>Size</th></tr></thead>
-      <tbody>${items.map((k) => `<tr data-href="#/knowledge/${encodeURIComponent(k.file.replace(/\.md$/, ""))}">
-        <td><a href="#/knowledge/${encodeURIComponent(k.file.replace(/\.md$/, ""))}">${esc(k.service)}</a><br><small class="muted"><code>${esc(k.path)}</code></small></td>
-        <td>${freshness(k)}</td><td><code>${esc(k.commit || "")}</code>${k.branch ? ` <small class="muted">${esc(k.branch)}</small>` : ""}</td>
-        <td class="num">${esc(k.updated || "")}</td><td>${k.updated_by ? esc(nameOf(k.updated_by)) : ""}</td><td class="num">${k.lines} lines</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="empty">Nothing yet. The Tech Lead writes a file for a service the first time it specs a task there.</div>`}`;
+      <p>The Tech Lead's memory of each repository: what it learned while writing specs, so the next task starts here instead of re-reading the code. A monorepo has an index plus one file per service; each file records the commit it describes, and "changed since" counts the files changed in its own folders after that.</p></div></div>
+    ${repos.length ? repos.map((repo) => `<section class="section knowledge-repo"><h2>${esc(repo.repo)} <small class="muted"><code>${esc(repo.path)}</code></small></h2>${table(repo)}</section>`).join("")
+      : `<div class="empty">Nothing yet. The Tech Lead writes a repository's knowledge the first time it specs a task there.</div>`}`;
 }
 
 async function KnowledgeView(r) {
-  const k = await api(`/api/knowledge/${encodeURIComponent(r.id)}`);
-  const linked = k.markdown.replace(/(^|[^\w`\[\/-])(TASK-\d{3,})(?![\w-])/g, "$1[$2](#/tasks/$2)");
+  const name = r.sub || "index";
+  const k = await api(`/api/knowledge/${encodeURIComponent(r.id)}/${encodeURIComponent(name)}`);
+  const linked = k.markdown.replace(/(^|[^\w`\[\/-])(TASK-\d{3,})(?![\w-])/g, "$1[$2](#/tasks/$2)")
+    .replace(/\|\s*([A-Za-z0-9._-]+)\.md\s*\|/g, (m, file) => k.siblings.some((s) => s.name === file) ? `| [${file}.md](${knowledgeHref(k.repo, file)}) |` : m);
+  const tabs = k.siblings.length > 1 ? `<nav class="tabs">${k.siblings.map((s) => `<a href="${knowledgeHref(k.repo, s.name)}" ${s.name === name ? 'aria-current="page"' : ""}>${esc(s.kind === "index" ? "Index" : s.name)}</a>`).join("")}</nav>` : "";
   const changes = k.changed_files.length ? `<details class="changed"><summary>${k.changed} file${k.changed > 1 ? "s" : ""} changed since ${esc(k.commit)}${k.stale_sections.length ? `, touching: ${esc(k.stale_sections.join(", "))}` : ""}</summary>
       <ul>${k.changed_files.map((f) => `<li><code>${esc(f)}</code></li>`).join("")}</ul></details>` : "";
-  return `<p><a href="#/knowledge" class="muted">All services</a></p>
-    <div class="page-head"><div><h1>${esc(k.service)}</h1>
-      <p>${freshness(k)} <code>${esc(k.path)}</code>${k.commit ? `, describes <code>${esc(k.commit)}</code>${k.branch ? ` on ${esc(k.branch)}` : ""}` : ""}${k.updated ? `, updated ${esc(k.updated)}` : ""}${k.updated_by ? ` by ${esc(nameOf(k.updated_by))}` : ""}</p></div></div>
-    ${changes}
+  return `<p><a href="#/knowledge" class="muted">All repositories</a></p>
+    <div class="page-head"><div><h1>${esc(k.repo)}${k.kind === "service" ? ` <span class="muted">/</span> ${esc(k.name)}` : ""}</h1>
+      <p>${freshness(k)} <code>${esc(k.path)}</code>${k.scope.length ? `, covers ${k.scope.map((s) => `<code>${esc(s)}</code>`).join(" ")}` : ""}${k.commit ? `, describes <code>${esc(k.commit)}</code>${k.branch ? ` on ${esc(k.branch)}` : ""}` : ""}${k.updated ? `, updated ${esc(k.updated)}` : ""}${k.updated_by ? ` by ${esc(nameOf(k.updated_by))}` : ""}</p></div></div>
+    ${tabs}${changes}
     <article class="prose knowledge">${md(linked)}</article>
     <p class="hint">File: <code>${esc(k.file_path)}</code></p>`;
 }

@@ -107,18 +107,27 @@ def summary() -> dict:
 
 
 def knowledge_list() -> list[dict]:
-    return sorted((kb.info(p) for p in KNOWLEDGE.glob("*.md")), key=lambda k: k["service"].lower())
+    """One entry per repo: its index and its service files, each with its own freshness."""
+    repos = []
+    for folder in sorted((p for p in KNOWLEDGE.glob("*") if p.is_dir()), key=lambda p: p.name.lower()):
+        files = [kb.info(p) for p in kb.repo_files(folder)]
+        if files:
+            repos.append({"repo": folder.name, "path": files[0]["path"], "files": files})
+    return repos
 
 
-def knowledge_get(name: str) -> dict | None:
-    path = next((p for p in KNOWLEDGE.glob("*.md") if p.stem == name), None)   # only files that exist: no path tricks
+def knowledge_get(repo: str, name: str) -> dict | None:
+    # Only files that exist in the listing: no path tricks.
+    folder = next((p for p in KNOWLEDGE.glob("*") if p.is_dir() and p.name == repo), None)
+    path = next((p for p in folder.glob("*.md") if p.stem == name), None) if folder else None
     if not path:
         return None
     text = path.read_text(encoding="utf-8")
     body = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.S)
     info = kb.info(path)
-    changed = kb.changed_since(info["path"], info["commit"]) if info["commit"] and info["path"] else None
-    return {**info, "markdown": re.sub(r"<!--.*?-->", "", body, flags=re.S), "file_path": str(path),
+    changed = kb.changed_since(info["path"], info["commit"], info["scope"]) if info["changed"] is not None else None
+    siblings = [{"name": p.stem, "kind": "index" if p.stem == "index" else "service"} for p in kb.repo_files(path.parent)]
+    return {**info, "siblings": siblings, "markdown": re.sub(r"<!--.*?-->", "", body, flags=re.S), "file_path": str(path),
             "changed_files": (changed or [])[:100], "stale_sections": kb.sections_mentioning(text, changed or [])}
 
 

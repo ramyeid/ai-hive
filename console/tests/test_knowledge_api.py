@@ -1,4 +1,4 @@
-"""The console's Knowledge page: lists the Tech Lead's knowledge files and shows one, with its freshness.
+"""The console's Knowledge page: lists each repository's knowledge files and shows one, with its freshness.
 
     .venv/bin/python -m unittest tests/test_knowledge_api.py
 """
@@ -21,40 +21,41 @@ HEADERS = {"x-token": TOKEN}
 
 class KnowledgeApiTest(unittest.TestCase):
 
-    def test_lists_each_service_with_the_number_of_files_changed_since_its_commit(self):
+    def test_lists_each_repo_with_its_index_first_then_its_services(self):
         client = self._a_console()
-        project = self._a_project_with_knowledge_at_head("orders")
-        self._a_commit_changing(project, "src/orders/api.py")
+        self._a_monorepo_with_knowledge("platform", services={"payments": "services/payments/", "orders": "services/orders/"})
 
         listing = client.get("/api/knowledge", headers=HEADERS).json()
 
-        self.assertEqual([k["service"] for k in listing], ["orders"])
-        self.assertEqual(listing[0]["changed"], 1)
+        self.assertEqual([r["repo"] for r in listing], ["platform"])
+        self.assertEqual([f["name"] for f in listing[0]["files"]], ["index", "orders", "payments"])
 
-    def test_shows_a_file_without_its_front_matter_and_with_the_changed_files(self):
+    def test_counts_changes_per_file_only_inside_its_own_folders(self):
         client = self._a_console()
-        project = self._a_project_with_knowledge_at_head("orders")
-        self._a_commit_changing(project, "src/orders/api.py")
+        project = self._a_monorepo_with_knowledge("platform", services={"orders": "services/orders/", "payments": "services/payments/"})
+        self._a_commit_changing(project, "services/payments/charge.py")
 
-        shown = client.get("/api/knowledge/orders", headers=HEADERS).json()
+        listing = client.get("/api/knowledge", headers=HEADERS).json()
+
+        changed = {f["name"]: f["changed"] for f in listing[0]["files"]}
+        self.assertEqual(changed, {"index": 0, "orders": 0, "payments": 1})
+
+    def test_shows_a_service_file_without_front_matter_with_its_changes_and_its_siblings(self):
+        client = self._a_console()
+        project = self._a_monorepo_with_knowledge("platform", services={"orders": "services/orders/"})
+        self._a_commit_changing(project, "services/orders/api.py")
+
+        shown = client.get("/api/knowledge/platform/orders", headers=HEADERS).json()
 
         self.assertTrue(shown["markdown"].lstrip().startswith("## Purpose"))
-        self.assertEqual(shown["changed_files"], ["src/orders/api.py"])
-        self.assertNotIn("<!--", shown["markdown"])
+        self.assertEqual(shown["changed_files"], ["services/orders/api.py"])
+        self.assertEqual([s["name"] for s in shown["siblings"]], ["index", "orders"])
 
-    def test_says_up_to_date_when_nothing_changed_since_the_commit(self):
+    def test_refuses_paths_that_are_not_knowledge_files(self):
         client = self._a_console()
-        self._a_project_with_knowledge_at_head("orders")
+        self._a_monorepo_with_knowledge("platform", services={"orders": "services/orders/"})
 
-        listing = client.get("/api/knowledge", headers=HEADERS).json()
-
-        self.assertEqual(listing[0]["changed"], 0)
-
-    def test_refuses_names_that_are_not_knowledge_files(self):
-        client = self._a_console()
-        self._a_project_with_knowledge_at_head("orders")
-
-        response = client.get("/api/knowledge/..%2Ftasks%2FBOARD", headers=HEADERS)
+        response = client.get("/api/knowledge/platform/..%2F..%2Ftasks%2FBOARD", headers=HEADERS)
 
         self.assertEqual(response.status_code, 404)
 
@@ -74,17 +75,23 @@ class KnowledgeApiTest(unittest.TestCase):
         self.addCleanup(client.__exit__, None, None, None)
         return client
 
-    def _a_project_with_knowledge_at_head(self, name: str) -> Path:
+    def _a_monorepo_with_knowledge(self, name: str, services: dict[str, str]) -> Path:
         project = Path(tempfile.mkdtemp()) / name
         project.mkdir()
         self.addCleanup(shutil.rmtree, project.parent)
         self._git(project, "init", "-q", "-b", "main")
-        self._a_commit_changing(project, "README.md")
+        self._a_commit_changing(project, "package.json")
         commit = self._git(project, "rev-parse", "--short", "HEAD").stdout.strip()
-        (self._knowledge / f"{name}.md").write_text(
-            f"---\nservice: {name}\npath: {project}\ncommit: {commit}\nbranch: main\nupdated: 2026-10-22\n"
-            f"updated_by: techlead\n---\n\n<!-- guidance -->\n## Purpose\nTakes orders.\n\n## Code map\n`src/orders/` → the API.\n")
+        folder = self._knowledge / name
+        folder.mkdir()
+        self._a_knowledge_file(folder / "index.md", f"repo: {name}\npath: {project}\nscope: package.json", commit)
+        for service, scope in services.items():
+            self._a_knowledge_file(folder / f"{service}.md", f"service: {service}\nrepo: {name}\npath: {project}\nscope: {scope}", commit)
         return project
+
+    def _a_knowledge_file(self, path: Path, fields: str, commit: str) -> None:
+        path.write_text(f"---\n{fields}\ncommit: {commit}\nbranch: main\nupdated: 2026-10-22\nupdated_by: techlead\n---\n\n"
+                        "<!-- guidance -->\n## Purpose\nPart of the platform.\n")
 
     def _a_commit_changing(self, project: Path, file: str) -> None:
         path = project / file

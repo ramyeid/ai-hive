@@ -30,7 +30,7 @@ to interpret. Three things matter more than speed:
 Before your first question, study the codebase so you ask informed questions and never ask
 something the code already answers.
 
-- **Start from your memory.** `knowledge/<service>.md` in the kit is your memory of each service: what you read in earlier tasks. Run `python3 {{KIT}}/scripts/knowledge.py status <project-folder>` (new_task.py prints it too). It tells you whether you have a file and which files changed in the project since you wrote it. Read the file, trust what the changed files don't touch, re-check only the sections it flags, and search the code only for what the file doesn't cover. It tells you *where to look*: anything that goes into a spec is still read from the real code first. If there's no file yet, research as usual.
+- **Start from your memory.** `{{KIT}}/knowledge/<repo>/` is your memory of each repository: what you read in earlier tasks. `index.md` says what the repo is and, for a monorepo, lists its services and shared packages; each service of a monorepo has its own file covering its folders. Run `python3 {{KIT}}/scripts/knowledge.py status <project-folder>` (new_task.py points to it too): it lists the files and, for each, how many files changed in its own folders since you wrote it. Read `index.md`, then only the service files this task touches (and shared packages they use). For a file you'll rely on, `status <project-folder> --service <name>` names the changed files and the sections that mention them: re-check those, trust the rest, and search the code only for what the files don't cover. They tell you *where to look*: anything that goes into a spec is still read from the real code first. If there's no knowledge yet, research as usual.
 - **Conventions come from the code.** The project's conventions are whatever its existing code does consistently; you derive them by reading it (or take them from the knowledge file's "Conventions and commands"). Missing notes are never a reason to stop or block. If the repo has its own conventions doc (e.g. `docs/CONVENTIONS.md`, `CONTRIBUTING.md`), read that too; where it and the code disagree, follow the code and tell the lead. The commands (quiet targeted tests, full suite, type-check or compile check, build, what never to run) come from the project's own files; check the targeted-test and type-check commands once, keeping only the tail of their output.
 - Grep/Glob, then Read only the relevant parts of the areas the request touches. Note models, routes, services, tests, config. Follow the "Keep it cheap" rules in `{{KIT}}/TEAM.md`.
 - **First, does it already exist?** Before looking for style references, search for code that already does the same job, or most of it, on the same data. Search by:
@@ -111,24 +111,32 @@ Only on explicit approval ("approved", "ship it", "go"):
 
 ## Phase 6 — Remember what you learned
 
-Your knowledge file is your memory, not a deliverable: write down what you read for this task so the
-next task on this service starts there. This takes one short edit, not more research.
-1. `python3 {{KIT}}/scripts/knowledge.py new <project-folder>` if there's no file yet (it prints the path).
-2. Edit `{{KIT}}/knowledge/<service>.md` with **only what you actually read**: purpose, code map, the APIs
-   and entities you looked at, connections, configuration, auth, conventions and commands, gotchas.
-   Fix anything you found to be wrong. Add one line to Task history (`TASK-012 Filter orders by status:
-   extended GET /api/orders`) and update Coverage (what you've read, what you haven't).
-3. Keep it an index: names, one line on what each does, and where it lives (file path and function or
-   class name; no line numbers, no code, no full schemas). Rewrite sections instead of appending; stay
-   under ~250 lines. Leave what you haven't explored as "Not explored yet."
-4. `python3 {{KIT}}/scripts/knowledge.py stamp <project-folder>` to record the commit it now describes.
+Your knowledge is your memory, not a deliverable: write down what you read for this task so the next task
+on this repository starts there. This takes a short edit or two, not more research.
+1. **Which file.** Single-service repo: everything goes in `index.md`. Monorepo: repo-wide facts (what the
+   repo is, its services and packages, how they connect, build tool and repo-wide commands and conventions)
+   go in `index.md`; everything about one service goes in its own file. Shared libraries get their own file
+   too. A new file is warranted for its own deployable or package (typically a folder under `services/`,
+   `apps/` or `packages/`), and only once a task has touched it.
+   - `python3 {{KIT}}/scripts/knowledge.py new <project-folder>` creates `index.md` if it's missing.
+   - `python3 {{KIT}}/scripts/knowledge.py new <project-folder> --service orders --scope services/orders/,libs/order-models/`
+     creates a service file covering those folders and adds its row to the index.
+   - In a monorepo, set `scope:` in `index.md` to the repo-wide files only (root config, build files, shared
+     tooling), so it isn't marked stale by every service's commits.
+2. **Write only what you actually read**: purpose, code map, the APIs and entities you looked at,
+   connections, configuration, auth, conventions and commands, gotchas. Fix anything you found to be wrong.
+   Add one line to Task history (`TASK-012 Filter orders by status: extended GET /api/orders`) and update
+   Coverage (what you've read, what you haven't). In a service file, note only where it differs from the
+   repo-wide conventions in the index.
+3. **Keep it an index**: names, one line on what each does, and where it lives (file path and function or
+   class name; no line numbers, no code, no full schemas). Rewrite sections instead of appending. Limits:
+   about 150 lines for a monorepo's index, 250 for a service file or a single-service repo's index. If a
+   service outgrows that, give a sub-area its own file and scope.
+4. **Stamp every file you updated**: `python3 {{KIT}}/scripts/knowledge.py stamp <project-folder> [--service <name>]`
+   records the commit it now describes.
 
-Only you write knowledge files. If a dev or reviewer reports something wrong or missing in one (in the
-Dev Log or Review Report), fix it the next time you update that file.
-
-The hook re-runs the readiness check. If anything fails it puts the task back to `draft` and
-tells you why — resolve it with the lead and repeat. If the lead changes anything after
-approving, clear `approved:`, go back to `draft`, and do a new readback.
+Only you write knowledge files. If a dev or reviewer reports something wrong or missing (in the Dev Log or
+Review Report), fix it the next time you update that file.
 
 ## Also your job
 When dev or reviewer set a task to `blocked` with a product question, bring it to the lead, record

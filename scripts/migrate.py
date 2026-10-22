@@ -3,7 +3,8 @@
 
 Run by install.sh and console/start.sh.
 - The "pm" role became "techlead" (Tech Lead): task fields, inboxes, console agents and history.
-- Per-project conventions notes (tasks/conventions/) moved into the knowledge files (knowledge/).
+- Per-project conventions notes (tasks/conventions/) moved into the knowledge files.
+- Knowledge files moved from knowledge/<repo>.md to knowledge/<repo>/index.md (one folder per repo).
 """
 import json
 import re
@@ -79,21 +80,33 @@ def conventions() -> None:
     if not old.exists():
         return
     projects = {Path(m.get("project", "")).name: m.get("project", "") for m in map(parse, task_files())}
-    template = (ROOT / "templates" / "KNOWLEDGE.md").read_text(encoding="utf-8")
+    template = (ROOT / "templates" / "KNOWLEDGE_INDEX.md").read_text(encoding="utf-8")
     for notes in old.glob("*.md"):
-        target = KNOWLEDGE / notes.name
+        target = KNOWLEDGE / notes.stem / "index.md"
         if not target.exists():
             body = re.sub(r"<!--.*?-->", "", notes.read_text(encoding="utf-8"), flags=re.S)
             body = re.sub(r"^# .*\n", "", body, count=1).strip()   # drop the old title
             body = re.sub(r"^## ", "### ", body, flags=re.M)
-            text = template.replace("SERVICE_NAME", notes.stem).replace("PROJECT_PATH", projects.get(notes.stem, ""))
+            text = template.replace("REPO_NAME", notes.stem).replace("PROJECT_PATH", projects.get(notes.stem, ""))
             text = re.sub(r"(## Conventions and commands\n<!--.*?-->\n)Not explored yet\.", lambda m: m.group(1) + body,
                           text, count=1, flags=re.S)
-            KNOWLEDGE.mkdir(parents=True, exist_ok=True)
+            target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
         notes.unlink()
     if not any(old.iterdir()):
         old.rmdir()
+
+
+def knowledge_folders() -> None:
+    """knowledge/<repo>.md (one file per repo) → knowledge/<repo>/index.md."""
+    for flat in KNOWLEDGE.glob("*.md") if KNOWLEDGE.exists() else []:
+        target = KNOWLEDGE / flat.stem / "index.md"
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            text = re.sub(r"^service:", "repo:", flat.read_text(encoding="utf-8"), count=1, flags=re.M)
+            text = re.sub(r"^(path: .*)$", r"\1\nscope:", text, count=1, flags=re.M)
+            target.write_text(text, encoding="utf-8")
+        flat.unlink()
 
 
 def main() -> None:
@@ -101,6 +114,7 @@ def main() -> None:
     inboxes()
     console()
     conventions()
+    knowledge_folders()
     if changed:
         print(f"Upgraded {changed} task file(s): the PM is now the Tech Lead (`techlead:`).")
 

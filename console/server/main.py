@@ -132,11 +132,11 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     async def knowledge_list():
         return board.knowledge_list()
 
-    @app.get("/api/knowledge/{name}")
-    async def knowledge_get(name: str):
-        found = board.knowledge_get(name)
+    @app.get("/api/knowledge/{repo}/{name}")
+    async def knowledge_get(repo: str, name: str):
+        found = board.knowledge_get(repo, name)
         if not found:
-            raise HTTPException(404, f"No knowledge file for {name}.")
+            raise HTTPException(404, f"No knowledge file {repo}/{name}.")
         return found
 
     @app.websocket("/api/terminal")
