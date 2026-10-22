@@ -140,6 +140,8 @@ async function loadState() {
   const data = await api("/api/state");
   state.settings = data.settings;
   state.kit = data.kit;
+  state.terminal = data.terminal;
+  document.getElementById("nav-terminal").hidden = !data.terminal;
   state.agents = Object.fromEntries(data.agents.map((a) => [a.name, a]));
   renderRail();
 }
@@ -217,7 +219,7 @@ async function refreshBadge() {
 
 function route() {
   const [, page = "", id = "", sub = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
-  const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings" };
+  const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -225,11 +227,12 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage };
   try {
-    const html = await pages[r.page](r);
+    const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
     const scrollY = window.scrollY;
+    parkTerminal();   // keep the shell alive while other pages are shown
     view.innerHTML = html;
     if (quiet) window.scrollTo(0, scrollY);
     afterRender[r.page]?.(r);
@@ -717,9 +720,78 @@ async function saveConfig(name, provider, model) {
   if (route().page === "overview") render(true);
 }
 
+// ---- terminal -------------------------------------------------------------------
+// One shell per browser tab. It keeps running while you visit other pages and ends when the tab closes.
+
+const term = { box: null, xterm: null, fit: null, socket: null, ended: false };
+
+function loadAsset(tag, attrs) {
+  return new Promise((resolve, reject) => {
+    const el = Object.assign(document.createElement(tag), attrs, { onload: resolve, onerror: reject });
+    document.head.append(el);
+  });
+}
+
+async function startTerminal() {
+  if (!window.Terminal) {
+    await Promise.all([loadAsset("link", { rel: "stylesheet", href: "/static/vendor/xterm/xterm.css" }),
+                       loadAsset("script", { src: "/static/vendor/xterm/xterm.js" })]);
+    await loadAsset("script", { src: "/static/vendor/xterm/addon-fit.js" });
+  }
+  term.xterm?.dispose();
+  term.box = term.box || Object.assign(document.createElement("div"), { className: "term-box" });
+  term.box.innerHTML = "";
+  term.xterm = new window.Terminal({ cursorBlink: true, fontFamily: "Plex Mono, ui-monospace, Menlo, monospace", fontSize: 13,
+                                     theme: { background: "#16202a", foreground: "#e3e7eb" } });
+  term.fit = new window.FitAddon.FitAddon();
+  term.xterm.loadAddon(term.fit);
+  term.xterm.open(term.box);
+  term.ended = false;
+  const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal`);
+  socket.binaryType = "arraybuffer";
+  term.socket = socket;
+  socket.onopen = () => { term.fit.fit(); socket.send(JSON.stringify({ token: TOKEN, cols: term.xterm.cols, rows: term.xterm.rows })); };
+  socket.onmessage = (e) => term.xterm.write(new Uint8Array(e.data));
+  socket.onclose = (e) => {
+    if (term.socket !== socket) return;
+    term.ended = true;
+    term.xterm.write(`\r\n\x1b[2m[${e.reason || "Disconnected."}]\x1b[0m\r\n`);
+    if (route().page === "terminal") render(true);
+  };
+  term.xterm.onData((data) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "input", data })));
+  term.xterm.onResize(({ cols, rows }) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "resize", cols, rows })));
+}
+
+function parkTerminal() {
+  if (term.box?.isConnected) document.getElementById("term-parking").append(term.box);
+}
+
+window.addEventListener("resize", () => { if (term.box?.isConnected && route().page === "terminal") term.fit?.fit(); });
+
+async function TerminalPage(r, quiet) {
+  if (!state.terminal) {
+    return `<div class="page-head"><div><h1>Terminal</h1></div></div>
+      <div class="empty">The terminal is off. Start the console with <code>ENABLE_TERMINAL=1</code> to use it, for example
+      <code>ENABLE_TERMINAL=1 bash service-start.sh</code>. It gives anyone who can open this console a shell on this machine.</div>`;
+  }
+  if (quiet && document.getElementById("term-slot") && !term.ended) return null;   // don't disturb a live shell
+  return `<div class="page-head"><div><h1>Terminal</h1>
+      <p>A shell on the machine running the console, starting in the agents' home folder. It keeps running while you use other pages and ends when you close this browser tab.</p></div>
+      ${term.ended ? `<button class="btn primary" data-action="new-shell">Start a new shell</button>` : ""}</div>
+    <div id="term-slot" class="term-slot"></div>`;
+}
+
 // ---- after-render wiring --------------------------------------------------------
 
 const afterRender = {
+  async terminal() {
+    const slot = document.getElementById("term-slot");
+    if (!slot) return;
+    if (!term.box) await startTerminal();
+    slot.append(term.box);
+    term.fit.fit();
+    term.xterm.focus();
+  },
   agent(r) {
     renderAgentChrome(r.id);
     const box = document.getElementById("transcript");
@@ -797,6 +869,7 @@ const actions = {
     const value = prompt(`New name for ${nameOf(name)}:`, personOf(name));
     if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
   },
+  "new-shell": async () => { await startTerminal(); render(); },
   "add-agent": async (el) => {
     const added = await act(() => api("/api/agents", { method: "POST", body: { role: el.dataset.role } }));
     if (!added) return;

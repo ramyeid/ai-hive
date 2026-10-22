@@ -9,12 +9,12 @@ import json
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import board, costs, store
+from . import board, costs, store, terminal
 from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
@@ -126,7 +126,17 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     @app.get("/api/state")
     async def state():
         return {"agents": [r.info() for r in manager.agents.values()],
-                "settings": public_settings(), "kit": str(store.KIT)}
+                "settings": public_settings(), "kit": str(store.KIT), "terminal": terminal.ENABLED}
+
+    @app.websocket("/api/terminal")
+    async def terminal_socket(ws: WebSocket):
+        # The HTTP middleware doesn't cover WebSockets, so the same checks happen here:
+        # local host only, and the page's key (sent as the first message).
+        if (ws.headers.get("host") or "").split(":")[0] not in LOCAL_HOSTS:
+            await ws.close(code=4403)
+            return
+        await terminal.session(ws, lambda token: secrets.compare_digest(token or "", TOKEN),
+                               store.load_settings()["workspace"])
 
     @app.get("/api/events")
     async def events(request: Request):

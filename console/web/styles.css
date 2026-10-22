@@ -128,6 +128,8 @@ textarea { resize: vertical; }
 
 /* ---- overview: who holds the ball ---------------------------------------- */
 .stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.term-slot { height: calc(100vh - 190px); min-height: 320px; background: #16202a; border-radius: var(--radius-m); padding: 8px; }
+.term-box { height: 100%; }
 .team-link { margin: 10px 0 0; font-size: 13px; }
 .team { margin-bottom: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .team-role { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); padding: 12px 14px; border-top: 3px solid var(--role); }
