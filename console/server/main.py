@@ -128,6 +128,17 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         return {"agents": [r.info() for r in manager.agents.values()],
                 "settings": public_settings(), "kit": str(store.KIT), "terminal": terminal.ENABLED}
 
+    @app.get("/api/knowledge")
+    async def knowledge_list():
+        return board.knowledge_list()
+
+    @app.get("/api/knowledge/{name}")
+    async def knowledge_get(name: str):
+        found = board.knowledge_get(name)
+        if not found:
+            raise HTTPException(404, f"No knowledge file for {name}.")
+        return found
+
     @app.websocket("/api/terminal")
     async def terminal_socket(ws: WebSocket):
         # The HTTP middleware doesn't cover WebSockets, so the same checks happen here:

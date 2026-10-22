@@ -84,6 +84,8 @@ class Toolbox:
             path = self.path(args.get("file_path", ""))
             if path.parent == self.kit / "tasks" and path.name.startswith("TASK-"):
                 return False
+            if path.parent == self.kit / "knowledge" and path.suffix == ".md":
+                return False
             return not (permission_mode == "acceptEdits" and self._inside(path))
         if name == "Bash":
             command = args.get("command", "")

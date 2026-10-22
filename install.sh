@@ -5,7 +5,7 @@ set -euo pipefail
 
 KIT="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
-mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox"
+mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox" "$KIT/knowledge"
 
 # Upgrade task and console data from older versions of the kit (safe to repeat).
 python3 "$KIT/scripts/migrate.py"
@@ -42,7 +42,7 @@ dirs = perms.setdefault("additionalDirectories", [])
 if kit not in dirs:
     dirs.append(kit)
 allow = perms.setdefault("allow", [])
-for rule in (f"Edit(/{kit}/tasks/**)", f"Bash(python3 {kit}/scripts/*)"):
+for rule in (f"Edit(/{kit}/tasks/**)", f"Edit(/{kit}/knowledge/**)", f"Bash(python3 {kit}/scripts/*)"):
     if rule not in allow:
         allow.append(rule)
 
@@ -54,6 +54,7 @@ echo "    agents:   $(ls "$KIT"/agents | sed 's/\.md//' | tr '\n' ' ')→ $CLAUD
 echo "    commands: /board /ship"
 echo "    hook + permissions → $CLAUDE_DIR/settings.json (backup: settings.json.bak)"
 echo "    task board: $KIT/tasks"
+echo "    knowledge:  $KIT/knowledge (the Tech Lead's memory of each service)"
 echo
 echo "Use it: cd into the folder that holds your projects, then"
 echo "    claude --agent techlead   |   claude --agent dev   |   claude --agent reviewer"

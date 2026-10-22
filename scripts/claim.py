@@ -14,7 +14,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import agent_id, conventions_hint, find_task, lock, parse, set_fields
+from tasklib import agent_id, knowledge_hint, find_task, lock, parse, set_fields
 import on_task_change
 
 CLAIMABLE = {"dev": {"ready-for-dev", "changes-requested"}, "reviewer": {"ready-for-review"}}
@@ -87,7 +87,7 @@ def main() -> None:
     if meta.get("worktree"):
         print(f"Work in: {meta['worktree']}  (branch {meta['branch']}, from {meta.get('base')})")
         print(f"Start every command with: cd {meta['worktree']} &&")
-    print(conventions_hint(meta["project"]))
+    print(knowledge_hint(meta["project"]))
 
 
 if __name__ == "__main__":

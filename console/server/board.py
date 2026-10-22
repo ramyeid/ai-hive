@@ -10,7 +10,8 @@ from pathlib import Path
 from .store import KIT
 
 sys.path.insert(0, str(KIT / "scripts"))
-from tasklib import INBOX, ORDER, ROUTING, TASKS, holder, parse, project_name, task_files  # noqa: E402
+from tasklib import INBOX, KNOWLEDGE, ORDER, ROUTING, TASKS, holder, parse, project_name, task_files  # noqa: E402
+import knowledge as kb  # noqa: E402
 
 ROLES = ("techlead", "dev", "reviewer", "lead")
 _NOTE = re.compile(r"^- \[(?P<ts>[^\]]+)\] \*\*(?P<id>[^*]+)\*\* (?:\[(?P<project>[^\]]+)\] )?"
@@ -103,6 +104,22 @@ def summary() -> dict:
     unread = {r: len(inbox(r)["notifications"]) for r in ROLES}
     return {"by_status": by_status, "tasks": tasks, "unread": unread,
             "activity": activity(25), "projects": sorted({t["project_name"] for t in tasks})}
+
+
+def knowledge_list() -> list[dict]:
+    return sorted((kb.info(p) for p in KNOWLEDGE.glob("*.md")), key=lambda k: k["service"].lower())
+
+
+def knowledge_get(name: str) -> dict | None:
+    path = next((p for p in KNOWLEDGE.glob("*.md") if p.stem == name), None)   # only files that exist: no path tricks
+    if not path:
+        return None
+    text = path.read_text(encoding="utf-8")
+    body = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.S)
+    info = kb.info(path)
+    changed = kb.changed_since(info["path"], info["commit"]) if info["commit"] and info["path"] else None
+    return {**info, "markdown": re.sub(r"<!--.*?-->", "", body, flags=re.S), "file_path": str(path),
+            "changed_files": (changed or [])[:100], "stale_sections": kb.sections_mentioning(text, changed or [])}
 
 
 def signature() -> str:

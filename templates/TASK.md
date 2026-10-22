@@ -60,7 +60,7 @@ approved:               # techlead: date the lead explicitly approved the final 
 |-----------|------------------|----------------|
 
 ## Conventions to Follow
-<!-- techlead: concrete rules taken from the references above (+ the project's conventions notes, if any).
+<!-- techlead: concrete rules taken from the references above (+ the service's knowledge file, if any).
      Each rule specific enough that a reviewer can answer yes/no. Cover at least:
      naming, file/folder placement, structure/layering, error handling, logging,
      typing, tests (framework, location, naming), dependencies allowed.

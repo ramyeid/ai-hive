@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import ROOT, TASKS, agent_id, conventions_hint, lock, task_files
+from tasklib import ROOT, TASKS, agent_id, knowledge_hint, lock, task_files
 
 
 def base_branch(project: Path) -> str:
@@ -54,7 +54,7 @@ def main() -> None:
         path.write_text(body, encoding="utf-8")
     print(path)
     print(f"Base branch: {base}  (change `base:` in the task if the lead wants another)")
-    print(conventions_hint(project))
+    print(knowledge_hint(project))
 
 
 if __name__ == "__main__":

@@ -3,12 +3,13 @@
 
 Run by install.sh and console/start.sh.
 - The "pm" role became "techlead" (Tech Lead): task fields, inboxes, console agents and history.
+- Per-project conventions notes (tasks/conventions/) moved into the knowledge files (knowledge/).
 """
 import json
 import re
 from pathlib import Path
 
-from tasklib import INBOX, ROOT, task_files
+from tasklib import INBOX, KNOWLEDGE, ROOT, parse, task_files
 
 DATA = ROOT / "console" / "data"
 
@@ -73,10 +74,33 @@ def console() -> None:
         write(DATA / "sessions" / "index.json", index)
 
 
+def conventions() -> None:
+    old = ROOT / "tasks" / "conventions"
+    if not old.exists():
+        return
+    projects = {Path(m.get("project", "")).name: m.get("project", "") for m in map(parse, task_files())}
+    template = (ROOT / "templates" / "KNOWLEDGE.md").read_text(encoding="utf-8")
+    for notes in old.glob("*.md"):
+        target = KNOWLEDGE / notes.name
+        if not target.exists():
+            body = re.sub(r"<!--.*?-->", "", notes.read_text(encoding="utf-8"), flags=re.S)
+            body = re.sub(r"^# .*\n", "", body, count=1).strip()   # drop the old title
+            body = re.sub(r"^## ", "### ", body, flags=re.M)
+            text = template.replace("SERVICE_NAME", notes.stem).replace("PROJECT_PATH", projects.get(notes.stem, ""))
+            text = re.sub(r"(## Conventions and commands\n<!--.*?-->\n)Not explored yet\.", lambda m: m.group(1) + body,
+                          text, count=1, flags=re.S)
+            KNOWLEDGE.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
+        notes.unlink()
+    if not any(old.iterdir()):
+        old.rmdir()
+
+
 def main() -> None:
     changed = tasks()
     inboxes()
     console()
+    conventions()
     if changed:
         print(f"Upgraded {changed} task file(s): the PM is now the Tech Lead (`techlead:`).")
 

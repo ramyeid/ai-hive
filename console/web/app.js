@@ -219,7 +219,7 @@ async function refreshBadge() {
 
 function route() {
   const [, page = "", id = "", sub = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
-  const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal" };
+  const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -227,7 +227,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -245,7 +245,7 @@ async function render(quiet = false) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "tasks" && r.page === "task") || (nav === "history" && r.page === "session");
+    const on = nav === r.page || (nav === "tasks" && r.page === "task") || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file");
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -718,6 +718,42 @@ async function saveConfig(name, provider, model) {
   if (saved) state.settings = saved;
   renderAgentChrome(name);
   if (route().page === "overview") render(true);
+}
+
+// ---- knowledge ------------------------------------------------------------------
+// The Tech Lead's memory of each service (knowledge/<service>.md), read-only here.
+
+function freshness(k) {
+  if (!k.commit) return `<span class="pill lead">Never stamped</span>`;
+  if (k.changed === null) return `<span class="pill lead" title="The recorded commit isn't in the repo anymore">Unverified</span>`;
+  if (k.changed === 0) return `<span class="pill dev">Up to date</span>`;
+  return `<span class="pill reviewer">${k.changed} file${k.changed > 1 ? "s" : ""} changed since</span>`;
+}
+
+async function KnowledgeList() {
+  const items = await api("/api/knowledge");
+  return `<div class="page-head"><div><h1>Knowledge</h1>
+      <p>The Tech Lead's memory of each service: what it learned while writing specs, so the next task starts here instead of re-reading the code. Each file records the commit it describes; "changed since" counts the files changed in the project after that, which the Tech Lead re-checks before relying on it.</p></div></div>
+    ${items.length ? `<div class="table-wrap"><table>
+      <thead><tr><th>Service</th><th>Freshness</th><th>Commit</th><th>Updated</th><th>By</th><th>Size</th></tr></thead>
+      <tbody>${items.map((k) => `<tr data-href="#/knowledge/${encodeURIComponent(k.file.replace(/\.md$/, ""))}">
+        <td><a href="#/knowledge/${encodeURIComponent(k.file.replace(/\.md$/, ""))}">${esc(k.service)}</a><br><small class="muted"><code>${esc(k.path)}</code></small></td>
+        <td>${freshness(k)}</td><td><code>${esc(k.commit || "")}</code>${k.branch ? ` <small class="muted">${esc(k.branch)}</small>` : ""}</td>
+        <td class="num">${esc(k.updated || "")}</td><td>${k.updated_by ? esc(nameOf(k.updated_by)) : ""}</td><td class="num">${k.lines} lines</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">Nothing yet. The Tech Lead writes a file for a service the first time it specs a task there.</div>`}`;
+}
+
+async function KnowledgeView(r) {
+  const k = await api(`/api/knowledge/${encodeURIComponent(r.id)}`);
+  const linked = k.markdown.replace(/(^|[^\w`\[\/-])(TASK-\d{3,})(?![\w-])/g, "$1[$2](#/tasks/$2)");
+  const changes = k.changed_files.length ? `<details class="changed"><summary>${k.changed} file${k.changed > 1 ? "s" : ""} changed since ${esc(k.commit)}${k.stale_sections.length ? `, touching: ${esc(k.stale_sections.join(", "))}` : ""}</summary>
+      <ul>${k.changed_files.map((f) => `<li><code>${esc(f)}</code></li>`).join("")}</ul></details>` : "";
+  return `<p><a href="#/knowledge" class="muted">All services</a></p>
+    <div class="page-head"><div><h1>${esc(k.service)}</h1>
+      <p>${freshness(k)} <code>${esc(k.path)}</code>${k.commit ? `, describes <code>${esc(k.commit)}</code>${k.branch ? ` on ${esc(k.branch)}` : ""}` : ""}${k.updated ? `, updated ${esc(k.updated)}` : ""}${k.updated_by ? ` by ${esc(nameOf(k.updated_by))}` : ""}</p></div></div>
+    ${changes}
+    <article class="prose knowledge">${md(linked)}</article>
+    <p class="hint">File: <code>${esc(k.file_path)}</code></p>`;
 }
 
 // ---- terminal -------------------------------------------------------------------

@@ -132,8 +132,8 @@ def main():
     made = run("new_task.py", project, "On develop", agent="techlead")
     on_dev = Path(made.stdout.splitlines()[0])
     check(field(on_dev, "base") == "develop", "a new task's base is the branch the lead has checked out (develop)")
-    check("Conventions notes:" in made.stdout and "not written yet" in made.stdout,
-          "new_task prints where the conventions notes go, and that a missing file is fine")
+    check("Knowledge: none yet for api" in made.stdout,
+          "new_task says there's no knowledge of the service yet, and that the code is the convention")
     on_dev.write_text(on_dev.read_text().replace("status: draft", "status: ready-for-dev", 1))
     r = run("claim.py", on_dev.name[:8], "dev", agent="dev")
     check(r.returncode == 0 and (Path(field(on_dev, "worktree")) / "dev_only.py").exists(),

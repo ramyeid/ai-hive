@@ -1,6 +1,9 @@
 # Personal: each person's task board, notifications and activity log
 tasks/
 
+# Personal: the Tech Lead's memory of each service (describes your company's code)
+knowledge/
+
 # Python
 __pycache__/
 *.pyc

@@ -38,6 +38,7 @@ Requirements:
 | **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
+| **Knowledge** | The Tech Lead's memory of each service (`knowledge/<service>.md`): purpose, code map, APIs, entities, conventions, task history. Shows how many files changed in the project since it was written. Read-only. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
 | **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
@@ -121,6 +122,7 @@ From this folder, with `.venv` active:
 - `python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
 - `python -m tests.test_costs` checks how costs are charged to tasks.
 - `python -m tests.test_team` checks adding and removing agents.
+- `python -m unittest tests/test_knowledge_api.py` checks the Knowledge page's API.
 - `python -m tests.test_terminal` checks the browser terminal (on by default, can be turned off, key required, real shell).
 - `python3 ../tests/test_multi_agent.py` checks claims, worktrees and routing with several agents per role.
 - `python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.

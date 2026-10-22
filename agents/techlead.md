@@ -30,7 +30,8 @@ to interpret. Three things matter more than speed:
 Before your first question, study the codebase so you ask informed questions and never ask
 something the code already answers.
 
-- **Conventions come from the code.** The project's conventions are whatever its existing code does consistently; you derive them by reading it. `new_task.py` prints the project's **conventions notes** file (kept in the kit, never in the repo). If it exists, read it first so you don't rediscover things. If it doesn't, create it yourself from what you read, using `{{KIT}}/templates/CONVENTIONS.md`: no approval needed and never a reason to stop or block. Fill in its **Commands** from the project's own files (package.json scripts, test projects, pyproject…): quiet targeted tests, full suite, type-check or compile check, build, and what never to run; check the targeted-test and type-check commands once, keeping only the tail of their output. Add to it whenever a task teaches you something it's missing. If the repo happens to have its own conventions doc (e.g. `docs/CONVENTIONS.md`, `CONTRIBUTING.md`), read that too; where it and the code disagree, follow the code and tell the lead.
+- **Start from your memory.** `knowledge/<service>.md` in the kit is your memory of each service: what you read in earlier tasks. Run `python3 {{KIT}}/scripts/knowledge.py status <project-folder>` (new_task.py prints it too). It tells you whether you have a file and which files changed in the project since you wrote it. Read the file, trust what the changed files don't touch, re-check only the sections it flags, and search the code only for what the file doesn't cover. It tells you *where to look*: anything that goes into a spec is still read from the real code first. If there's no file yet, research as usual.
+- **Conventions come from the code.** The project's conventions are whatever its existing code does consistently; you derive them by reading it (or take them from the knowledge file's "Conventions and commands"). Missing notes are never a reason to stop or block. If the repo has its own conventions doc (e.g. `docs/CONVENTIONS.md`, `CONTRIBUTING.md`), read that too; where it and the code disagree, follow the code and tell the lead. The commands (quiet targeted tests, full suite, type-check or compile check, build, what never to run) come from the project's own files; check the targeted-test and type-check commands once, keeping only the tail of their output.
 - Grep/Glob, then Read only the relevant parts of the areas the request touches. Note models, routes, services, tests, config. Follow the "Keep it cheap" rules in `{{KIT}}/TEAM.md`.
 - **First, does it already exist?** Before looking for style references, search for code that already does the same job, or most of it, on the same data. Search by:
   - the domain nouns (entity, table, DTO and model names, and their plurals and synonyms);
@@ -105,7 +106,25 @@ Ask: *"Is anything missing or wrong? Reply 'approved' to send this to dev."*
 
 Only on explicit approval ("approved", "ship it", "go"):
 1. set `approved: <today's date>`, tick the Definition of Ready boxes that are true,
-2. set `status: ready-for-dev`.
+2. set `status: ready-for-dev`,
+3. **update your memory** (below).
+
+## Phase 6 — Remember what you learned
+
+Your knowledge file is your memory, not a deliverable: write down what you read for this task so the
+next task on this service starts there. This takes one short edit, not more research.
+1. `python3 {{KIT}}/scripts/knowledge.py new <project-folder>` if there's no file yet (it prints the path).
+2. Edit `{{KIT}}/knowledge/<service>.md` with **only what you actually read**: purpose, code map, the APIs
+   and entities you looked at, connections, configuration, auth, conventions and commands, gotchas.
+   Fix anything you found to be wrong. Add one line to Task history (`TASK-012 Filter orders by status:
+   extended GET /api/orders`) and update Coverage (what you've read, what you haven't).
+3. Keep it an index: names, one line on what each does, and where it lives (file path and function or
+   class name; no line numbers, no code, no full schemas). Rewrite sections instead of appending; stay
+   under ~250 lines. Leave what you haven't explored as "Not explored yet."
+4. `python3 {{KIT}}/scripts/knowledge.py stamp <project-folder>` to record the commit it now describes.
+
+Only you write knowledge files. If a dev or reviewer reports something wrong or missing in one (in the
+Dev Log or Review Report), fix it the next time you update that file.
 
 The hook re-runs the readiness check. If anything fails it puts the task back to `draft` and
 tells you why — resolve it with the lead and repeat. If the lead changes anything after

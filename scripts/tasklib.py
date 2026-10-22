@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TASKS = ROOT / "tasks"
 INBOX = TASKS / ".inbox"
 STATE = INBOX / ".state.json"
-CONVENTIONS = TASKS / "conventions"   # per-project conventions notes, kept here, never in the projects
+KNOWLEDGE = ROOT / "knowledge"   # the Tech Lead's memory of each service; local, never in the projects
 
 # Which role gets pinged when a task enters a status.
 ROUTING = {
@@ -54,16 +54,12 @@ def holder(meta: dict) -> str:
     return meta.get(HOLDER.get(meta.get("status", ""), ""), "")
 
 
-def conventions_file(project: str | Path) -> Path:
-    return CONVENTIONS / f"{Path(project).name}.md"
-
-
-def conventions_hint(project: str | Path) -> str:
-    path = conventions_file(project)
+def knowledge_hint(project: str | Path) -> str:
+    path = KNOWLEDGE / f"{Path(project).name}.md"
     if path.exists():
-        return f"Conventions notes: {path} (read them first)"
-    return (f"Conventions notes: {path} (not written yet: derive the conventions from the code and, "
-            f"if you studied it, write them there from {ROOT / 'templates/CONVENTIONS.md'})")
+        return (f"Knowledge: {path} (read it before searching the code; "
+                f"`python3 {ROOT}/scripts/knowledge.py status {project}` shows what changed since it was written)")
+    return f"Knowledge: none yet for {Path(project).name}. The conventions are whatever the existing code does."
 
 
 def project_name(meta: dict) -> str:
