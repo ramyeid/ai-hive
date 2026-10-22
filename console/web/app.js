@@ -721,9 +721,12 @@ async function saveConfig(name, provider, model) {
 }
 
 // ---- terminal -------------------------------------------------------------------
-// One shell per browser tab. It keeps running while you visit other pages and ends when the tab closes.
+// Several shells per browser tab, laid out in a 2-column grid: 1 and 2 side by side, 3 under 1,
+// 4 next to 3, 5 under 3… They keep running while you visit other pages and end when the tab closes.
 
-const term = { box: null, xterm: null, fit: null, socket: null, ended: false };
+const shells = [];              // { n, pane, xterm, fit, socket, ended }
+let shellCount = 0;
+const grid = Object.assign(document.createElement("div"), { className: "term-grid" });
 
 function loadAsset(tag, attrs) {
   return new Promise((resolve, reject) => {
@@ -732,51 +735,78 @@ function loadAsset(tag, attrs) {
   });
 }
 
-async function startTerminal() {
-  if (!window.Terminal) {
-    await Promise.all([loadAsset("link", { rel: "stylesheet", href: "/static/vendor/xterm/xterm.css" }),
-                       loadAsset("script", { src: "/static/vendor/xterm/xterm.js" })]);
-    await loadAsset("script", { src: "/static/vendor/xterm/addon-fit.js" });
-  }
-  term.xterm?.dispose();
-  term.box = term.box || Object.assign(document.createElement("div"), { className: "term-box" });
-  term.box.innerHTML = "";
-  term.xterm = new window.Terminal({ cursorBlink: true, fontFamily: "Plex Mono, ui-monospace, Menlo, monospace", fontSize: 13,
-                                     theme: { background: "#16202a", foreground: "#e3e7eb" } });
-  term.fit = new window.FitAddon.FitAddon();
-  term.xterm.loadAddon(term.fit);
-  term.xterm.open(term.box);
-  term.ended = false;
+async function loadXterm() {
+  if (window.Terminal) return;
+  await Promise.all([loadAsset("link", { rel: "stylesheet", href: "/static/vendor/xterm/xterm.css" }),
+                     loadAsset("script", { src: "/static/vendor/xterm/xterm.js" })]);
+  await loadAsset("script", { src: "/static/vendor/xterm/addon-fit.js" });
+}
+
+function layoutShells() {
+  grid.dataset.count = shells.length;
+  grid.style.gridTemplateColumns = shells.length > 1 ? "repeat(2, minmax(0, 1fr))" : "minmax(0, 1fr)";
+  grid.style.gridTemplateRows = `repeat(${Math.max(1, Math.ceil(shells.length / 2))}, minmax(220px, 1fr))`;
+}
+
+async function openShell() {
+  await loadXterm();
+  const shell = { n: ++shellCount, ended: false };
+  shell.pane = Object.assign(document.createElement("section"), { className: "term-pane" });
+  shell.pane.innerHTML = `<header><span class="term-title">Shell ${shell.n}</span><span class="term-state"></span>
+    <button class="term-close" data-action="close-shell" data-shell="${shell.n}" title="Close this shell" aria-label="Close shell ${shell.n}">×</button></header>
+    <div class="term-box"></div>`;
+  const box = shell.pane.querySelector(".term-box");
+  shell.xterm = new window.Terminal({ cursorBlink: true, fontFamily: "Plex Mono, ui-monospace, Menlo, monospace", fontSize: 13,
+                                      theme: { background: "#16202a", foreground: "#e3e7eb" } });
+  shell.fit = new window.FitAddon.FitAddon();
+  shell.xterm.loadAddon(shell.fit);
+  shells.push(shell);
+  grid.append(shell.pane);
+  layoutShells();
+  shell.xterm.open(box);
+  new ResizeObserver(() => { if (box.isConnected && box.clientWidth) shell.fit.fit(); }).observe(box);
+
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal`);
   socket.binaryType = "arraybuffer";
-  term.socket = socket;
-  socket.onopen = () => { term.fit.fit(); socket.send(JSON.stringify({ token: TOKEN, cols: term.xterm.cols, rows: term.xterm.rows })); };
-  socket.onmessage = (e) => term.xterm.write(new Uint8Array(e.data));
+  shell.socket = socket;
+  socket.onopen = () => { shell.fit.fit(); socket.send(JSON.stringify({ token: TOKEN, cols: shell.xterm.cols, rows: shell.xterm.rows })); };
+  socket.onmessage = (e) => shell.xterm.write(new Uint8Array(e.data));
   socket.onclose = (e) => {
-    if (term.socket !== socket) return;
-    term.ended = true;
-    term.xterm.write(`\r\n\x1b[2m[${e.reason || "Disconnected."}]\x1b[0m\r\n`);
-    if (route().page === "terminal") render(true);
+    shell.ended = true;
+    shell.pane.classList.add("ended");
+    shell.pane.querySelector(".term-state").textContent = "ended";
+    shell.xterm.write(`\r\n\x1b[2m[${e.reason || "Disconnected."}]\x1b[0m\r\n`);
   };
-  term.xterm.onData((data) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "input", data })));
-  term.xterm.onResize(({ cols, rows }) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "resize", cols, rows })));
+  shell.xterm.onData((data) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "input", data })));
+  shell.xterm.onResize(({ cols, rows }) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "resize", cols, rows })));
+  shell.xterm.focus();
+  return shell;
+}
+
+function closeShell(n) {
+  const i = shells.findIndex((s) => s.n === n);
+  if (i < 0) return;
+  const [shell] = shells.splice(i, 1);
+  shell.socket.close();   // the server ends the shell
+  shell.xterm.dispose();
+  shell.pane.remove();
+  layoutShells();
+  (shells[i] || shells[i - 1])?.xterm.focus();
 }
 
 function parkTerminal() {
-  if (term.box?.isConnected) document.getElementById("term-parking").append(term.box);
+  if (grid.isConnected) document.getElementById("term-parking").append(grid);
 }
-
-window.addEventListener("resize", () => { if (term.box?.isConnected && route().page === "terminal") term.fit?.fit(); });
 
 async function TerminalPage(r, quiet) {
   if (!state.terminal) {
     return `<div class="page-head"><div><h1>Terminal</h1></div></div>
       <div class="empty">The terminal was turned off when the console started (<code>ENABLE_TERMINAL=0</code>). Restart the console without it to use the terminal.</div>`;
   }
-  if (quiet && document.getElementById("term-slot") && !term.ended) return null;   // don't disturb a live shell
+  if (quiet && document.getElementById("term-slot")) return null;   // don't disturb live shells
   return `<div class="page-head"><div><h1>Terminal</h1>
-      <p>A shell on the machine running the console, starting in the agents' home folder. It keeps running while you use other pages and ends when you close this browser tab.</p></div>
-      ${term.ended ? `<button class="btn primary" data-action="new-shell">Start a new shell</button>` : ""}</div>
+      <p>Shells on the machine running the console, starting in the agents' home folder. They keep running while you use other pages and end when you close this browser tab.</p></div>
+      <button class="btn primary" data-action="new-shell">New shell</button></div>
     <div id="term-slot" class="term-slot"></div>`;
 }
 
@@ -786,10 +816,9 @@ const afterRender = {
   async terminal() {
     const slot = document.getElementById("term-slot");
     if (!slot) return;
-    if (!term.box) await startTerminal();
-    slot.append(term.box);
-    term.fit.fit();
-    term.xterm.focus();
+    slot.append(grid);
+    if (!shells.length) await openShell();
+    shells.find((s) => !s.ended)?.xterm.focus();
   },
   agent(r) {
     renderAgentChrome(r.id);
@@ -868,7 +897,8 @@ const actions = {
     const value = prompt(`New name for ${nameOf(name)}:`, personOf(name));
     if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
   },
-  "new-shell": async () => { await startTerminal(); render(); },
+  "new-shell": () => openShell(),
+  "close-shell": (el) => closeShell(Number(el.dataset.shell)),
   "add-agent": async (el) => {
     const added = await act(() => api("/api/agents", { method: "POST", body: { role: el.dataset.role } }));
     if (!added) return;

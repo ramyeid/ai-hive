@@ -50,8 +50,10 @@ default; to turn it off, start the console with:
 ENABLE_TERMINAL=0 bash service-start.sh     # or: ENABLE_TERMINAL=0 ./start.sh
 ```
 
-The shell starts in the agents' home folder, runs as the user the console runs as, keeps running while
-you use other pages, and ends when you close the browser tab (or type `exit`).
+Open as many shells as you need with **New shell**: they're laid out two per row (1 and 2 side by side,
+3 under 1, 4 next to 3, and so on), each with a × to close it. Shells start in the agents' home folder,
+run as the user the console runs as, keep running while you use other pages, and end when you close the
+browser tab (or type `exit`).
 
 **Anyone who can open the console can run any command on that machine.** Keep the console itself
 protected: on your own laptop it only listens on 127.0.0.1; on a server, keep it behind your login and

@@ -128,8 +128,16 @@ textarea { resize: vertical; }
 
 /* ---- overview: who holds the ball ---------------------------------------- */
 .stations { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
-.term-slot { height: calc(100vh - 190px); min-height: 320px; background: #16202a; border-radius: var(--radius-m); padding: 8px; }
-.term-box { height: 100%; }
+.term-slot { height: calc(100vh - 190px); min-height: 320px; }
+.term-grid { display: grid; gap: 10px; height: 100%; }
+.term-pane { display: flex; flex-direction: column; min-height: 0; background: #16202a; border-radius: var(--radius-m); overflow: hidden; }
+.term-pane header { display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; background: #0f171f; color: #aab4be; font: 12px var(--mono); }
+.term-pane:focus-within { box-shadow: 0 0 0 2px var(--focus); }
+.term-pane .term-state { color: #e0a96d; }
+.term-pane.ended .term-title { text-decoration: line-through; }
+.term-close { margin-left: auto; background: none; border: 0; color: #aab4be; font-size: 18px; line-height: 1; padding: 2px 8px; border-radius: var(--radius-s); cursor: pointer; }
+.term-close:hover, .term-close:focus-visible { background: #2a3642; color: #fff; }
+.term-box { flex: 1; min-height: 0; padding: 6px; }
 .team-link { margin: 10px 0 0; font-size: 13px; }
 .team { margin-bottom: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .team-role { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); padding: 12px 14px; border-top: 3px solid var(--role); }
