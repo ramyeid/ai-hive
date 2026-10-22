@@ -63,7 +63,9 @@ approved:               # techlead: date the lead explicitly approved the final 
 <!-- techlead: concrete rules taken from the references above (+ the project's conventions notes, if any).
      Each rule specific enough that a reviewer can answer yes/no. Cover at least:
      naming, file/folder placement, structure/layering, error handling, logging,
-     typing, tests (location, naming, fixtures), dependencies allowed. -->
+     typing, tests (framework, location, naming), dependencies allowed.
+     Test shape is fixed for every project: given/when/then blocks and named private setup helpers
+     ("How tests are written" in TEAM.md), even where the existing tests differ. -->
 
 ## Technical Notes
 <!-- techlead: your research, so nobody repeats it: files and places to change (with line ranges),

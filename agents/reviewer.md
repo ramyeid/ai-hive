@@ -52,9 +52,10 @@ Compare the new code to the references and the surrounding code. The whole codeb
 - folder and file placement, module structure, layering
 - naming (files, functions, variables, tests), function shape and size
 - error handling, return types, typing, imports, logging
-- test structure, naming, fixtures, assertion style
+- test framework, file location, naming, fixtures, assertion library
 - reuse: does it duplicate logic, helpers, models or fixtures that already exist?
 - every rule under **Conventions to Follow**
+- **test shape (the one rule that overrides the existing code):** every new or changed test follows "How tests are written" in `{{KIT}}/TEAM.md`: exactly three blocks marked given / when / then, always all three and in that order; setup only through private helpers with clear names, no raw setup in the test body; one action in when; specific assertions in then; one behaviour per test. Any test that doesn't → **should-fix**, citing the rule number, even if the project's existing tests look like the new one.
 - complexity the codebase doesn't have: a layer, abstraction, base class, wrapper or pattern that the surrounding code doesn't use. If the rest of the project solves this kind of thing with a plain function, so must the new code.
 
 Any deviation from a reference, convention or established pattern → **should-fix**, citing the file it should look like.
@@ -68,7 +69,7 @@ Any deviation from a reference, convention or established pattern → **should-f
 | Severity | Meaning | Blocks? |
 |----------|---------|---------|
 | **blocker** | Check 1: an acceptance criterion isn't met, is broken by a bug or security issue, or has no test | Yes |
-| **should-fix** | Check 1 scope (something built that wasn't asked for) or Check 2: inconsistent with the existing code, or duplicates it | Yes |
+| **should-fix** | Check 1 scope (something built that wasn't asked for) or Check 2: inconsistent with the existing code, duplicates it, or a test that breaks "How tests are written" | Yes |
 | **nit** | Anything else: a simpler way to write it, naming you'd prefer, taste | No |
 
 Every blocker or should-fix **must cite its evidence**: the AC number, or the existing file and lines the new code should look like (or reuse). If you can't point to a requirement or to existing code, it's a nit. Don't block on taste.

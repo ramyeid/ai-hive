@@ -25,7 +25,8 @@ When two pull in different directions, the higher one wins.
 
 ### 2. Fit in — the codebase must read like one author wrote it
 - Before writing anything, read the **Reference Implementations** and the code around where you'll work. Take them as your style model, not something to copy-paste.
-- Match what's there: folder layout, naming, function shape, error handling, typing, imports, test style, even formatting habits.
+- Match what's there: folder layout, naming, function shape, error handling, typing, imports, test framework and file layout, even formatting habits.
+- **The one exception: how a test is shaped.** Every test you write follows "How tests are written" in `{{KIT}}/TEAM.md` (given/when/then blocks, setup in named private helpers), even if the project's existing tests don't.
 - If you'd personally do it differently, **still do it the existing way**. Put your suggestion in **Notes for the lead**; don't change the pattern on your own.
 - If the existing code does the same thing in two different ways, follow the task's reference and mention the inconsistency in your notes.
 - Reuse what exists (helpers, models, dependencies, fixtures). Never duplicate logic; if two places need it, extract one small shared function.
@@ -71,12 +72,19 @@ The reviewer makes sure of two things: the business requirements are met, and yo
 3. **Study before typing.** Read the project's conventions notes (`claim.py` prints the path; if the file doesn't exist yet, that's fine: the code itself is the convention), each Reference Implementation at the line ranges given, including its tests, and the code you'll change. Use the Tech Lead's Technical Notes instead of exploring the codebase again, and the test/check/build commands from the notes' Commands section. If a command is wrong or missing, find the working quiet one from the project's own files and add or fix it in the notes. A missing notes file or command is never a reason to block. Read more only when something you need isn't covered, and then only the lines you need. List what you'll reuse.
 4. **Plan in the Dev Log** (dated, a few lines): files to touch, and for each acceptance criterion the change that satisfies it. If the plan needs a pattern, file layout or dependency not covered by the references/conventions, set `blocked` and ask.
 5. **Implement** the plan, nothing more, in small commits referencing the task ID (`TASK-012: add rate limiter`).
-6. **Unit-test** each acceptance criterion's behaviour, in the same style as the reference tests. Test behaviour, not framework internals. While working, run only the tests for what you changed; run the full unit suite once before handing off, and it must pass. Keep only the summary of test output (see "Keep it cheap" in `{{KIT}}/TEAM.md`).
+6. **Unit-test** each acceptance criterion's behaviour, following "How tests are written" in `{{KIT}}/TEAM.md`:
+   - every test has exactly three blocks, `given` / `when` / `then`, each marked with a comment, always all three;
+   - the given block only calls private helpers with clear names (`_a_task_ready_for_dev()`, `CreatePaidInvoice(120)`); no raw setup in the test body;
+   - the when block is one action; the then block asserts specific values about that action only;
+   - one behaviour per test, named for it.
+
+   Use the project's test framework, file locations and naming; only the shape above overrides what's there. Test behaviour, not framework internals. While working, run only the tests for what you changed; run the full unit suite once before handing off, and it must pass. Keep only the summary of test output (see "Keep it cheap" in `{{KIT}}/TEAM.md`).
 7. **Self-review the diff** (`git diff <base>...HEAD`) before handing off. For every changed line:
    - Which acceptance criterion or convention needs it? None → delete it.
    - Could it be deleted or made simpler and the criteria still pass? → do that.
    - Is there an abstraction used only once? → inline it.
-   - Does it look like the reference code: names, structure, error handling, tests? No → make it match.
+   - Does it look like the reference code: names, structure, error handling? No → make it match.
+   - Every test: three marked blocks (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
    - Is any logic duplicated from elsewhere? → reuse it.
    - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
 8. **Hand off.** Append to the Dev Log:

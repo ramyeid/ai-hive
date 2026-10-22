@@ -17,7 +17,9 @@
      each with an example: `path/to/file.ts:12-40` -->
 
 ## Tests
-<!-- where tests live, naming, fixtures/mocks, what a good test looks like (example file) -->
+<!-- framework, where tests live, file and test naming, fixtures/mocks, assertion library.
+     The shape of each test is NOT a project convention: it's always given/when/then with named private setup
+     helpers ("How tests are written" in the kit's TEAM.md), even if the existing tests differ. -->
 
 ## Commands
 
