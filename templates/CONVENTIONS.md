@@ -18,8 +18,8 @@
 
 ## Tests
 <!-- framework, where tests live, file and test naming, fixtures/mocks, assertion library.
-     The shape of each test is NOT a project convention: it's always given/when/then with named private setup
-     helpers ("How tests are written" in the kit's TEAM.md), even if the existing tests differ. -->
+     The shape of each test is NOT a project convention: it's always given/when/then as three blocks separated by empty
+     lines, with named private setup helpers ("How tests are written" in the kit's TEAM.md), even if the existing tests differ. -->
 
 ## Commands
 

@@ -57,16 +57,17 @@ This is the **one exception to "be consistent with the repo"**: every test the t
 rules, even when the project's existing tests don't. Everything else about tests (framework, file location,
 file and test naming, assertion library, fixtures and mocks) still follows the project.
 
-1. **Three blocks, every time: given, when, then.** Each test body has exactly three blocks, in this order,
-   each marked with a comment in the language's syntax (`# given` / `// given`, `# when`, `# then`).
-   Always all three, even when one is short. If nothing needs setting up, the given block still says what
-   the starting state is (`# given: no tasks exist`). Never merge them (`# when/then`), never repeat them
-   (given, when, then, when, then): a second action is a second test.
+1. **Three blocks, every time: given, when, then.** A block is a group of lines; blocks are separated by
+   **one empty line**. Every test body is exactly three blocks in this order: given (setup), when (the
+   action), then (the assertions). So a test body always has exactly two empty lines, between the blocks,
+   and no empty line anywhere inside a block. No `given` / `when` / `then` comments: the empty lines are
+   the delimiters. Never merge two blocks, never add a fourth: a second action is a second test.
 2. **Given:** the setup, written as calls to **private helper methods with clear names** that say what they
-   create, e.g. `_given_a_task_ready_for_dev()`, `_an_order_with_status("pending")`,
-   `CreatePaidInvoice(amount: 120)`. No raw setup code (building objects field by field, inserting rows,
-   configuring mocks) in the test body. Helpers live in the test file or class as private members (`_name`
-   in Python, `private` in C#/TypeScript/Java), reused across the tests that need the same state.
+   create, e.g. `_a_task_ready_for_dev()`, `_an_order_with_status("pending")`, `CreatePaidInvoice(amount: 120)`.
+   No raw setup code (building objects field by field, inserting rows, configuring mocks) in the test body.
+   Helpers live in the test file or class as private members (`_name` in Python, `private` in
+   C#/TypeScript/Java), reused across the tests that need the same state. The given block is never empty:
+   when the test starts from nothing, a helper says so (`_no_tasks_on_the_board()`).
 3. **When:** exactly one action, the behaviour under test, usually one line that stores its result:
    `result = service.list_orders(status="pending")`.
 4. **Then:** assertions about that one action's result or effect only. Specific values (`== 2`,
@@ -78,14 +79,11 @@ Example (Python; same shape in any language):
 
 ```python
 def test_rejects_a_second_claim_on_the_same_task():
-    # given
     task = _a_task_ready_for_dev()
     _claimed_by(task, "dev")
 
-    # when
     result = claim(task.id, agent="dev-2")
 
-    # then
     assert result.refused
     assert result.message == f"{task.id} is `in-dev`, not waiting for a dev. Pick another task."
 

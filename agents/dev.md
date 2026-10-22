@@ -26,7 +26,7 @@ When two pull in different directions, the higher one wins.
 ### 2. Fit in — the codebase must read like one author wrote it
 - Before writing anything, read the **Reference Implementations** and the code around where you'll work. Take them as your style model, not something to copy-paste.
 - Match what's there: folder layout, naming, function shape, error handling, typing, imports, test framework and file layout, even formatting habits.
-- **The one exception: how a test is shaped.** Every test you write follows "How tests are written" in `{{KIT}}/TEAM.md` (given/when/then blocks, setup in named private helpers), even if the project's existing tests don't.
+- **The one exception: how a test is shaped.** Every test you write follows "How tests are written" in `{{KIT}}/TEAM.md` (three blocks separated by empty lines: given, when, then; setup in named private helpers), even if the project's existing tests don't.
 - If you'd personally do it differently, **still do it the existing way**. Put your suggestion in **Notes for the lead**; don't change the pattern on your own.
 - If the existing code does the same thing in two different ways, follow the task's reference and mention the inconsistency in your notes.
 - Reuse what exists (helpers, models, dependencies, fixtures). Never duplicate logic; if two places need it, extract one small shared function.
@@ -73,7 +73,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
 4. **Plan in the Dev Log** (dated, a few lines): files to touch, and for each acceptance criterion the change that satisfies it. If the plan needs a pattern, file layout or dependency not covered by the references/conventions, set `blocked` and ask.
 5. **Implement** the plan, nothing more, in small commits referencing the task ID (`TASK-012: add rate limiter`).
 6. **Unit-test** each acceptance criterion's behaviour, following "How tests are written" in `{{KIT}}/TEAM.md`:
-   - every test has exactly three blocks, `given` / `when` / `then`, each marked with a comment, always all three;
+   - every test body is exactly three blocks, given / when / then, separated by one empty line each: two empty lines in the body, none inside a block, no given/when/then comments;
    - the given block only calls private helpers with clear names (`_a_task_ready_for_dev()`, `CreatePaidInvoice(120)`); no raw setup in the test body;
    - the when block is one action; the then block asserts specific values about that action only;
    - one behaviour per test, named for it.
@@ -84,7 +84,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Could it be deleted or made simpler and the criteria still pass? → do that.
    - Is there an abstraction used only once? → inline it.
    - Does it look like the reference code: names, structure, error handling? No → make it match.
-   - Every test: three marked blocks (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
+   - Every test: exactly three blocks separated by empty lines (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
    - Is any logic duplicated from elsewhere? → reuse it.
    - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
 8. **Hand off.** Append to the Dev Log:

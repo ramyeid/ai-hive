@@ -55,7 +55,7 @@ Compare the new code to the references and the surrounding code. The whole codeb
 - test framework, file location, naming, fixtures, assertion library
 - reuse: does it duplicate logic, helpers, models or fixtures that already exist?
 - every rule under **Conventions to Follow**
-- **test shape (the one rule that overrides the existing code):** every new or changed test follows "How tests are written" in `{{KIT}}/TEAM.md`: exactly three blocks marked given / when / then, always all three and in that order; setup only through private helpers with clear names, no raw setup in the test body; one action in when; specific assertions in then; one behaviour per test. Any test that doesn't → **should-fix**, citing the rule number, even if the project's existing tests look like the new one.
+- **test shape (the one rule that overrides the existing code):** every new or changed test follows "How tests are written" in `{{KIT}}/TEAM.md`: a body of exactly three blocks (given, when, then) separated by one empty line each, with no empty line inside a block; setup only through private helpers with clear names, no raw setup in the test body; one action in when; specific assertions in then; one behaviour per test. Any test that doesn't → **should-fix**, citing the rule number, even if the project's existing tests look like the new one.
 - complexity the codebase doesn't have: a layer, abstraction, base class, wrapper or pattern that the surrounding code doesn't use. If the rest of the project solves this kind of thing with a plain function, so must the new code.
 
 Any deviation from a reference, convention or established pattern → **should-fix**, citing the file it should look like.
