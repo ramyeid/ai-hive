@@ -37,7 +37,7 @@ def fill(template: str, project: Path, reuse: str) -> str:
         "Out of Scope": "Sorting.",
         "Reference Implementations": "| Reference | Why | Patterns |\n|---|---|---|\n| `app/orders.py:1-2` | same endpoint | filters |",
         "Conventions to Follow": "Query parameters are optional and snake_case.",
-        "Clarifications": "| # | Question | Answer |\n|---|---|---|\n| 1 | Extend the existing endpoint? | Yes |",
+        "Clarifications": "| # | Question | Answer |\n|---|---|---|\n| 1 | Extend the existing endpoint? | Yes |\n| 2 | The base branch will be `main`, OK? | Yes |",
     }
     body["Existing Code to Reuse"] = reuse
     for name, content in body.items():   # replace the section's whole body, up to the next heading
@@ -69,6 +69,10 @@ def main():
 
     found = problems(GOOD)
     check(found == [], f"a complete spec with a reuse decision is ready {found}")
+
+    task.write_text(fill(template, project, GOOD).replace("| 2 | The base branch will be `main`, OK? | Yes |", ""))
+    found = check_ready.check(task)
+    check(any("base branch `main`" in p for p in found), "base branch not confirmed by the lead → not ready")
 
     found = problems(GOOD.replace("**Searched:** `grep -ril order app/`, routes under `/api/orders`", "**Searched:**"))
     check(any("Searched" in p for p in found), "no searches listed → not ready")

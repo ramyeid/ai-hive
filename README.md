@@ -7,7 +7,7 @@ You talk to each agent; they hand work to each other through one task board.
 You ──► techlead ──interviews you until nothing is unknown──► task (project: ~/code/my-api)
               readiness check passes + you approve ──► ready-for-dev ──► notifies dev
 You ──► dev ──works in the task's project: simplest code that fits + unit tests──► ready-for-review
-You ──► reviewer ──business need · consistency · simplicity──► done   or   changes-requested ──► dev
+You ──► reviewer ──requirements met · consistent with existing code──► done   or   changes-requested ──► dev
 ```
 
 ## Get started
@@ -47,7 +47,7 @@ claude --agent reviewer   # tab 3
 | techlead | "In `~/code/my-api`: users need to reset their password by email." | Tech Lead studies that project, then asks you questions in rounds (with suggested answers) until nothing is unknown. |
 | techlead | "approved" | Readiness check runs. Pass → `ready-for-dev`, dev notified. Fail → back to `draft`, with the reasons. |
 | dev | "Check your inbox." | Dev sees tasks from every project, goes to the task's project, builds exactly what's asked (KISS, consistent with that codebase), self-reviews, hands off. |
-| reviewer | "Check your inbox." | Reviewer reads the change in that project and checks business need, consistency, simplicity → `done` or `changes-requested`. |
+| reviewer | "Check your inbox." | Reviewer reads the change in that project and checks that the requirements are met and the code is consistent with what exists → `done` or `changes-requested`. |
 
 - `/board` (in any tab): every task across all projects, plus anything blocked or waiting on you.
 - `/ship TASK-007`: runs dev → reviewer (→ dev …, max 3 rounds) automatically.

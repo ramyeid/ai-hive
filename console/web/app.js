@@ -369,8 +369,12 @@ const PROMPTS = {
 async function TaskDetail(r) {
   const t = await api(`/api/tasks/${encodeURIComponent(r.id)}`);
   const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}</span></li>`).join("");
+  const holder = t.assignee && state.agents[t.assignee];
+  const chatButton = holder ? `<a class="btn role ${roleOf(t.assignee)}" href="#/agents/${t.assignee}">Open chat with ${esc(nameOf(t.assignee))}${t.status === "blocked" ? ", who blocked it" : ""}</a>` : "";
+  // Names in Details link to that agent's chat (plain text if the agent was removed).
+  const who = (id) => state.agents[id] ? `<a href="#/agents/${id}">${esc(nameOf(id))}</a>` : esc(nameOf(id));
   return `<p><a href="#/tasks" class="muted">All tasks</a></p>
-    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div></div>
+    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div>${chatButton}</div>
     <div class="task-layout">
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
@@ -379,9 +383,9 @@ async function TaskDetail(r) {
         <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
         <section><h2>Details</h2><dl class="facts">
           <dt>Project</dt><dd><code>${esc(t.project)}</code></dd>
-          ${t.techlead ? `<dt>Tech Lead</dt><dd>${esc(nameOf(t.techlead))}</dd>` : ""}
-          ${t.dev ? `<dt>Dev</dt><dd>${esc(nameOf(t.dev))}</dd>` : ""}
-          ${t.reviewer ? `<dt>Reviewer</dt><dd>${esc(nameOf(t.reviewer))}</dd>` : ""}
+          ${t.techlead ? `<dt>Tech Lead</dt><dd>${who(t.techlead)}</dd>` : ""}
+          ${t.dev ? `<dt>Dev</dt><dd>${who(t.dev)}</dd>` : ""}
+          ${t.reviewer ? `<dt>Reviewer</dt><dd>${who(t.reviewer)}</dd>` : ""}
           ${t.worktree ? `<dt>Worktree</dt><dd><code>${esc(t.worktree)}</code></dd>` : ""}
           <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
           <dt>Base</dt><dd><code>${esc(t.base)}</code></dd>

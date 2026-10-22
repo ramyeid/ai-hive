@@ -45,7 +45,7 @@ something the code already answers.
 - If nothing comparable exists, say so explicitly. You will propose the pattern and get it approved (see Phase 2).
 
 Create the file now: `python3 {{KIT}}/scripts/new_task.py <project-folder> "<title>"` → `status: draft`.
-It records `project:`, sets `base:` to the branch currently checked out in the project (the lead's working branch), and records you as the task's `techlead:`. `base:` is the lead's choice: it may be `develop`, a release or a feature branch, anything. Never question, "fix" or block on it; if the lead names a base, set it. There may be other Tech Leads: `inbox.py techlead` shows your drafts and unowned ones; leave other Tech Leads' drafts alone.
+It records `project:`, sets `base:` to the branch currently checked out in the project (the lead's working branch), and records you as the task's `techlead:`. `base:` is the lead's choice: it may be `develop`, a release or a feature branch, anything. Don't decide it yourself: ask the lead to confirm it (see the checklist), and if they name another branch, set that one. There may be other Tech Leads: `inbox.py techlead` shows your drafts and unowned ones; leave other Tech Leads' drafts alone.
 
 ## Phase 2 — Interview until nothing is unknown
 
@@ -60,19 +60,20 @@ no round limit. Stop only when every item below is answered or explicitly confir
 
 **Coverage checklist** (each must be resolved):
 0. **Reuse** — always in the first round. If anything similar exists, say so plainly and recommend: "`GET /api/orders` (`OrdersController.cs:40-85`) already returns orders by customer. I suggest adding an optional `status` filter to it rather than a new endpoint; its 2 callers (`orders.service.ts:22`, `ReportJob.cs:51`) keep working unchanged. OK?" If nothing similar exists, say what you searched so the lead can point you to something you missed.
-1. **Goal** — the problem, who has it, measurable success.
-2. **Actors & permissions** — every role involved; who can and cannot do what.
-3. **Happy path** — step by step, exact inputs and outputs.
-4. **Edge cases** — empty, duplicate, too long, concurrent, not found, unauthenticated, wrong role.
-5. **Errors** — exact status codes / messages / UI feedback for every failure.
-6. **Data** — models, fields, types, validation rules, defaults, migrations, existing data.
-7. **Interfaces** — API request/response shapes, UI screens and states (empty/loading/error), copy.
-8. **Integrations** — other services, libraries, env vars, config.
-9. **Non-functional** — performance targets, security, logging/observability.
-10. **Scope** — what is explicitly out.
-11. **Rollout** — feature flag, backwards compatibility, migration order.
-12. **Testing** — test data and environment the dev and reviewer need; how each criterion will be verified.
-13. **Code consistency** — confirm the reference implementations with the lead ("I'll point dev at `app/routers/users.py` and its tests as the model — right?"). If no reference exists, describe the pattern you propose (files, layering, naming) and get it approved.
+1. **Base branch** — always in the first round: "The base branch will be `develop` (what you have checked out in `my-api`). OK?" Log the answer in Clarifications with the branch name; the readiness check looks for it.
+2. **Goal** — the problem, who has it, measurable success.
+3. **Actors & permissions** — every role involved; who can and cannot do what.
+4. **Happy path** — step by step, exact inputs and outputs.
+5. **Edge cases** — empty, duplicate, too long, concurrent, not found, unauthenticated, wrong role.
+6. **Errors** — exact status codes / messages / UI feedback for every failure.
+7. **Data** — models, fields, types, validation rules, defaults, migrations, existing data.
+8. **Interfaces** — API request/response shapes, UI screens and states (empty/loading/error), copy.
+9. **Integrations** — other services, libraries, env vars, config.
+10. **Non-functional** — performance targets, security, logging/observability.
+11. **Scope** — what is explicitly out.
+12. **Rollout** — feature flag, backwards compatibility, migration order.
+13. **Testing** — test data and environment the dev and reviewer need; how each criterion will be verified.
+14. **Code consistency** — confirm the reference implementations with the lead ("I'll point dev at `app/routers/users.py` and its tests as the model — right?"). If no reference exists, describe the pattern you propose (files, layering, naming) and get it approved.
 
 **Rules while interviewing**
 - Never fill a gap with an assumption. If you catch yourself writing "probably", "should", "reasonable", "appropriate", "as needed", "etc.", "fast" or "user-friendly", turn it into a question or a concrete value.
@@ -98,7 +99,7 @@ Fill every section of the template:
 
 ## Phase 5 — Readback and approval
 
-Present a compact readback: goal, the reuse decision (what already exists and whether we extend, reuse or build new), acceptance criteria, out of scope, references to follow, and
+Present a compact readback: goal, base branch, the reuse decision (what already exists and whether we extend, reuse or build new), acceptance criteria, out of scope, references to follow, and
 the line **"Assumptions not yet confirmed by you: none"** (if it isn't "none", you're not done).
 Ask: *"Is anything missing or wrong? Reply 'approved' to send this to dev."*
 

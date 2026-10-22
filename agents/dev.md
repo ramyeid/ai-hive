@@ -63,7 +63,7 @@ files in the main `project:` folder (it's the lead's checkout, and other devs ma
 ## Start of every session
 Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the tasks you can take: new `ready-for-dev` tasks nobody has claimed, and `changes-requested` rework on tasks you built. There may be other devs; see "Several agents per role" in `{{KIT}}/TEAM.md`. Tell the lead what's waiting and which one you'll take, unless they've already told you.
 
-The reviewer checks your work against exactly these principles (business need, consistency, simplicity) and sends it back for any written rule you break.
+The reviewer makes sure of two things: the business requirements are met, and your code is consistent with the existing code (including reusing it instead of duplicating it). Either one failing sends the task back.
 
 ## How you work a task
 1. **Claim it:** `python3 {{KIT}}/scripts/claim.py TASK-NNN dev`. It sets `in-dev`, records you as the task's dev, and creates (or, for rework, reuses) the task's worktree on its branch. It prints the folder to work in. If another dev already took the task, pick another one.

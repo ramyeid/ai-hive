@@ -21,7 +21,7 @@ draft ──► ready-for-dev ──► in-dev ──► ready-for-review ──
 | `ready-for-review`  | dev      | Committed on the task branch, unit tests pass        |
 | `in-review`         | reviewer | Reviewer has claimed it                              |
 | `changes-requested` | reviewer | Findings to fix; see the Review Report section       |
-| `done`              | reviewer | Business need met, consistent, simple — accepted     |
+| `done`              | reviewer | Requirements met, consistent with existing code     |
 | `blocked`           | anyone   | Needs a decision from the lead; say why in the file  |
 
 ## Several agents per role
@@ -39,7 +39,7 @@ without it the ID is just the role name. The kit's scripts read it, so commands 
 ## Rules every agent follows
 
 1. One task = one file: `tasks/TASK-<NNN>-<slug>.md`, created only with `python3 scripts/new_task.py <project-folder> "<title>"`.
-   Its `project:` field is the folder where all the task's work happens; `base:` is the branch it starts from and is reviewed against. `base:` is the lead's choice and is often not `main` (a `develop`, release or feature branch): use it as given, never question it or block on it.
+   Its `project:` field is the folder where all the task's work happens; `base:` is the branch it starts from and is reviewed against. `base:` is the lead's choice and is often not `main` (a `develop`, release or feature branch). The Tech Lead asks the lead to confirm it while writing the spec (the readiness check requires it); after that, everyone uses it as given and never blocks on it.
 2. Only change the `status:` field to a value your role is allowed to set (table above).
 3. Never delete another role's section. Append to your own section; add dated entries.
 4. If anything is ambiguous, set `status: blocked`, write the question under **Open Questions**, and stop. The lead decides.

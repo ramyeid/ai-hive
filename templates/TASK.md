@@ -80,6 +80,7 @@ approved:               # techlead: date the lead explicitly approved the final 
 
 ## Definition of Ready
 <!-- techlead: tick only when actually true. Every box must be [x] before ready-for-dev (checked automatically). -->
+- [ ] Base branch confirmed by the lead
 - [ ] Goal and measurable success confirmed by the lead
 - [ ] Every user role / actor and their permissions named
 - [ ] Happy path described step by step

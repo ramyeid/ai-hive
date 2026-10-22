@@ -73,8 +73,12 @@ def check(path: Path) -> list[str]:
     project = Path(meta.get("project", "")).expanduser()
     if not project.is_absolute() or not (project / ".git").exists():
         problems.append(f"`project:` is not a git repository folder: `{meta.get('project')}`")
-    if not meta.get("base") or meta.get("base") == "BASE_BRANCH":
+    base = meta.get("base", "")
+    if not base or base == "BASE_BRANCH":
         problems.append("`base:` branch is not set.")
+    elif not re.search(rf"(?<![\w/.-]){re.escape(base)}(?![\w/-])", sec.get("Clarifications", "")):
+        problems.append(f"The lead hasn't confirmed the base branch `{base}`: ask \"The base branch will be "
+                        f"`{base}`, OK?\" and log the answer in Clarifications.")
 
     if meta.get("title", "") in ("", "Short imperative title"):
         problems.append("Title is still the template placeholder.")
