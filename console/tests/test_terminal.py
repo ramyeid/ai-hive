@@ -45,8 +45,9 @@ def read_until(ws, text: str) -> str:
 def main():
     app = create_app(AgentManager(claude_client_factory=FakeClient, http_transport=fake_openai_transport([])))
     with TestClient(app, base_url="http://127.0.0.1:8420") as c:
-        terminal.ENABLED = False
-        check(c.get("/api/state", headers={"x-token": TOKEN}).json()["terminal"] is False, "the terminal is off by default")
+        check(c.get("/api/state", headers={"x-token": TOKEN}).json()["terminal"] is True, "the terminal is on by default")
+        terminal.ENABLED = False   # as with ENABLE_TERMINAL=0
+        check(c.get("/api/state", headers={"x-token": TOKEN}).json()["terminal"] is False, "ENABLE_TERMINAL=0 turns it off")
         with c.websocket_connect(URL) as ws:
             check(closed_with(ws) == 4403, "while off, no shell is started")
 
@@ -79,7 +80,6 @@ def main():
                     code = exc.code
                     break
             check(code == 1000, "typing exit ends the shell and the connection")
-    terminal.ENABLED = False
     print(f"\nAll {checks} checks passed.")
 
 

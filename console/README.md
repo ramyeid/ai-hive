@@ -41,21 +41,21 @@ Requirements:
 | **History** | Every past conversation. Read it, or continue it where it left off. |
 | **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
-## Terminal (off by default)
+## Terminal
 
-A **Terminal** page gives you a shell on the machine the console runs on, in the browser. Turn it on
-when starting the console:
+A **Terminal** page gives you a shell on the machine the console runs on, in the browser. It's on by
+default; to turn it off, start the console with:
 
 ```bash
-ENABLE_TERMINAL=1 bash service-start.sh     # or: ENABLE_TERMINAL=1 ./start.sh
+ENABLE_TERMINAL=0 bash service-start.sh     # or: ENABLE_TERMINAL=0 ./start.sh
 ```
 
 The shell starts in the agents' home folder, runs as the user the console runs as, keeps running while
 you use other pages, and ends when you close the browser tab (or type `exit`).
 
-**Anyone who can open the console can then run any command on that machine.** Only turn it on where the
-console itself is protected: on your own laptop (it only listens on 127.0.0.1), or on a server behind
-your login and IP allowlist. Like every other request, the terminal needs the key that only the page the
+**Anyone who can open the console can run any command on that machine.** Keep the console itself
+protected: on your own laptop it only listens on 127.0.0.1; on a server, keep it behind your login and
+IP allowlist, or turn the terminal off. Like every other request, the terminal needs the key that only the page the
 console serves knows, and it refuses requests made for any other host name.
 
 Behind nginx, add these lines to the `location` block so the terminal's WebSocket gets through:
@@ -119,6 +119,6 @@ From this folder, with `.venv` active:
 - `python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
 - `python -m tests.test_costs` checks how costs are charged to tasks.
 - `python -m tests.test_team` checks adding and removing agents.
-- `python -m tests.test_terminal` checks the browser terminal (off by default, key required, real shell).
+- `python -m tests.test_terminal` checks the browser terminal (on by default, can be turned off, key required, real shell).
 - `python3 ../tests/test_multi_agent.py` checks claims, worktrees and routing with several agents per role.
 - `python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.

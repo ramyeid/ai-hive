@@ -771,8 +771,7 @@ window.addEventListener("resize", () => { if (term.box?.isConnected && route().p
 async function TerminalPage(r, quiet) {
   if (!state.terminal) {
     return `<div class="page-head"><div><h1>Terminal</h1></div></div>
-      <div class="empty">The terminal is off. Start the console with <code>ENABLE_TERMINAL=1</code> to use it, for example
-      <code>ENABLE_TERMINAL=1 bash service-start.sh</code>. It gives anyone who can open this console a shell on this machine.</div>`;
+      <div class="empty">The terminal was turned off when the console started (<code>ENABLE_TERMINAL=0</code>). Restart the console without it to use the terminal.</div>`;
   }
   if (quiet && document.getElementById("term-slot") && !term.ended) return null;   // don't disturb a live shell
   return `<div class="page-head"><div><h1>Terminal</h1>

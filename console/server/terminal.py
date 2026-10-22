@@ -1,8 +1,8 @@
 """A shell on the machine the console runs on, streamed to the browser over a WebSocket.
 
-Off unless the console is started with ENABLE_TERMINAL=1. Anyone who can open the console can then
-run any command as the user the console runs as, so only turn it on where the console itself is
-protected (this machine only, or behind your login and IP allowlist).
+On by default; start the console with ENABLE_TERMINAL=0 to turn it off. Anyone who can open the console
+can run any command as the user the console runs as, so keep the console itself protected (this machine
+only, or behind your login and IP allowlist).
 
 Protocol: the browser's first message is {"token": ...}; after that, {"type": "input", "data": "..."}
 or {"type": "resize", "cols": 120, "rows": 30}. The server sends the shell's output as binary frames.
@@ -20,7 +20,7 @@ import termios
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-ENABLED = os.environ.get("ENABLE_TERMINAL", "") == "1"
+ENABLED = os.environ.get("ENABLE_TERMINAL", "1") != "0"
 
 
 def _resize(fd: int, cols: int, rows: int) -> None:
@@ -60,7 +60,7 @@ def _end(pid: int, fd: int) -> None:
 async def session(ws: WebSocket, token_ok, folder: str) -> None:
     await ws.accept()
     if not ENABLED:
-        await ws.close(code=4403, reason="The terminal is off. Start the console with ENABLE_TERMINAL=1.")
+        await ws.close(code=4403, reason="The terminal is turned off (ENABLE_TERMINAL=0).")
         return
     try:
         hello = await asyncio.wait_for(ws.receive_json(), timeout=10)
