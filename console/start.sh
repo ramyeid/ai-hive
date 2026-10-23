@@ -4,26 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")"
 PORT="${PORT:-8420}"
 
-# The Claude Agent SDK needs Python 3.10 or newer.
-if [ ! -x .venv/bin/python ]; then
-  PY=""
-  for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
-    if command -v "$candidate" >/dev/null &&
-       "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
-      PY="$candidate"; break
-    fi
-  done
-  if [ -z "$PY" ]; then
-    echo "Python 3.10 or newer is required."
-    echo "  macOS:          brew install python@3.12"
-    echo "  Ubuntu/Debian:  sudo apt install python3.12 python3.12-venv"
-    exit 1
-  fi
-  echo "Setting up the console (first run only)…"
-  "$PY" -m venv .venv
-  .venv/bin/pip install --quiet --upgrade pip
+# Dependencies and Python are managed by uv (https://docs.astral.sh/uv/): pyproject.toml + uv.lock.
+if ! command -v uv >/dev/null; then
+  echo "uv is required to run the console."
+  echo "  macOS:  brew install uv"
+  echo "  Linux:  curl -LsSf https://astral.sh/uv/install.sh | sh"
+  exit 1
 fi
-.venv/bin/pip install --quiet -r requirements.txt
+# Installs exactly what uv.lock pins into .venv (and a suitable Python if this machine lacks one).
+uv sync --locked --quiet
 
 URL="http://127.0.0.1:$PORT"
 if [ -z "${NO_BROWSER:-}" ]; then   # service-start.sh sets NO_BROWSER
@@ -33,4 +22,4 @@ if [ -z "${NO_BROWSER:-}" ]; then   # service-start.sh sets NO_BROWSER
     fi ) &
 fi
 echo "Agent Team Console → $URL   (Ctrl+C to stop)"
-exec .venv/bin/python -m uvicorn server.main:app --host 127.0.0.1 --port "$PORT"
+exec uv run --locked uvicorn server.main:app --host 127.0.0.1 --port "$PORT"

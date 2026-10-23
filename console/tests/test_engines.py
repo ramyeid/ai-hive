@@ -1,6 +1,6 @@
 """End-to-end checks for both engines, with fake providers (no API keys, no cost).
 
-    .venv/bin/python -m tests.test_engines
+    uv run python -m tests.test_engines
 """
 import asyncio
 import json

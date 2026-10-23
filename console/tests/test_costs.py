@@ -1,6 +1,6 @@
 """Checks that task costs are charged to the right tasks and models.
 
-    .venv/bin/python -m tests.test_costs
+    uv run python -m tests.test_costs
 """
 import sys
 import tempfile

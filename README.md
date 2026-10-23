@@ -12,7 +12,8 @@ You ──► reviewer ──requirements met · consistent with existing code�
 
 ## Get started
 
-Requirements: [Claude Code](https://code.claude.com) (logged in), Python 3, git. macOS or Linux.
+Requirements: [Claude Code](https://code.claude.com) (logged in), Python 3 (for the kit's scripts), git. macOS or Linux.
+The console also needs [uv](https://docs.astral.sh/uv/), which installs its dependencies.
 
 ```bash
 git clone git@github.com:ramyeid/team-agents.git ~/team-agents

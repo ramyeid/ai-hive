@@ -1,6 +1,6 @@
 """Checks the browser terminal: off by default, needs the page's key, runs a real shell.
 
-    .venv/bin/python -m tests.test_terminal
+    uv run python -m tests.test_terminal
 """
 import sys
 

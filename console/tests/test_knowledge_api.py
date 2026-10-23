@@ -1,6 +1,6 @@
 """The console's Knowledge page: lists each repository's knowledge files and shows one, with its freshness.
 
-    .venv/bin/python -m unittest tests/test_knowledge_api.py
+    uv run python -m unittest tests/test_knowledge_api.py
 """
 import shutil
 import subprocess

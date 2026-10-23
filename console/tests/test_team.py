@@ -1,6 +1,6 @@
 """Checks adding and removing agents (several per role), with a fake Claude (no cost).
 
-    .venv/bin/python -m tests.test_team
+    uv run python -m tests.test_team
 """
 import shutil
 import sys

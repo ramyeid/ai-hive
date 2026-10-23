@@ -1,6 +1,6 @@
 """Run the console with a fake Claude (no real agents): for UI development and testing.
 
-    .venv/bin/python -m tests.run_fake      → http://127.0.0.1:8420
+    uv run python -m tests.run_fake      → http://127.0.0.1:8420
 """
 import uvicorn
 

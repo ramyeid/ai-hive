@@ -9,7 +9,8 @@ talk to each agent, approve what it wants to do, follow tasks across projects, r
 bash console/start.sh        # from the repository folder
 ```
 
-The first run creates a Python environment and installs three packages (about a minute).
+The first run installs the dependencies pinned in `uv.lock` (and a suitable Python, if this machine lacks one) with
+[uv](https://docs.astral.sh/uv/), in about a minute; later starts take a second.
 Then it opens **http://127.0.0.1:8420** in your browser. Stop it with Ctrl+C.
 
 **On a server, or to keep it running after you close the terminal**, run it in the background:
@@ -27,7 +28,9 @@ another port. It doesn't restart the console after a crash or a reboot: for that
 
 Requirements:
 - `install.sh` has been run once (it adds the task hook the agents rely on).
-- Python 3.10 or newer (macOS: `brew install python@3.12`).
+- [uv](https://docs.astral.sh/uv/) (macOS: `brew install uv`; Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`).
+  It provides Python 3.10+ itself. If you start the console from a service manager or cron, make sure `uv` is on
+  that environment's `PATH` (the Linux installer puts it in `~/.local/bin`).
 - You're logged in to Claude Code (`claude` works in your terminal). The console uses that same login.
 
 ## What you can do
@@ -118,11 +121,12 @@ price under **Settings → Model prices**. Prices apply to past conversations to
 
 ## Developing
 
-From this folder, with `.venv` active:
-- `python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
-- `python -m tests.test_costs` checks how costs are charged to tasks.
-- `python -m tests.test_team` checks adding and removing agents.
-- `python -m unittest tests/test_knowledge_api.py` checks the Knowledge page's API.
-- `python -m tests.test_terminal` checks the browser terminal (on by default, can be turned off, key required, real shell).
+Dependencies live in `pyproject.toml`, pinned in `uv.lock`. Add one with `uv add <package>` (it updates both);
+never edit `uv.lock` by hand. From this folder:
+- `uv run python -m tests.test_engines` runs end-to-end checks of both engines against fake providers.
+- `uv run python -m tests.test_costs` checks how costs are charged to tasks.
+- `uv run python -m tests.test_team` checks adding and removing agents.
+- `uv run python -m unittest tests/test_knowledge_api.py` checks the Knowledge page's API.
+- `uv run python -m tests.test_terminal` checks the browser terminal (on by default, can be turned off, key required, real shell).
 - `python3 ../tests/test_multi_agent.py` checks claims, worktrees and routing with several agents per role.
-- `python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.
+- `uv run python -m tests.run_fake` runs the console with fake providers, handy for UI work without spending tokens.
