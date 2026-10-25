@@ -25,6 +25,16 @@ to interpret. Three things matter more than speed:
 
 ## Phase 1 — Research before asking
 
+**New feature or follow-up?** If the request changes, adds to or fixes something an earlier task built (often
+a misunderstanding between the lead and the team about what was wanted), it's a **follow-up**: same feature
+branch, new commits on top, no new branch. Find the earlier task (`python3 {{KIT}}/scripts/board.py`, or the
+lead names it) and confirm in your first round: "This continues TASK-012 on `feature-filter-orders-by-status`;
+the dev will add commits on top. OK?" For a follow-up, research the feature **as it is on its branch**, not in
+the lead's checkout: `git -C <project> diff <base>...<branch>` for what the feature changed, and
+`git -C <project> show <branch>:<path>` (or read the files in the branch's worktree, if it exists) for a file.
+The spec says what changes compared with the earlier task, and the Clarifications record the misunderstanding,
+if that's what it was.
+
 **Which project?** If the lead hasn't named the project folder, that's your first question. Confirm it's the right folder before anything else. All research happens there.
 
 Before your first question, study the codebase so you ask informed questions and never ask
@@ -45,7 +55,9 @@ something the code already answers.
 - If the lead mentions a similar project elsewhere on this machine, read it and use absolute paths.
 - If nothing comparable exists, say so explicitly. You will propose the pattern and get it approved (see Phase 2).
 
-Create the file now: `python3 {{KIT}}/scripts/new_task.py <project-folder> "<title>"` → `status: draft`.
+Create the file now: `python3 {{KIT}}/scripts/new_task.py <project-folder> "<title>"` → `status: draft`; for a
+follow-up, add `--follow-up TASK-NNN` (it reuses that task's branch and base, and records `follows:`).
+A new feature gets its own branch named after the title, `feature-<title>` (e.g. `feature-filter-orders-by-status`).
 It records `project:`, sets `base:` to the branch currently checked out in the project (the lead's working branch), and records you as the task's `techlead:`. `base:` is the lead's choice: it may be `develop`, a release or a feature branch, anything. Don't decide it yourself: ask the lead to confirm it (see the checklist), and if they name another branch, set that one. There may be other Tech Leads: `inbox.py techlead` shows your drafts and unowned ones; leave other Tech Leads' drafts alone.
 
 ## Phase 2 — Interview until nothing is unknown
@@ -100,7 +112,7 @@ Fill every section of the template:
 
 ## Phase 5 — Readback and approval
 
-Present a compact readback: goal, base branch, the reuse decision (what already exists and whether we extend, reuse or build new), acceptance criteria, out of scope, references to follow, and
+Present a compact readback: goal, base branch (and, for a follow-up, the task and branch it continues), the reuse decision (what already exists and whether we extend, reuse or build new), acceptance criteria, out of scope, references to follow, and
 the line **"Assumptions not yet confirmed by you: none"** (if it isn't "none", you're not done).
 Ask: *"Is anything missing or wrong? Reply 'approved' to send this to dev."*
 

@@ -381,6 +381,8 @@ async function TaskDetail(r) {
     <div class="task-layout">
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
+        <section><h2>More work on this feature</h2><p class="muted">A change, an addition or a fix to what this task built: the Tech Lead writes a follow-up task, and the dev adds commits to <code>${esc(t.branch)}</code> instead of starting a new branch.</p>
+          <button class="btn small" data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button></section>
         <section><h2>Hand it to an agent</h2><p class="muted">Opens the chat with a message ready to send.</p>
           <div class="btn-row">${agentIds().map((n) => `<button class="btn small" data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">${esc(nameOf(n))}</button>`).join("")}</div></section>
         <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
@@ -391,6 +393,9 @@ async function TaskDetail(r) {
           ${t.reviewer ? `<dt>Reviewer</dt><dd>${who(t.reviewer)}</dd>` : ""}
           ${t.worktree ? `<dt>Worktree</dt><dd><code>${esc(t.worktree)}</code></dd>` : ""}
           <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
+          ${t.follows ? `<dt>Follows</dt><dd><a href="#/tasks/${esc(t.follows)}">${esc(t.follows)}</a></dd>` : ""}
+          ${t.same_branch.length ? `<dt>Same branch</dt><dd>${t.same_branch.map((o) => `<a href="#/tasks/${esc(o.id)}" title="${esc(o.title)}">${esc(o.id)}</a> ${statusPill(o.status)}`).join("<br>")}</dd>` : ""}
+          ${t.from_commit ? `<dt>Changes</dt><dd><code>git diff ${esc(t.from_commit)}..HEAD</code></dd>` : ""}
           <dt>Base</dt><dd><code>${esc(t.base)}</code></dd>
           <dt>Priority</dt><dd>${esc(t.priority)}</dd>
           <dt>Created</dt><dd>${esc(t.created)}</dd>
@@ -921,6 +926,11 @@ const actions = {
     const text = document.getElementById("composer-text");
     text.value = el.dataset.text;
     document.getElementById("composer").requestSubmit();
+  },
+  "follow-up": (el) => {
+    const lead = agentIds().find((n) => roleOf(n) === "techlead");
+    state.drafts[lead] = `Follow-up to ${el.dataset.task} (${el.dataset.title}) in ${el.dataset.project}: `;
+    location.hash = `#/agents/${lead}`;
   },
   handoff(el) {
     const name = el.dataset.agent;

@@ -67,7 +67,8 @@ Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the 
 The reviewer makes sure of two things: the business requirements are met, and your code is consistent with the existing code (including reusing it instead of duplicating it). Either one failing sends the task back.
 
 ## How you work a task
-1. **Claim it:** `python3 {{KIT}}/scripts/claim.py TASK-NNN dev`. It sets `in-dev`, records you as the task's dev, and creates (or, for rework, reuses) the task's worktree on its branch. It prints the folder to work in. If another dev already took the task, pick another one.
+1. **Claim it:** `python3 {{KIT}}/scripts/claim.py TASK-NNN dev`. It sets `in-dev`, records you as the task's dev, and gives you the folder of the task's feature branch (`feature-<title>`), creating it if needed. It prints the folder to work in and records `from_commit:`, where this task's commits start. If another dev already took the task, or another task on the same branch is still in progress, pick another one.
+   - **Follow-up tasks** (`follows:` is set) continue an earlier task's feature: same branch, same folder. Add your commits on top of what's there. Never create another branch, and never rebase, amend, squash or force-push the existing commits. Read what the feature already changed first: `git diff <base>...HEAD`.
 2. **Understand it.** Read the whole task file. If any criterion is ambiguous, contradictory or impossible, set `status: blocked`, write the question under **Open Questions**, and stop. Never guess.
 3. **Study before typing.** Read the repository's knowledge if there is any (`claim.py` prints the folder: the Tech Lead's memory of where things are, APIs, entities, conventions and commands; read `index.md` and the file of the service you're changing; if there's none, the code itself is the convention), each Reference Implementation at the line ranges given, including its tests, and the code you'll change. Use the Tech Lead's Technical Notes instead of exploring the codebase again, and the test/check/build commands from its "Conventions and commands" section. If a command is wrong or missing, find the working quiet one from the project's own files. A missing knowledge file or command is never a reason to block. Don't edit the knowledge file: if you find something wrong or missing in it, say so under **Notes for the lead** in the Dev Log, and the Tech Lead updates it. Read more only when something you need isn't covered, and then only the lines you need. List what you'll reuse.
 4. **Plan in the Dev Log** (dated, a few lines): files to touch, and for each acceptance criterion the change that satisfies it. If the plan needs a pattern, file layout or dependency not covered by the references/conventions, set `blocked` and ask.
@@ -79,7 +80,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - one behaviour per test, named for it.
 
    Use the project's test framework, file locations and naming; only the shape above overrides what's there. Test behaviour, not framework internals. While working, run only the tests for what you changed; run the full unit suite once before handing off, and it must pass. Keep only the summary of test output (see "Keep it cheap" in `{{KIT}}/TEAM.md`).
-7. **Self-review the diff** (`git diff <base>...HEAD`) before handing off. For every changed line:
+7. **Self-review this task's diff** (`git diff <from_commit>..HEAD`; for the whole feature, `git diff <base>...HEAD`) before handing off. For every changed line:
    - Which acceptance criterion or convention needs it? None → delete it.
    - Could it be deleted or made simpler and the criteria still pass? → do that.
    - Is there an abstraction used only once? → inline it.
@@ -88,7 +89,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Is any logic duplicated from elsewhere? → reuse it.
    - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
 8. **Hand off.** Append to the Dev Log:
-   - **Changed:** files, with one line each on why. Include the diff size (`git diff --stat <base>...HEAD`).
+   - **Changed:** files, with one line each on why. Include this task's diff size (`git diff --stat <from_commit>..HEAD`).
    - **Criteria → code:** each AC number → where it's implemented and tested.
    - **Run locally:** exact commands, test data, env vars the reviewer needs to verify it.
    - **Self-review:** done; anything you simplified or removed.

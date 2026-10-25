@@ -72,8 +72,8 @@ def main():
     winner = field(task, "dev")
     check(status(task) == "in-dev" and winner in ("dev", "dev-2"), f"task is in-dev and assigned to {winner}")
     worktree = Path(field(task, "worktree"))
-    check(worktree == project.parent / "api.worktrees" / tid and (worktree / "app.py").exists(),
-          "the task got its own worktree next to the project")
+    check(worktree == project.parent / "api.worktrees" / field(task, "branch") and (worktree / "app.py").exists(),
+          "the task's feature branch got its own worktree next to the project")
     branch = subprocess.run(["git", "-C", str(worktree), "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
     check(branch == field(task, "branch"), "the worktree is on the task's branch")
     check(subprocess.run(["git", "-C", str(project), "branch", "--show-current"], capture_output=True, text=True).stdout.strip() == "main",

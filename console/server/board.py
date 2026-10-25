@@ -36,6 +36,7 @@ def _summary(path: Path) -> dict:
         "blocked_by": meta.get("blocked_by", ""),
         "techlead": meta.get("techlead", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
         "worktree": meta.get("worktree", ""),
+        "follows": meta.get("follows", ""), "from_commit": meta.get("from_commit", ""),
         "ready": {"done": sum(t != " " for t in ticks), "total": len(ticks)},
     }
 
@@ -54,7 +55,10 @@ def get_task(task_id: str) -> dict | None:
             text = path.read_text(encoding="utf-8")
             body = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.S)
             body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
-            return {**_summary(path), "markdown": body, "path": str(path),
+            task = _summary(path)
+            same_branch = [{"id": t["id"], "title": t["title"], "status": t["status"]} for t in list_tasks()
+                           if t["id"] != task["id"] and t["project"] == task["project"] and t["branch"] == task["branch"]]
+            return {**task, "same_branch": sorted(same_branch, key=lambda t: t["id"]), "markdown": body, "path": str(path),
                     "activity": [a for a in activity(1000) if a["id"] == task_id]}
     return None
 

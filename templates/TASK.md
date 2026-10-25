@@ -5,7 +5,9 @@ project: PROJECT_PATH     # set by new_task.py — all work for this task happen
 base: BASE_BRANCH        # branch to start from and review against: the lead's choice, any branch
 status: draft
 priority: medium        # low | medium | high | urgent
-branch: task/TASK-000-short-slug
+branch: BRANCH_NAME             # feature-<title>; shared by every follow-up task on this feature
+follows: FOLLOWS                # set by new_task.py --follow-up: the earlier task whose feature this continues
+from_commit:                    # set by claim.py: the branch's commit when the dev started; this task's changes are from_commit..HEAD
 techlead: TECHLEAD_ID                # who wrote the spec
 dev:                     # set by claim.py: the dev building it (rework comes back to them)
 reviewer:                # set by claim.py: the reviewer (re-reviews come back to them)

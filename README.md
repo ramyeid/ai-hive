@@ -75,14 +75,16 @@ chat header. Names are only for you: scripts and task files use the IDs.
 
 - **No double work.** An agent claims a task before starting it (`scripts/claim.py`). Claims are
   atomic, so if two devs reach for the same task, one gets it and the other picks another.
-- **Each dev task gets its own git worktree**, a separate folder on the task's branch, next to the
-  project: `~/code/my-api.worktrees/TASK-007`. Devs never share a checkout, and your own
+- **One branch per feature, `feature-<title>`**, in its own git worktree next to the project:
+  `~/code/my-api.worktrees/feature-filter-orders-by-status`. Follow-up tasks on the same feature (more
+  changes, a fix, a misunderstanding cleared up: ask the Tech Lead for a follow-up to TASK-007) add commits
+  to that branch instead of creating a new one. Devs never share a checkout, and your own
   `~/code/my-api` stays on its branch untouched.
 - **Rework goes back to the dev who built it, re-reviews to the same reviewer**, so nobody has to
   relearn the task. New work goes to a shared pool every agent of the role sees.
 - **When a task is `done`**, the reviewer removes its worktree (`python3 scripts/worktree.py remove
   TASK-007`). The branch stays: merge it as usual. If it couldn't be removed (uncommitted files),
-  remove it yourself with `git -C ~/code/my-api worktree remove ../my-api.worktrees/TASK-007`.
+  remove it yourself with `git -C ~/code/my-api worktree remove ../my-api.worktrees/feature-…`. The folder is kept while a follow-up on the same branch isn't done.
 - The task file records who has it (`techlead:`, `dev:`, `reviewer:`, `worktree:`). If you remove an
   agent while it holds a task, clear its name in the task file so another agent of the role can take it.
 
