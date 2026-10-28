@@ -39,11 +39,23 @@ Requirements:
 |------|---------------|
 | **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
 | **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
-| **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. |
+| **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. Under **Who worked on it**, each agent's conversation on the task (who, when, the hand-off, cost), for debugging. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **Knowledge** | The Tech Lead's memory of each repository (`knowledge/<repo>/`): an index, plus one file per service of a monorepo, with purpose, code map, APIs, entities, conventions and task history. Each file shows how many files changed in its own folders since it was written. Read-only. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
 | **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
+
+## Conversations per task, and no more /clear
+
+When an agent hands a task on (Tech Lead → ready-for-dev, dev → ready-for-review, reviewer → done or
+changes-requested), the console saves that conversation with the task and starts the agent on a fresh one once
+its turn ends. You don't need to start a new session between tasks.
+
+Each task's conversations are kept in `tasks/chats/TASK-NNN/`, one `.md` (readable) and one `.json` per agent
+conversation, with when it started and finished and how it ended. Open them from the task page under **Who
+worked on it**. They're for your debugging only: agents never read them and work only from the task file.
+Conversations are also saved when you stop an agent or start a new session. Agents run from a terminal
+(`claude --agent dev`) aren't recorded, and still need `/clear` between tasks.
 
 ## Terminal
 

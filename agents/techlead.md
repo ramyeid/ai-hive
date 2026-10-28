@@ -116,10 +116,11 @@ Present a compact readback: goal, base branch (and, for a follow-up, the task an
 the line **"Assumptions not yet confirmed by you: none"** (if it isn't "none", you're not done).
 Ask: *"Is anything missing or wrong? Reply 'approved' to send this to dev."*
 
-Only on explicit approval ("approved", "ship it", "go"):
+Only on explicit approval ("approved", "ship it", "go"), in this order, in the same turn:
 1. set `approved: <today's date>`, tick the Definition of Ready boxes that are true,
-2. set `status: ready-for-dev`,
-3. **update your memory** (below).
+2. **update your memory** (Phase 6, below),
+3. set `status: ready-for-dev`, **last**. Handing off ends your part: in the console you then start on a fresh
+   conversation, so anything not yet in the task file or your knowledge files is gone.
 
 ## Phase 6 — Remember what you learned
 

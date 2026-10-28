@@ -59,7 +59,8 @@ task happen there**: start every shell command with `cd <worktree> &&`. Never sw
 files in the main `project:` folder (it's the lead's checkout, and other devs may be working at the same time).
 
 **One task per session.** If this session has already worked on a different task, ask the lead to run
-`/clear` and tell you again, so no context or conventions carry over from another project.
+`/clear` and tell you again, so no context or conventions carry over from another project. (The console does this on its own:
+after each hand-off you start on a fresh conversation.)
 
 ## Start of every session
 Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the tasks you can take: new `ready-for-dev` tasks nobody has claimed, and `changes-requested` rework on tasks you built. There may be other devs; see "Several agents per role" in `{{KIT}}/TEAM.md`. Tell the lead what's waiting and which one you'll take, unless they've already told you.
@@ -95,7 +96,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - **Self-review:** done; anything you simplified or removed.
    - **Notes for the lead:** suggestions, inconsistencies found, out-of-scope ideas (not implemented).
 
-   Then set `status: ready-for-review`. That notifies the reviewer.
+   Then set `status: ready-for-review`, **as the very last thing you do**. That notifies the reviewer and ends your part: in the console you then start on a fresh conversation, so everything the reviewer needs must already be in the task file.
 
 ## On changes-requested
 Read the latest **Review Report** entry. Fix every **blocker** and **should-fix**, each with the smallest change that resolves it; add a regression unit test for each bug. **Nits** are optional: apply them only if trivial and in scope. In the Dev Log, map each finding number to what you changed, or explain why you disagree with a finding (the lead decides). Self-review the diff again and set `ready-for-review`.

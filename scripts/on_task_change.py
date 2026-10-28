@@ -43,7 +43,8 @@ def log_activity(meta: dict, previous: str | None, status: str) -> None:
     INBOX.mkdir(parents=True, exist_ok=True)
     entry = {"ts": dt.datetime.now().isoformat(timespec="seconds"), "id": meta.get("id"),
              "title": meta.get("title"), "project": project_name(meta),
-             "from": previous, "to": status, "by": holder(meta)}
+             "from": previous, "to": status, "by": holder(meta),
+             "actor": os.environ.get("AGENT_ID", "")}   # the agent whose edit made the change ("" = the lead or a terminal)
     with (INBOX / "activity.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 

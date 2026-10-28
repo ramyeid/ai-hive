@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import board, costs, store, terminal
+from . import board, chats, costs, store, terminal
 from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
@@ -325,6 +325,22 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         if not found:
             raise HTTPException(404, "Task not found.")
         found["cost"] = costs.summary()["tasks"].get(task_id, {"cost_usd": 0, "unpriced_tokens": 0, "tokens": 0, "rows": []})
+        return found
+
+    def live_sessions() -> list[str]:
+        return [r.session_id for r in manager.agents.values() if r.engine and r.session_id]
+
+    @app.get("/api/tasks/{task_id}/chats")
+    async def task_chats(task_id: str):
+        if not board.get_task(task_id):
+            raise HTTPException(404, "Task not found.")
+        return chats.for_task(task_id, live_sessions())
+
+    @app.get("/api/tasks/{task_id}/chats/{name}")
+    async def task_chat(task_id: str, name: str):
+        found = chats.get(task_id, name, live_sessions()) if board.get_task(task_id) else None
+        if not found:
+            raise HTTPException(404, "Conversation not found.")
         return found
 
     @app.get("/api/inbox/{role}")

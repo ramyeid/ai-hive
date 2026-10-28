@@ -12,7 +12,7 @@ import re
 import uuid
 from pathlib import Path
 
-from . import store
+from . import chats, store
 from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT
@@ -63,6 +63,7 @@ class AgentRunner:
         self.pending: dict[str, dict] = {}
         self.always_allow: set[str] = set()
         self.turn: asyncio.Task | None = None
+        self.turn_started = ""
         self.error = ""
 
     # ---- state ---------------------------------------------------------------------
@@ -179,7 +180,16 @@ class AgentRunner:
             self.turn = None
             self.always_allow.clear()
             self.emit("system", text="Agent stopped.")
+            self._save_chats()
             self._set_status("stopped")
+
+    def _save_chats(self) -> None:
+        """Save this conversation into the folder of each task it worked on (never breaks the agent)."""
+        try:
+            chats.archive(self.session_id)
+        except Exception as exc:
+            self.bus.publish({"ts": store.now(), "agent": self.name, "kind": "error",
+                              "text": f"Couldn't save the conversation with its tasks: {exc}"})
 
     async def new_session(self) -> None:
         await self.stop()
@@ -204,6 +214,7 @@ class AgentRunner:
             await self.start()
         if self.status != "idle":
             raise RuntimeError(f"{self.name} is busy. Wait for it to finish, or interrupt it.")
+        self.turn_started = store.now()
         self.emit("user", text=text)
         self._set_status("working")
         self.turn = asyncio.create_task(self._run_turn(text))
@@ -219,6 +230,25 @@ class AgentRunner:
         finally:
             if self.engine:
                 self._set_status("idle")
+                asyncio.get_running_loop().create_task(self._after_turn(self.turn_started))
+
+    async def _after_turn(self, started: str) -> None:
+        """If the agent handed a task on during this turn, save the conversation with the task and start a
+        fresh one, so the next task doesn't carry this one's context (what /clear does in a terminal)."""
+        if self.turn and not self.turn.done():
+            await asyncio.wait([self.turn])
+        handoffs = chats.handed_off(self.name, started)
+        if not handoffs or not self.engine or self.status != "idle":
+            return
+        done = ", ".join(f"{h['id']} → {h['to']}" for h in handoffs)
+        self.emit("system", text=f"Handed off {done}. This conversation is saved with the task; starting a fresh one.")
+        try:
+            await self.new_session()
+        except Exception as exc:
+            self.error = str(exc)
+            self._set_status("stopped")
+            return
+        self.emit("system", text=f"Fresh conversation after handing off {done}. The previous one is saved with the task.")
 
 
 class AgentManager:

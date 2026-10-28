@@ -93,6 +93,15 @@ def _a_task_ready_for_dev() -> Task: ...
 def _claimed_by(task: Task, agent: str) -> None: ...
 ```
 
+## One conversation per hand-off
+
+- **Handing a task on is the last thing you do in a turn** (Tech Lead → `ready-for-dev`, dev → `ready-for-review`,
+  reviewer → `done` or `changes-requested`). In the console, your conversation is then saved with the task and you
+  start fresh for the next one, so nothing carries over from one task to another. In a terminal, ask the lead to
+  `/clear` instead.
+- **The task file is the only thing that carries work between agents.** Write everything the next agent needs there.
+- `tasks/chats/` holds every agent's conversation on each task, for the lead's debugging. **Never read it.**
+
 ## Keep it cheap (every agent)
 
 Every message re-sends the whole conversation, so everything you read or print is paid for again on every later turn.

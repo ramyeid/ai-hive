@@ -31,12 +31,13 @@ def _ids_in(text: str) -> set[str]:
     return set(TASK_ID.findall(text or ""))
 
 
-def session_turns(session_id: str, meta: dict) -> list[dict]:
-    """One row per finished turn: who, which model, tokens, cost and the tasks it's charged to."""
-    rows, touched, last_tasks, tools = [], set(), set(), {}
-    model = meta.get("model") or ""
-    for event in store.read_events(session_id):
+def attributed_turns(events: list[dict], model: str = "") -> list[dict]:
+    """Split a conversation into turns (from the lead's message to the result) and say which tasks each
+    one worked on. Shared by costs and the per-task conversation records, so they always agree."""
+    turns, current, touched, last_tasks, tools = [], [], set(), set(), {}
+    for event in events:
         kind = event["kind"]
+        current.append(event)
         if kind == "init" and event.get("model"):
             model = event["model"]
         elif kind == "user":
@@ -57,11 +58,24 @@ def session_turns(session_id: str, meta: dict) -> list[dict]:
         elif kind == "result":
             tasks = touched or last_tasks
             last_tasks = tasks
-            rows.append({"session": session_id, "agent": meta["agent"],
-                         "provider": meta.get("provider", "claude"), "model": model or "unknown",
-                         "tokens_in": event.get("tokens_in") or 0, "tokens_out": event.get("tokens_out") or 0,
-                         "cost_usd": event.get("cost_usd"), "tasks": sorted(tasks), "ts": event["ts"]})
-            touched = set()
+            turns.append({"tasks": sorted(tasks), "events": current, "result": event, "model": model})
+            current, touched = [], set()
+    if current and any(e["kind"] == "user" for e in current):   # a turn still running (or cut short)
+        turns.append({"tasks": sorted(touched or last_tasks), "events": current, "result": None, "model": model})
+    return turns
+
+
+def session_turns(session_id: str, meta: dict) -> list[dict]:
+    """One row per finished turn: who, which model, tokens, cost and the tasks it's charged to."""
+    rows = []
+    for turn in attributed_turns(store.read_events(session_id), meta.get("model") or ""):
+        result = turn["result"]
+        if result is None:
+            continue
+        rows.append({"session": session_id, "agent": meta["agent"],
+                     "provider": meta.get("provider", "claude"), "model": turn["model"] or "unknown",
+                     "tokens_in": result.get("tokens_in") or 0, "tokens_out": result.get("tokens_out") or 0,
+                     "cost_usd": result.get("cost_usd"), "tasks": turn["tasks"], "ts": result["ts"]})
     return rows
 
 

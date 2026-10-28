@@ -218,7 +218,8 @@ async function refreshBadge() {
 // ---- routing ------------------------------------------------------------------
 
 function route() {
-  const [, page = "", id = "", sub = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
+  const [, page = "", id = "", sub = "", name = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
+  if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
@@ -227,7 +228,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -245,7 +246,7 @@ async function render(quiet = false) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "tasks" && r.page === "task") || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file");
+    const on = nav === r.page || (nav === "tasks" && (r.page === "task" || r.page === "task-chat")) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file");
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -369,8 +370,39 @@ const PROMPTS = {
   reviewer: (t) => `Review ${t.id} per your instructions.`,
 };
 
+// When and how long, in words: "28 Oct, 10:02 → 10:41 (39 min)".
+function span(from, to) {
+  const a = new Date(from), b = to ? new Date(to) : null;
+  const day = a.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const time = (d) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  if (!b) return `${day}, ${time(a)}`;
+  const mins = Math.max(1, Math.round((b - a) / 60000));
+  return `${day}, ${time(a)} → ${time(b)} (${mins < 90 ? `${mins} min` : `${(mins / 60).toFixed(1)} h`})`;
+}
+
+function chatsSection(t, list) {
+  const rows = list.map((c) => `<li><a href="#/tasks/${esc(t.id)}/chats/${esc(c.name)}"><span class="pill ${roleOf(c.agent)}">${esc(nameOf(c.agent))}</span></a>
+      <span class="muted">${span(c.started, c.live ? null : c.finished)}</span>
+      ${c.live ? `<span class="pill lead">in progress</span>` : c.outcome ? statusPill(c.outcome) : `<span class="muted">no hand-off</span>`}
+      <span class="muted">${c.turns} turn${c.turns === 1 ? "" : "s"}${c.cost_usd ? `, $${c.cost_usd.toFixed(2)}` : ""}</span></li>`).join("");
+  return `<section><h2>Who worked on it</h2>
+    ${list.length ? `<ul class="chat-list">${rows}</ul>` : `<p class="muted">No conversations recorded yet.</p>`}
+    <p class="hint">Each agent's conversation on this task, for debugging. Agents never read these; they work from the task file. Saved in <code>tasks/chats/${esc(t.id)}/</code>.</p></section>`;
+}
+
+async function TaskChat(r) {
+  const c = await api(`/api/tasks/${encodeURIComponent(r.id)}/chats/${encodeURIComponent(r.name)}`);
+  return `<p><a href="#/tasks/${esc(r.id)}" class="muted">${esc(r.id)}</a></p>
+    <div class="page-head ${roleOf(c.agent)}"><div><h1>${esc(r.id)}: ${esc(nameOf(c.agent))}</h1>
+      <p><span class="pill ${roleOf(c.agent)}">${esc(nameOf(c.agent))}</span> ${span(c.started, c.live ? null : c.finished)},
+        ${c.live ? "still working on it" : c.outcome ? `handed off as ${statusPill(c.outcome)}` : "no hand-off in this conversation"},
+        ${c.turns} turn${c.turns === 1 ? "" : "s"}${c.cost_usd ? `, about $${c.cost_usd.toFixed(2)}` : ""}${c.model ? `, ${esc(c.model)}` : ""}</p></div>
+      ${c.live && state.agents[c.agent] ? `<a class="btn role ${roleOf(c.agent)}" href="#/agents/${c.agent}">Open live chat</a>` : ""}</div>
+    <div class="transcript ${roleOf(c.agent)}" style="overflow:visible">${transcriptHTML(c.events, { agent: c.agent })}</div>`;
+}
+
 async function TaskDetail(r) {
-  const t = await api(`/api/tasks/${encodeURIComponent(r.id)}`);
+  const [t, chatList] = await Promise.all([api(`/api/tasks/${encodeURIComponent(r.id)}`), api(`/api/tasks/${encodeURIComponent(r.id)}/chats`)]);
   const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}</span></li>`).join("");
   const holder = t.assignee && state.agents[t.assignee];
   const chatButton = holder ? `<a class="btn role ${roleOf(t.assignee)}" href="#/agents/${t.assignee}">Open chat with ${esc(nameOf(t.assignee))}${t.status === "blocked" ? ", who blocked it" : ""}</a>` : "";
@@ -381,6 +413,7 @@ async function TaskDetail(r) {
     <div class="task-layout">
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
+        ${chatsSection(t, chatList)}
         <section><h2>More work on this feature</h2><p class="muted">A change, an addition or a fix to what this task built: the Tech Lead writes a follow-up task, and the dev adds commits to <code>${esc(t.branch)}</code> instead of starting a new branch.</p>
           <button class="btn small" data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button></section>
         <section><h2>Hand it to an agent</h2><p class="muted">Opens the chat with a message ready to send.</p>

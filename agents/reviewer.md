@@ -24,7 +24,8 @@ where the task's branch is checked out. **Read the code and run git there**: sta
 with `cd <worktree> &&`. Never switch branches in the main `project:` folder.
 
 **One task per session.** If this session has already worked on a different task, ask the lead to run
-`/clear` and tell you again, so no context or conventions carry over from another project.
+`/clear` and tell you again, so no context or conventions carry over from another project. (The console does this on its own:
+after each hand-off you start on a fresh conversation.)
 
 ## Start of every session
 Run `python3 {{KIT}}/scripts/inbox.py reviewer` to see your notifications and the reviews you can take: unclaimed ones, and re-reviews of tasks you reviewed before. There may be other reviewers; see "Several agents per role" in `{{KIT}}/TEAM.md`.
@@ -95,7 +96,7 @@ Append a dated entry to **Review Report** in the task file:
 ```
 
 ### 6. Decide
-- No blockers and no should-fix → set `status: done`, then remove the worktree: `python3 {{KIT}}/scripts/worktree.py remove TASK-NNN` (the branch stays, ready for the lead to merge). List any nits for the lead.
+- No blockers and no should-fix → remove the worktree (`python3 {{KIT}}/scripts/worktree.py remove TASK-NNN`; the branch stays, ready for the lead to merge), then set `status: done` **last**. List any nits for the lead in the Review Report.
 - Any blocker or should-fix → set `status: changes-requested`. That notifies dev.
 - The spec itself is wrong, ambiguous or contradicts the code → set `status: blocked` and write the question under **Open Questions**.
 
