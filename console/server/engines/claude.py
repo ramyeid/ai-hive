@@ -43,6 +43,8 @@ class ClaudeCodeEngine(AgentEngine):
             resume=claude_session,
             include_partial_messages=True,  # stream thinking and replies as they're written
             env={"AGENT_ID": cfg.agent},    # the kit's scripts use it for inbox and claims
+            effort=cfg.effort or None,       # from the agent file; the Coach thinks hardest
+            thinking={"type": "adaptive", "display": "summarized"} if cfg.effort else None,
         )
         self.client = self.client_factory(options)
         await self.client.connect()

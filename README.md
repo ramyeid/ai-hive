@@ -22,15 +22,29 @@ bash ~/team-agents/install.sh
 
 `install.sh` puts the agents and the `/board` and `/ship` commands into `~/.claude/`, and adds the task
 hook to `~/.claude/settings.json`. Your existing settings are kept, and a backup is saved as `settings.json.bak`.
-It overwrites any personal agents or commands with the same names (`techlead`, `dev`, `reviewer`, `board`, `ship`).
+It overwrites any personal agents or commands with the same names (`techlead`, `dev`, `reviewer`, `coach`, `board`, `ship`).
 
 **Updating:** `git pull`, then run `install.sh` again. Do the same if you move the folder.
 
 **Your board is yours.** `tasks/` and the console's `data/` stay on your machine and are not committed:
 task files hold paths from your laptop and details of your projects. Each person has their own board.
 
-**Changing an agent:** edit the files in `agents/`, `TEAM.md` or `templates/`, run `install.sh`, and open a pull
-request so everyone gets the improvement.
+**Changing an agent:** edit the files in `agents/`, `TEAM.md`, `PREFERENCES.md` or `templates/`, run `install.sh`,
+and open a pull request so everyone gets the improvement. Or let the Coach propose changes (below).
+
+## Teaching the team: the Coach
+
+`PREFERENCES.md` says how you want things built (code shape, reuse, simplicity, how tests are written, and
+whatever else you add); every agent reads it. `TEAM.md` keeps the process.
+
+Now and then, start a review with the **Coach** (console → **Improvements**, or `claude --agent coach`). It reads
+how finished tasks went: your own words in the agents' conversations, your answers in Clarifications, review
+rounds, follow-ups, and your commits and comments on the GitHub pull requests (`gh` must be logged in; agent
+commits carry an `Agent:` line, so anything without one is yours). It asks you about anything unclear, then
+proposes small, exact changes to `PREFERENCES.md`, the agents' files, `TEAM.md` or the task template, each with
+its evidence. Nothing changes until you approve; approved changes are committed one by one, so the console's
+**Team history** shows every version of the team, with diffs and undo. It runs on Opus, thinking hard, so a
+review costs more than a task; you decide when.
 
 ## Daily use
 
@@ -97,18 +111,20 @@ approve their actions, start and stop them, and see tasks, inboxes and history. 
 
 ```
 team-agents/              ← this repository: the only copy of the agents and rules
-├── TEAM.md               shared rules + lifecycle every agent follows
-├── agents/               techlead.md · dev.md · reviewer.md   (installed into ~/.claude/agents)
+├── TEAM.md               how the team works: lifecycle, branches, hand-offs
+├── PREFERENCES.md        how you want things built; every agent follows it
+├── agents/               techlead.md · dev.md · reviewer.md · coach.md   (installed into ~/.claude/agents)
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
-├── templates/            TASK.md (task spec) · KNOWLEDGE_INDEX.md · KNOWLEDGE_SERVICE.md (knowledge files)
-├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · on_task_change …
+├── templates/            TASK.md (task spec) · KNOWLEDGE_*.md (knowledge files) · PROPOSAL.md (Coach)
+├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · coach · on_task_change …
 ├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md (not committed)
 ├── knowledge/            ← the Tech Lead's memory: one folder per repository it has worked on (not committed)
+├── coach/                ← the Coach's evidence and proposals (not committed)
 ├── console/              ← the Team Console web app (optional)
 └── install.sh
 ```
 
-Your projects get nothing from the kit — only the dev's commits on `task/TASK-…` branches.
+Your projects get nothing from the kit — only the dev's commits on `feature-…` branches.
 Each task records `project:` (its folder) and `base:` (the branch it starts from and is reviewed against; the Tech Lead proposes the branch you have checked out and asks you to confirm it).
 
 **Knowledge:** each time the Tech Lead writes a spec, it records what it learned in `knowledge/<repo>/`:

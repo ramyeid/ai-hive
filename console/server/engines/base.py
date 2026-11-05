@@ -41,7 +41,8 @@ class EngineConfig:
     permission_mode: str       # default | acceptEdits
     api_key: str = ""
     base_url: str = ""
-    role: str = ""             # techlead | dev | reviewer
+    role: str = ""             # techlead | dev | reviewer | coach
+    effort: str = ""           # Claude only: low | medium | high | xhigh | max ("" = the default)
 
 
 class AgentEngine(ABC):

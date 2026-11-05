@@ -51,12 +51,12 @@ def run():
     store.SETTINGS.unlink(missing_ok=True)
     app = create_app(AgentManager(claude_client_factory=FakeClient, http_transport=fake_openai_transport([])))
     with TestClient(app, base_url="http://127.0.0.1:8420") as c:
-        check(names(c) == ["techlead", "dev", "reviewer"], "a fresh install has one agent per role")
+        check(names(c) == ["techlead", "dev", "reviewer", "coach"], "a fresh install has one agent per role, and the Coach")
 
         for role in ["techlead", "dev", "dev", "reviewer"]:
             r = c.post("/api/agents", json={"role": role}, headers=H)
             check(r.status_code == 200, f"added a {role}: {r.json().get('id')}")
-        check(names(c) == ["techlead", "techlead-2", "dev", "dev-2", "dev-3", "reviewer", "reviewer-2"],
+        check(names(c) == ["techlead", "techlead-2", "dev", "dev-2", "dev-3", "reviewer", "reviewer-2", "coach"],
               "two Tech Leads, three devs, two reviewers, listed by role")
         state = c.get("/api/state", headers=H).json()
         check(next(a for a in state["agents"] if a["name"] == "dev-3")["role"] == "dev", "each agent reports its role")

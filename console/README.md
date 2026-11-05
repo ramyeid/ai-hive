@@ -43,6 +43,8 @@ Requirements:
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **Knowledge** | The Tech Lead's memory of each repository (`knowledge/<repo>/`): an index, plus one file per service of a monorepo, with purpose, code map, APIs, entities, conventions and task history. Each file shows how many files changed in its own folders since it was written. Read-only. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |
+| **Improvements** | Start a review with the Coach, and approve, edit or reject what it proposes: each proposal shows the exact change, why, and the tasks behind it. |
+| **Team history** | Every change to the team's instructions, newest first: who (the Coach or a person), when, why, and the diff. Read the team as it was at any change, or undo one. |
 | **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
 
 ## Conversations per task, and no more /clear

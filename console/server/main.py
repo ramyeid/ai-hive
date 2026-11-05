@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import board, chats, costs, store, terminal
+from . import board, chats, costs, store, team, terminal
 from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
@@ -52,6 +52,11 @@ class SettingsBody(BaseModel):
 class AgentConfigBody(BaseModel):
     provider: str
     model: str = ""
+
+
+class ProposalDecision(BaseModel):
+    note: str = ""
+    afters: list[str] | None = None   # approve: the lead's edited version of each change's new text
 
 
 class NameBody(BaseModel):
@@ -126,7 +131,56 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     @app.get("/api/state")
     async def state():
         return {"agents": [r.info() for r in manager.agents.values()],
-                "settings": public_settings(), "kit": str(store.KIT), "terminal": terminal.ENABLED}
+                "settings": public_settings(), "kit": str(store.KIT), "terminal": terminal.ENABLED,
+                "improvements": sum(1 for p in team.proposals() if p["status"] == "pending")}
+
+    # ---- the Coach's proposals, and the history of the team's instructions ----------------
+
+    @app.get("/api/improvements")
+    def improvements():
+        return team.proposals()
+
+    @app.post("/api/improvements/{pid}/{decision}")
+    def decide_improvement(pid: str, decision: str, body: ProposalDecision):
+        if decision not in ("approve", "reject"):
+            raise HTTPException(404, "Unknown decision.")
+        try:
+            done = team.approve(pid, body.afters, body.note) if decision == "approve" else team.reject(pid, body.note)
+        except KeyError:
+            raise HTTPException(404, f"No proposal {pid}.")
+        except team.TeamError as exc:
+            raise HTTPException(409, str(exc))
+        manager.bus.publish({"kind": "team"})
+        return done
+
+    @app.get("/api/team/history")
+    def team_history():
+        return {"repo": team.is_repo(), "changes": team.history()}
+
+    @app.get("/api/team/history/{sha}")
+    def team_change(sha: str):
+        try:
+            return team.change(sha)
+        except KeyError:
+            raise HTTPException(404, "No such change to the team.")
+
+    @app.get("/api/team/at/{sha}")
+    def team_files_at(sha: str, path: str = ""):
+        try:
+            return {"files": team.files_at(sha)} if not path else {"path": path, "text": team.file_at(sha, path)}
+        except (KeyError, team.TeamError):
+            raise HTTPException(404, "Not found at that version.")
+
+    @app.post("/api/team/undo/{sha}")
+    def team_undo(sha: str):
+        try:
+            done = team.undo(sha)
+        except KeyError:
+            raise HTTPException(404, "No such change to the team.")
+        except team.TeamError as exc:
+            raise HTTPException(409, str(exc))
+        manager.bus.publish({"kind": "team"})
+        return done
 
     @app.get("/api/knowledge")
     async def knowledge_list():

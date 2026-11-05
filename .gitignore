@@ -4,6 +4,9 @@ tasks/
 # Personal: the Tech Lead's memory of each service (describes your company's code)
 knowledge/
 
+# Personal: the Coach's evidence and proposals (quote your tasks and conversations)
+coach/
+
 # Python
 __pycache__/
 *.pyc

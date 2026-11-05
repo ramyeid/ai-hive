@@ -15,12 +15,14 @@
   --techlead: #4453c9;
   --dev: #0e7c66;
   --reviewer: #a85a08;
+  --coach: #8b3a8f;
   --lead: #16202a;
   --attention: #b4236b;
   --danger: #b42318;
   --techlead-soft: #e6e8fa;
   --dev-soft: #ddf1ec;
   --reviewer-soft: #f7ead9;
+  --coach-soft: #f4e4f4;
   --lead-soft: #e3e7eb;
   --attention-soft: #fae3ee;
   --focus: #4453c9;
@@ -41,12 +43,14 @@
     --techlead: #939df4;
     --dev: #4cc3a4;
     --reviewer: #e2a457;
+    --coach: #d690d9;
     --lead: #e6eaee;
     --attention: #f06aa8;
     --danger: #f97066;
     --techlead-soft: #262c52;
     --dev-soft: #173a33;
     --reviewer-soft: #3d2c16;
+    --coach-soft: #3a2139;
     --lead-soft: #26303a;
     --attention-soft: #4a1d33;
     --focus: #939df4;
@@ -72,6 +76,7 @@ code, pre { font-family: var(--mono); font-size: 0.86em; }
 .techlead { --role: var(--techlead); --role-soft: var(--techlead-soft); }
 .dev { --role: var(--dev); --role-soft: var(--dev-soft); }
 .reviewer { --role: var(--reviewer); --role-soft: var(--reviewer-soft); }
+.coach { --role: var(--coach); --role-soft: var(--coach-soft); }
 .lead { --role: var(--lead); --role-soft: var(--lead-soft); }
 
 /* ---- shell --------------------------------------------------------------- */
@@ -146,6 +151,30 @@ textarea { resize: vertical; }
 .chat-list { list-style: none; margin: 0 0 8px; padding: 0; }
 .chat-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 7px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
 .chat-list a { text-decoration: none; }
+.diff { margin: 6px 0 12px; padding: 10px 12px; border-radius: var(--radius-m); background: var(--panel); border: 1px solid var(--rule);
+  font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff .add { display: block; background: color-mix(in srgb, var(--dev) 14%, transparent); }
+.diff .del { display: block; background: color-mix(in srgb, var(--attention) 14%, transparent); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--attention) 50%, transparent); }
+.diff span { min-height: 1.5em; }
+.diff .hunk { display: block; color: var(--muted); margin-top: 6px; }
+.diff .ctx { display: block; color: var(--muted); }
+.proposal { background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--reviewer); border-radius: var(--radius-m); padding: 14px 18px; margin: 0 0 16px; }
+.proposal.approved { border-left-color: var(--dev); }
+.proposal.rejected { border-left-color: var(--rule); opacity: .8; }
+.proposal header { display: flex; align-items: baseline; gap: 10px; justify-content: space-between; }
+.proposal h2 { margin: 0; font-size: 17px; }
+.proposal h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 4px; }
+.proposal h4 { margin: 10px 0 2px; font-size: 13px; font-weight: 500; }
+.proposal .edit-after { width: 100%; font: 12.5px/1.5 var(--mono); }
+.proposal .warn { color: var(--attention); }
+.review-form .form-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.review-form input { min-width: 260px; }
+.files-at { display: grid; grid-template-columns: minmax(180px, 260px) 1fr; gap: 20px; }
+.file-list { display: flex; flex-direction: column; gap: 2px; font: 13px var(--mono); }
+.file-list a { padding: 4px 8px; border-radius: var(--radius-s); text-decoration: none; }
+.file-list a[aria-current="page"] { background: var(--role-soft, var(--panel)); font-weight: 600; }
+.file-view { padding: 14px; background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); font: 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .files-at { grid-template-columns: 1fr; } }
 .team-link { margin: 10px 0 0; font-size: 13px; }
 .team { margin-bottom: 28px; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
 .team-role { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); padding: 12px 14px; border-top: 3px solid var(--role); }

@@ -55,7 +55,7 @@ Not explored yet.
 
 ## Conventions and commands
 <!-- How this codebase is written (derived from the code): structure, naming, error handling, data access,
-     test framework and locations. The shape of each test is fixed by the kit's TEAM.md, not here.
+     test framework and locations. The shape of each test is fixed by the kit's PREFERENCES.md, not here.
      Commands, quiet, from the project root:
        tests for the code you changed / full suite / type-check or compile check / build / lint,
        and what never to run (servers, watch modes). -->

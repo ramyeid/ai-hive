@@ -15,7 +15,7 @@ SESSIONS = DATA / "sessions"
 INDEX = SESSIONS / "index.json"
 SETTINGS = DATA / "settings.json"
 
-ROLES = ("techlead", "dev", "reviewer")
+ROLES = ("techlead", "dev", "reviewer", "coach")   # the Coach is outside the task flow: always exactly one
 # Display names, given at random to new agents (rename them in Settings). The ID (dev-2) stays
 # what the scripts and task files use; the name is only what you see.
 NAMES = """Kareem Hossam Aliaa Zeinab Tarek Nour Yasmine Rania Hany Sherif Amr Laila Dina Salma
@@ -64,6 +64,9 @@ def load_settings() -> dict:
                                    for aid in settings["agents"]}
     settings["providers"] = saved.get("providers", {})
     settings["prices"] = saved.get("prices", {})
+    if not any(a["role"] == "coach" for a in settings["agents"].values()):   # installs from before the Coach
+        settings["agents"]["coach"] = {"role": "coach", "name": "", "provider": "claude", "model": ""}
+        settings["permission_mode"]["coach"] = "default"
     unnamed = [a for a in settings["agents"].values() if not a["name"]]
     for agent in unnamed:   # first run, or agents from before names existed: name them once
         agent["name"] = pick_name(settings["agents"])
@@ -125,6 +128,8 @@ def add_agent(role: str) -> str:
     """Add another agent for a role. Returns its ID (dev-2, dev-3, …)."""
     if role not in ROLES:
         raise ValueError(f"Unknown role: {role}")
+    if role == "coach":
+        raise ValueError("The team has one Coach.")
     settings = load_settings()
     taken = set(settings["agents"])
     agent_id = role if role not in taken else next(f"{role}-{n}" for n in range(2, 100) if f"{role}-{n}" not in taken)

@@ -86,6 +86,8 @@ class Toolbox:
                 return False
             if path.parent.parent == self.kit / "knowledge" and path.suffix == ".md":
                 return False
+            if path.parent == self.kit / "coach" / "proposals" and path.suffix == ".md":
+                return False
             return not (permission_mode == "acceptEdits" and self._inside(path))
         if name == "Bash":
             command = args.get("command", "")

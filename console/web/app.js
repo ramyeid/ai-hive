@@ -6,9 +6,10 @@ const view = document.getElementById("view");
 const ROLES = {
   techlead: { name: "Tech Lead", role: "Tech lead / staff engineer", blurb: "Designs the change against the codebase and turns it into a complete, approved task spec.", quick: ["Show me the board", "What's still in draft?"] },
   dev: { name: "Dev", role: "Developer", blurb: "Builds exactly what the spec asks, in the project's style.", quick: ["Check your inbox"] },
-  reviewer: { name: "Reviewer", role: "Reviewer", blurb: "Checks business need, consistency and simplicity.", quick: ["Check your inbox"] },
+  reviewer: { name: "Reviewer", role: "Reviewer", blurb: "Checks the requirements are met and the code is consistent with what exists.", quick: ["Check your inbox"] },
+  coach: { name: "Coach", role: "Coach", blurb: "Reviews how finished tasks went and proposes improvements to the team's instructions, for your approval.", quick: ["Review everything since your last review", "What did you propose last time?"] },
 };
-const OWNER_LABEL = { techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer", lead: "You" };
+const OWNER_LABEL = { techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer", coach: "Coach", lead: "You" };
 // Agents are identified by id: the role, then -2, -3… for extra agents of the same role.
 const roleOf = (id) => state.agents[id]?.role || String(id).split("-")[0];
 // Each agent has a display name (Kareem), given at random and renamed in Settings; shown as "Kareem (Tech Lead)".
@@ -141,6 +142,9 @@ async function loadState() {
   state.settings = data.settings;
   state.kit = data.kit;
   state.terminal = data.terminal;
+  const improvements = document.getElementById("improvements-badge");
+  improvements.textContent = data.improvements;
+  improvements.hidden = !data.improvements;
   document.getElementById("nav-terminal").hidden = !data.terminal;
   state.agents = Object.fromEntries(data.agents.map((a) => [a.name, a]));
   renderRail();
@@ -220,7 +224,8 @@ async function refreshBadge() {
 function route() {
   const [, page = "", id = "", sub = "", name = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
-  const map = { "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
+  const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
+    "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -228,7 +233,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -246,7 +251,7 @@ async function render(quiet = false) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "tasks" && (r.page === "task" || r.page === "task-chat")) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file");
+    const on = nav === r.page || (nav === "tasks" && (r.page === "task" || r.page === "task-chat")) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -718,7 +723,7 @@ function teamSection() {
           <span class="muted">${esc(providerOf(choice.provider || "claude").label)}${choice.model ? `, ${esc(choice.model)}` : ""}</span>
           ${ids.length > 1 ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${ag.status !== "stopped" ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</li>`;
       }).join("")}</ul>
-      <button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button></div>`;
+      ${role === "coach" ? `<p class="muted">One Coach, outside the task flow. Start a review from Improvements.</p>` : `<button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button>`}</div>`;
   }).join("");
   return `<section class="section"><h2>Team</h2>
     <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Each agent gets a random name; type over it to rename. Choose each agent's provider and model in its chat header.</p>
@@ -756,6 +761,115 @@ async function saveConfig(name, provider, model) {
   if (saved) state.settings = saved;
   renderAgentChrome(name);
   if (route().page === "overview") render(true);
+}
+
+// ---- improvements (the Coach's proposals) and team history ---------------------------
+
+// A change shown as a diff, line by line: unchanged lines plain, removed ones struck out, new ones added.
+function diffLines(before, after) {
+  const a = before ? before.split("\n") : [], b = after.split("\n");
+  const lcs = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { out.push(`<span class="ctx">  ${esc(a[i])}</span>`); i++; j++; }
+    else if (j < b.length && (i >= a.length || lcs[i][j + 1] >= lcs[i + 1][j])) out.push(`<span class="add">+ ${esc(b[j++])}</span>`);
+    else out.push(`<span class="del">- ${esc(a[i++])}</span>`);
+  }
+  return `<pre class="diff">${out.join("")}</pre>`;
+}
+
+function unifiedDiff(text) {
+  return `<pre class="diff">${text.split("\n").filter((l) => !/^(diff --git|index |--- |\+\+\+ |new file|deleted file)/.test(l)).map((l) =>
+    `<span class="${l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "ctx"}">${esc(l)}</span>`).join("")}</pre>`;
+}
+
+const taskLinks = (ids) => ids.map((t) => `<a href="#/tasks/${esc(t)}">${esc(t)}</a>`).join(", ");
+
+function proposalCard(p) {
+  const pending = p.status === "pending";
+  const changes = p.changes.map((c, i) => `<div class="change"><h4><code>${esc(c.file)}</code>${c.before ? "" : ` <span class="muted">added at the end</span>`}</h4>
+      ${diffLines(c.before, c.after)}
+      ${pending ? `<textarea class="edit-after" data-index="${i}" rows="${Math.min(18, c.after.split("\n").length + 2)}" hidden aria-label="New text for ${esc(c.file)}">${esc(c.after)}</textarea>` : ""}</div>`).join("");
+  const decided = pending ? "" : `<p class="muted">${p.status === "approved" ? "Approved" : "Rejected"} ${esc(p.decided)}${p.note ? `: ${esc(p.note)}` : ""}${p.commit ? ` · <a href="#/team/${esc(p.commit)}">see the change</a>` : ""}</p>`;
+  return `<section class="proposal ${p.status}" id="${esc(p.id)}">
+    <header><h2><span class="muted">${esc(p.id)}</span> ${esc(p.title)}</h2>${statusWord(p.status)}</header>
+    ${p.tasks.length ? `<p class="muted">Based on ${taskLinks(p.tasks)}</p>` : ""}
+    <div class="prose"><h3>Why</h3>${md(p.why)}<h3>Evidence</h3>${md(p.evidence)}</div>
+    <h3>Change</h3>${changes}
+    ${p.problems.length ? `<p class="warn">Can't be applied as it is: ${esc(p.problems.join(" "))} Ask the Coach to fix it.</p>` : ""}
+    ${decided}
+    ${pending ? `<div class="btn-row">
+      <button class="btn primary" data-action="approve" data-id="${esc(p.id)}" ${p.problems.length ? "disabled" : ""}>Approve</button>
+      <button class="btn" data-action="edit-proposal" data-id="${esc(p.id)}">Edit before approving</button>
+      <button class="btn" data-action="reject" data-id="${esc(p.id)}">Reject</button></div>` : ""}
+  </section>`;
+}
+
+const statusWord = (s) => `<span class="pill ${s === "approved" ? "dev" : s === "rejected" ? "lead" : "reviewer"}">${s}</span>`;
+
+async function Improvements() {
+  const list = await api("/api/improvements");
+  const pending = list.filter((p) => p.status === "pending");
+  const decided = list.filter((p) => p.status !== "pending");
+  return `<div class="page-head"><div><h1>Improvements</h1>
+      <p>The Coach reviews how finished tasks went (your corrections, reviews, follow-ups, your commits on the pull requests) and proposes changes to the team's instructions. Nothing changes until you approve; every approved change is committed and shows in <a href="#/team">Team history</a>, where you can undo it.</p></div></div>
+    <section class="section review-form"><h2>Start a review</h2>
+      <div class="form-row">
+        <label>Review <select id="review-scope">
+          <option value="last">everything since the last review</option>
+          <option value="tasks">these tasks</option>
+          <option value="project">one project</option>
+          <option value="all">all tasks</option></select></label>
+        <input id="review-target" placeholder="TASK-012, TASK-019  or  ~/code/my-api" aria-label="Tasks or project" hidden>
+        <button class="btn role coach" data-action="start-review">Start the review</button>
+      </div>
+      <p class="hint">It runs on the Coach's model (Opus, thinking hard), so a review costs more than a normal task. It may ask you questions in its chat before proposing anything.</p></section>
+    <section class="section"><h2>Waiting for you <span class="count">${pending.length}</span></h2>
+      ${pending.length ? pending.map(proposalCard).join("") : `<p class="muted">No proposals waiting.</p>`}</section>
+    ${decided.length ? `<section class="section"><h2>Decided</h2>${decided.map(proposalCard).join("")}</section>` : ""}`;
+}
+
+async function TeamHistory() {
+  const data = await api("/api/team/history");
+  if (!data.repo) return `<div class="page-head"><div><h1>Team history</h1></div></div><div class="empty">The kit folder isn't a git repository, so there's no history to show.</div>`;
+  const rows = data.changes.map((c) => `<tr data-href="#/team/${c.short}">
+      <td class="num">${esc(new Date(c.date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}</td>
+      <td>${c.proposal ? `<span class="pill coach">Coach</span> <span class="muted">${esc(c.proposal)}</span>` : esc(c.by)}</td>
+      <td><a href="#/team/${c.short}">${esc(c.subject)}</a>${c.tasks && c.tasks !== "-" ? `<br><small class="muted">from ${esc(c.tasks)}</small>` : ""}</td>
+      <td>${c.files.map((f) => `<code>${esc(f)}</code>`).join(" ")}</td></tr>`).join("");
+  return `<div class="page-head"><div><h1>Team history</h1>
+      <p>Every change to the team's instructions (the agents' files, TEAM.md, PREFERENCES.md, templates), newest first: the Coach's approved proposals, your own edits and any other commit. Open one to see exactly what changed, read the team as it was then, or undo it.</p></div></div>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Files</th></tr></thead><tbody>${rows}</tbody></table></div>`
+           : `<div class="empty">No changes yet.</div>`}`;
+}
+
+async function TeamChange(r) {
+  const c = await api(`/api/team/history/${encodeURIComponent(r.id)}`);
+  return `<p><a href="#/team" class="muted">Team history</a></p>
+    <div class="page-head"><div><h1>${esc(c.subject)}</h1>
+      <p>${c.proposal ? `<span class="pill coach">Coach</span> ${esc(c.proposal)}, approved by you` : `By ${esc(c.by)}`},
+        ${esc(new Date(c.date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}, <code>${esc(c.short)}</code>
+        ${c.tasks && c.tasks !== "-" ? `· from ${taskLinks(c.tasks.split(",").map((t) => t.trim()))}` : ""}</p></div>
+      <div class="btn-row"><a class="btn" href="#/team/${c.short}/files">See the team as of this change</a>
+        ${c.undoable ? `<button class="btn" data-action="undo-team" data-sha="${c.short}">Undo this change</button>` : ""}</div></div>
+    ${c.body ? `<div class="prose">${md(c.body)}</div>` : ""}
+    ${!c.undoable && c.other_files.length ? `<p class="hint">This commit also changed other files (${c.other_files.slice(0, 4).map((f) => `<code>${esc(f)}</code>`).join(", ")}${c.other_files.length > 4 ? "…" : ""}), so it can't be undone from here.</p>` : ""}
+    ${c.diffs.map((d) => `<section class="section"><h3><code>${esc(d.file)}</code></h3>${unifiedDiff(d.diff)}</section>`).join("")}`;
+}
+
+async function TeamFiles(r) {
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  const path = params.get("path") || "";
+  const { files } = await api(`/api/team/at/${encodeURIComponent(r.id)}`);
+  const shown = path ? await api(`/api/team/at/${encodeURIComponent(r.id)}?path=${encodeURIComponent(path)}`) : null;
+  return `<p><a href="#/team/${esc(r.id)}" class="muted">Back to the change</a></p>
+    <div class="page-head"><div><h1>The team as of <code>${esc(r.id)}</code></h1><p>The instructions exactly as they were after this change.</p></div></div>
+    <div class="files-at"><nav class="file-list">${files.map((f) => `<a href="#/team/${esc(r.id)}/files?path=${encodeURIComponent(f)}" ${f === path ? 'aria-current="page"' : ""}>${esc(f)}</a>`).join("")}</nav>
+      <div>${shown ? `<h2><code>${esc(shown.path)}</code></h2><pre class="file-view">${esc(shown.text)}</pre>` : `<p class="muted">Pick a file.</p>`}</div></div>`;
 }
 
 // ---- knowledge ------------------------------------------------------------------
@@ -985,6 +1099,44 @@ const actions = {
     if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
   },
   "new-shell": () => openShell(),
+  "start-review": async () => {
+    const scope = document.getElementById("review-scope").value;
+    const target = document.getElementById("review-target").value.trim();
+    if ((scope === "tasks" || scope === "project") && !target) return toast("Say which tasks or which project.");
+    const coach = agentIds().find((n) => roleOf(n) === "coach");
+    const text = { last: "Review everything since your last review.", all: "Review all tasks.",
+                   tasks: `Review these tasks: ${target}.`, project: `Review the tasks in ${target}.` }[scope];
+    if (state.agents[coach].status === "stopped") {
+      const started = await act(() => api(`/api/agents/${coach}/start`, { method: "POST", body: {} }));
+      if (!started) return;
+    }
+    const sent = await act(() => api(`/api/agents/${coach}/message`, { method: "POST", body: { text } }));
+    if (sent) location.hash = `#/agents/${coach}`;
+  },
+  "edit-proposal": (el) => {
+    const card = document.getElementById(el.dataset.id);
+    const editing = card.classList.toggle("editing");
+    card.querySelectorAll(".edit-after").forEach((t) => { t.hidden = !editing; });
+    el.textContent = editing ? "Cancel editing" : "Edit before approving";
+  },
+  approve: async (el) => {
+    const card = document.getElementById(el.dataset.id);
+    const afters = card.classList.contains("editing") ? [...card.querySelectorAll(".edit-after")].map((t) => t.value) : null;
+    if (!confirm(`Apply ${el.dataset.id} to the team's instructions? It's committed, and you can undo it in Team history.`)) return;
+    const done = await act(() => api(`/api/improvements/${el.dataset.id}/approve`, { method: "POST", body: { afters } }), `${el.dataset.id} applied.`);
+    if (done) render(true);
+  },
+  reject: async (el) => {
+    const note = prompt(`Why reject ${el.dataset.id}? The Coach reads this and won't propose it again without new evidence.`, "");
+    if (note === null) return;
+    const done = await act(() => api(`/api/improvements/${el.dataset.id}/reject`, { method: "POST", body: { note } }), `${el.dataset.id} rejected.`);
+    if (done) render(true);
+  },
+  "undo-team": async (el) => {
+    if (!confirm("Undo this change? A new commit reverses it, so the undo shows in the history too.")) return;
+    const done = await act(() => api(`/api/team/undo/${el.dataset.sha}`, { method: "POST", body: {} }), "Change undone.");
+    if (done) location.hash = "#/team";
+  },
   "close-shell": (el) => closeShell(Number(el.dataset.shell)),
   "add-agent": async (el) => {
     const added = await act(() => api("/api/agents", { method: "POST", body: { role: el.dataset.role } }));
@@ -1035,6 +1187,10 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.id === "review-scope") {
+    document.getElementById("review-target").hidden = !["tasks", "project"].includes(e.target.value);
+    return;
+  }
   if (e.target.matches('[data-action="provider"]')) {
     saveConfig(e.target.dataset.agent, e.target.value, "");
     return;

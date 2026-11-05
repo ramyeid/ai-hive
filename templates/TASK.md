@@ -67,7 +67,7 @@ approved:               # techlead: date the lead explicitly approved the final 
      naming, file/folder placement, structure/layering, error handling, logging,
      typing, tests (framework, location, naming), dependencies allowed.
      Test shape is fixed for every project: given/when/then as three blocks separated by empty lines, named private setup helpers
-     ("How tests are written" in TEAM.md), even where the existing tests differ. -->
+     ("How tests are written" in PREFERENCES.md), even where the existing tests differ. -->
 
 ## Technical Notes
 <!-- techlead: your research, so nobody repeats it: files and places to change (with line ranges),

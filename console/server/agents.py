@@ -17,14 +17,15 @@ from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT
 
-def load_agent(role: str) -> tuple[str, str]:
-    """A role's instructions (with the kit path filled in) and its default Claude model."""
+def load_agent(role: str) -> tuple[str, str, str]:
+    """A role's instructions (with the kit path filled in), its default Claude model and effort level."""
     text = (KIT / "agents" / f"{role}.md").read_text(encoding="utf-8")
     match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
     front = match.group(1) if match else ""
     model = re.search(r"^model:\s*(\S+)", front, re.M)
+    effort = re.search(r"^effort:\s*(\S+)", front, re.M)
     body = text[match.end():] if match else text
-    return body.replace("{{KIT}}", str(KIT)), (model.group(1) if model else "")
+    return body.replace("{{KIT}}", str(KIT)), (model.group(1) if model else ""), (effort.group(1) if effort else "")
 
 
 class EventBus:
@@ -93,6 +94,11 @@ class AgentRunner:
         self.bus.publish(event)
 
     async def ask(self, tool: str, tool_input: dict) -> tuple[bool, str]:
+        if self.role == "coach" and tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            target = Path(str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")).expanduser()
+            if not target.resolve().is_relative_to((KIT / "coach").resolve()):
+                return False, ("The Coach never edits files directly. Write a proposal in coach/proposals/ "
+                               "(`coach.py propose`), and the lead approves it in the console.")
         if tool in self.always_allow:
             return True, ""
         pid = uuid.uuid4().hex[:8]
@@ -135,7 +141,7 @@ class AgentRunner:
         provider = PROVIDERS.get(provider_id)
         if not provider:
             raise ValueError(f"Unknown provider: {provider_id}")
-        instructions, default_claude_model = load_agent(self.role)
+        instructions, default_claude_model, effort = load_agent(self.role)
         display = store.load_settings()["agents"].get(self.name, {}).get("name", "")
         instructions += (f"\n\n## Your identity\n{f'Your name is {display}. ' if display else ''}"
                          f"Your agent ID is `{self.name}` (role: {self.role}). It's in the "
@@ -152,7 +158,7 @@ class AgentRunner:
             agent=self.name, role=self.role, instructions=instructions, provider=provider.id, model=model,
             workspace=Path(settings["workspace"]), kit=KIT, session_id=self.session_id,
             resume=bool(resume), permission_mode=settings["permission_mode"].get(self.name, "default"),
-            api_key=api_key, base_url=base_url)
+            api_key=api_key, base_url=base_url, effort=effort)
         engine = make_engine(config, self, **self.engine_options)
         try:
             await engine.start()

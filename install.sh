@@ -5,7 +5,7 @@ set -euo pipefail
 
 KIT="$(cd "$(dirname "$0")" && pwd)"
 CLAUDE_DIR="$HOME/.claude"
-mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox" "$KIT/knowledge"
+mkdir -p "$CLAUDE_DIR/agents" "$CLAUDE_DIR/commands" "$KIT/tasks/.inbox" "$KIT/knowledge" "$KIT/coach/proposals"
 
 # Upgrade task and console data from older versions of the kit (safe to repeat).
 python3 "$KIT/scripts/migrate.py"
@@ -42,7 +42,7 @@ dirs = perms.setdefault("additionalDirectories", [])
 if kit not in dirs:
     dirs.append(kit)
 allow = perms.setdefault("allow", [])
-for rule in (f"Edit(/{kit}/tasks/**)", f"Edit(/{kit}/knowledge/**)", f"Bash(python3 {kit}/scripts/*)"):
+for rule in (f"Edit(/{kit}/tasks/**)", f"Edit(/{kit}/knowledge/**)", f"Edit(/{kit}/coach/**)", f"Bash(python3 {kit}/scripts/*)"):
     if rule not in allow:
         allow.append(rule)
 
