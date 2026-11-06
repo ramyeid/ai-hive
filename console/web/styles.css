@@ -353,6 +353,9 @@ form.provider input { width: 100%; flex: none; }
 .code-diff tr.comment-row td, .code-diff tr.comment-form-row td { padding: 6px 10px 6px calc(6.8em + 22px); font-family: var(--sans); background: var(--panel); }
 .review-comment { padding: 8px 12px; border: 1px solid var(--rule); border-left: 3px solid var(--ink); border-radius: var(--radius-s); background: var(--panel); white-space: normal; }
 .review-comment + .review-comment { margin-top: 8px; }
+.review-comment.posted { border-left-color: var(--muted); background: var(--sunken); }
+.review-comment.posted .reply { background: var(--panel); }
+.review-comment.posted .reply.none { color: var(--muted); }
 .review-comment .who { font-size: 0.85rem; }
 .review-comment .prose p { margin: 4px 0; }
 .comment-form textarea, .review-submit textarea { width: 100%; margin: 4px 0 8px; }

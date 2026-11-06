@@ -802,7 +802,39 @@ function draftCard(c, { where = false } = {}) {
       <button class="btn small" data-action="delete-comment" data-id="${esc(c.id)}">Delete</button></div></div>`;
 }
 
-function diffFile(f, drafts, shown) {
+// A submitted comment, shown back on its line, with the dev's reply.
+function postedCard(c, r, dev) {
+  const asked = r.verdict === "changes";
+  return `<div class="review-comment posted ${asked ? "" : "approved"}">
+    <div class="who"><span class="pill ${asked ? "lead" : "dev"}">Round ${r.n}</span> <span class="muted">${esc(ago(r.at))}</span></div>
+    <div class="prose body">${md(c.body)}</div>
+    ${asked ? `<div class="reply ${c.reply ? "" : "none"}"><span class="pill dev">${esc(dev ? nameOf(dev) : "Dev")}</span> ${c.reply ? esc(c.reply) : "No reply yet."}</div>` : ""}</div>`;
+}
+
+// Where each submitted comment sits in this view: the line in the same file and side whose code is still the line
+// it was made on (the last line of its snippet), nearest to its old position. If that code changed or isn't in this
+// view, it stays only under "Your earlier reviews" (like an outdated comment on a pull request).
+function placePosted(files, rounds, head) {
+  const placed = new Map();
+  for (const r of rounds) {
+    for (const c of r.comments) {
+      if (!c.file || !c.line) continue;
+      const f = files.find((x) => x.path === c.file);
+      if (!f) continue;
+      const lines = f.hunks.flatMap((h) => h.lines).map((l) => ({ side: l.t === "-" ? "old" : "new", n: l.t === "-" ? l.o : l.n, s: l.s }))
+        .filter((l) => l.side === c.side);
+      const text = c.code ? c.code.split("\n").pop() : null;
+      const matches = text !== null ? lines.filter((l) => l.s === text) : r.commit === head ? lines.filter((l) => l.n === c.line) : [];
+      if (!matches.length) continue;
+      const best = matches.reduce((a, b) => (Math.abs(b.n - c.line) < Math.abs(a.n - c.line) ? b : a));
+      const key = lineKey(c.file, c.side, best.n);
+      placed.set(key, [...(placed.get(key) || []), { c, r }]);
+    }
+  }
+  return placed;
+}
+
+function diffFile(f, drafts, shown, posted = new Map(), dev = "") {
   const rows = [];
   for (const h of f.hunks) {
     rows.push(`<tr class="hunk"><td colspan="3">${esc(h.header)}</td></tr>`);
@@ -812,6 +844,7 @@ function diffFile(f, drafts, shown) {
       rows.push(`<tr class="${l.t === "+" ? "add" : l.t === "-" ? "del" : "ctx"}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}">
         <td class="ln">${l.o ?? ""}</td><td class="ln">${l.n ?? ""}</td>
         <td class="code"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${esc(l.s)}</td></tr>`);
+      for (const { c, r } of posted.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="3">${postedCard(c, r, dev)}</td></tr>`);
       for (const c of drafts.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="3">${draftCard(c)}</td></tr>`);
     }
   }
@@ -847,7 +880,8 @@ async function CodeReview(r) {
     drafts.set(key, [...(drafts.get(key) || []), c]);
   }
   const shown = new Set();
-  const files = d.files.map((f) => diffFile(f, drafts, shown)).join("");
+  const posted = placePosted(d.files, d.rounds, d.head);
+  const files = d.files.map((f) => diffFile(f, drafts, shown, posted, d.dev)).join("");
   const elsewhere = d.pending.filter((c) => !c.file || !c.line || !shown.has(lineKey(c.file, c.side, c.line)));
   const adds = d.files.reduce((n, f) => n + f.additions, 0), dels = d.files.reduce((n, f) => n + f.deletions, 0);
   const tabs = REVIEW_VIEWS.map(([v, label]) => {
