@@ -38,13 +38,14 @@ def desktop_notify(title: str, msg: str) -> None:
         pass
 
 
-def log_activity(meta: dict, previous: str | None, status: str) -> None:
+def log_activity(meta: dict, previous: str | None, status: str, actor: str | None = None) -> None:
     """Permanent record of every status change (the inbox files get cleared)."""
     INBOX.mkdir(parents=True, exist_ok=True)
     entry = {"ts": dt.datetime.now().isoformat(timespec="seconds"), "id": meta.get("id"),
              "title": meta.get("title"), "project": project_name(meta),
              "from": previous, "to": status, "by": holder(meta),
-             "actor": os.environ.get("AGENT_ID", "")}   # the agent whose edit made the change ("" = the lead or a terminal)
+             # the agent whose edit made the change ("lead" from the console's code review; "" = the lead or a terminal)
+             "actor": os.environ.get("AGENT_ID", "") if actor is None else actor}
     with (INBOX / "activity.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
@@ -59,8 +60,9 @@ def recipient(meta: dict, status: str) -> str | None:
     return ROUTING.get(status)
 
 
-def process(path: Path) -> int:
-    """Handle a task file that may have changed status. Returns 2 if the change was refused."""
+def process(path: Path, actor: str | None = None) -> int:
+    """Handle a task file that may have changed status. Returns 2 if the change was refused.
+    actor: who made the change, when it isn't $AGENT_ID (the console passes "lead" for the lead's review)."""
     meta = parse(path)
     tid, status = meta.get("id", path.stem), meta.get("status", "")
     state = load_state()
@@ -84,7 +86,7 @@ def process(path: Path) -> int:
 
     # Record who blocked it: the agent that made the change, else whoever held the task before.
     if status == "blocked":
-        by = os.environ.get("AGENT_ID") or meta.get(HOLDER.get(previous or "", ""), "")
+        by = (actor if actor is not None else os.environ.get("AGENT_ID")) or meta.get(HOLDER.get(previous or "", ""), "")
         if by != meta.get("blocked_by", ""):
             set_fields(path, blocked_by=by)
             meta = parse(path)
@@ -94,7 +96,7 @@ def process(path: Path) -> int:
 
     state[tid] = status
     save_state(state)
-    log_activity(meta, previous, status)
+    log_activity(meta, previous, status, actor)
 
     to = recipient(meta, status)
     if to:

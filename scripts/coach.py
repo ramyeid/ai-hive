@@ -4,7 +4,8 @@
 Usage:
   python3 scripts/coach.py evidence [--since last|all|YYYY-MM-DD] [--tasks TASK-012,TASK-019] [--project PATH]
       Writes coach/runs/<time>/evidence.md for the chosen tasks and prints its path. Per task: the lead's own
-      words (conversations, Clarifications), the review findings and rounds, blocked questions, the dev's notes,
+      words (conversations, Clarifications), the lead's own code reviews in the console (each comment with the
+      code it was about, the dev's reply and what the dev changed), the review findings and rounds, blocked questions, the dev's notes,
       follow-ups, and the GitHub pull request: the lead's commits on the branch (any commit without an
       `Agent:` line), with their diffs, and the lead's review comments.
   python3 scripts/coach.py propose "Short title"
@@ -29,6 +30,7 @@ import sys
 from pathlib import Path
 
 from tasklib import INBOX, ROOT, TASKS, parse, task_files
+import lead_review
 
 COACH = ROOT / "coach"
 RUNS = COACH / "runs"
@@ -234,11 +236,42 @@ def _local_commits(meta: dict) -> list[str]:
     return lines
 
 
+def _lead_reviews(meta: dict, tid: str, moves: list[dict]) -> str:
+    """The lead's code reviews in the console: every comment, the code it was about, the dev's reply,
+    who had already passed that code, and what the dev changed in response."""
+    rounds = lead_review.rounds(tid)
+    out = []
+    for i, r in enumerate(rounds):
+        before = [a for a in moves if a.get("ts", "") < r["at"]]
+        passes = sum(1 for a in before if a.get("from") == "in-review")
+        stage = ("after the reviewer had marked it done" if any(a.get("to") == "done" for a in before)
+                 else f"after {passes} reviewer round(s)" if passes else "before the reviewer had seen it")
+        verdict = "changes requested" if r["verdict"] == "changes" else "approved"
+        out.append(f"#### Lead code review, round {r['n']} ({verdict}) at `{r['commit'][:7]}`, {stage}")
+        if r.get("summary"):
+            out.append(f"Summary: \"{r['summary']}\"")
+        for c in r["comments"]:
+            where = f"`{c['file']}:{c['line']}`" if c.get("file") and c.get("line") else f"`{c['file']}`" if c.get("file") else "General"
+            out.append(f"{c['number']}. {where}: \"{c['body']}\"")
+            if c.get("code"):
+                out.append("   ```\n" + "\n".join("   " + l for l in c["code"].splitlines()) + "\n   ```")
+            if r["verdict"] == "changes":
+                out.append(f"   Dev's reply: {c['reply'] or '(none)'}")
+        after = rounds[i + 1]["commit"] if i + 1 < len(rounds) else lead_review.head(meta)
+        files = sorted({c["file"] for c in r["comments"] if c.get("file")})
+        if r["verdict"] == "changes" and files and after and after != r["commit"]:
+            diff = _run(["git", "diff", "--no-color", f"{r['commit']}..{after}", "--", *files], meta.get("project", ""))
+            if diff:
+                out.append("What the dev changed in response, in the commented files:\n```diff\n"
+                           + _clip(diff, LIMIT["diff"]) + "\n```")
+    return "\n".join(out)
+
+
 def _task_evidence(path: Path, activity: list[dict], all_tasks: list[dict]) -> str:
     meta, text = parse(path), path.read_text(encoding="utf-8")
     tid = meta.get("id", path.name[:8])
     moves = [a for a in activity if a.get("id") == tid]
-    rounds = sum(1 for a in moves if a.get("to") == "changes-requested")
+    rounds = sum(1 for a in moves if a.get("to") == "changes-requested" and a.get("actor") != "lead")
     blocked = sum(1 for a in moves if a.get("to") == "blocked")
     follow_ups = [t["id"] for t in all_tasks if t.get("follows") == tid]
     head = [f"## {tid}: {meta.get('title', '')}  [{meta.get('status', '')}]",
@@ -248,6 +281,10 @@ def _task_evidence(path: Path, activity: list[dict], all_tasks: list[dict]) -> s
             f"Review rounds sent back: {rounds}. Times blocked: {blocked}. "
             f"Tech Lead: {meta.get('techlead', '?')}, dev: {meta.get('dev') or '?'}, reviewer: {meta.get('reviewer') or '?'}."]
     parts = ["\n".join(head)]
+    reviews = _lead_reviews(meta, tid, moves)
+    if reviews:
+        parts.append("### The lead's code reviews (the strongest evidence: what the lead wanted changed, line by line)\n"
+                     + reviews)
     words = _lead_words(tid)
     if words:
         parts.append("### The lead's words in the conversations\n" + _clip("\n".join(words), LIMIT["words"]))

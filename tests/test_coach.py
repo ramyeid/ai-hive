@@ -61,6 +61,20 @@ class EvidenceTest(unittest.TestCase):
         self.assertIn("use cursor pagination", evidence)
         self.assertIn("Review comment on `api.py:12`: We always paginate with cursors here.", evidence)
 
+    def test_the_evidence_shows_the_leads_code_review_with_the_code_and_the_devs_reply(self):
+        kit = self._a_kit()
+        self._a_task(kit, "TASK-001")
+        self._a_lead_review(kit, "TASK-001", comment="Errors are always { code, message }.", code='return {"error": msg}',
+                            reply="Fixed in abc1234: returns { code, message }.")
+        self._activity(kit, "TASK-001", ["done"], at="2026-11-01T10:00:00")
+
+        evidence = self._evidence(kit, "--since", "all")
+
+        self.assertIn("round 1 (changes requested) at `abc1234`, after the reviewer had marked it done", evidence)
+        self.assertIn('1. `api.py:12`: "Errors are always { code, message }."', evidence)
+        self.assertIn('return {"error": msg}', evidence)
+        self.assertIn("Dev's reply: Fixed in abc1234: returns { code, message }.", evidence)
+
     def test_since_the_last_review_only_takes_tasks_with_activity_after_it(self):
         kit = self._a_kit()
         self._a_task(kit, "TASK-001")
@@ -120,6 +134,15 @@ class EvidenceTest(unittest.TestCase):
     def _last_review_at(self, kit: Path, at: str) -> None:
         (kit / "coach").mkdir(exist_ok=True)
         (kit / "coach" / "state.json").write_text(json.dumps({"last_review": at}))
+
+    def _a_lead_review(self, kit: Path, task_id: str, comment: str, code: str, reply: str) -> None:
+        comments = [{"id": "c1", "file": "api.py", "line": 12, "side": "new", "code": code, "body": comment}]
+        rounds = [{"n": 1, "at": "2026-11-02T10:00:00", "verdict": "changes", "commit": "abc1234" + "0" * 33,
+                   "describes": "the whole feature", "summary": "", "comments": comments}]
+        (kit / "tasks" / "reviews").mkdir(parents=True)
+        (kit / "tasks" / "reviews" / f"{task_id}.json").write_text(json.dumps({"rounds": rounds, "pending": [], "next": 2}))
+        task = next((kit / "tasks").glob(f"{task_id}-*.md"))
+        task.write_text(task.read_text() + f"\n## Lead Review\n\n### Round 1 — x\n\n1. `api.py:12`\n   {comment}\n   - Reply: {reply}\n")
 
     def _a_proposal(self, kit: Path, pid: str, status: str, note: str) -> None:
         folder = kit / "coach" / "proposals"

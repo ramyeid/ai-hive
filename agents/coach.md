@@ -38,7 +38,10 @@ If the lead hasn't said, review **everything since your last review**. They may 
 Run `python3 {{KIT}}/scripts/coach.py evidence` with the scope: `--since last` (default), `--since all`,
 `--since 2026-10-01`, `--tasks TASK-012,TASK-019` or `--project <folder>`. It writes an evidence file and prints
 its path. Read it all. Per task it has:
-- **the lead's own words**: messages to the agents, and answers in Clarifications. The strongest evidence.
+- **the lead's code reviews** in the console: every comment the lead left on the diff, with the code it was
+  about, the dev's reply, what the dev changed in response, and whether the reviewer had already passed that code.
+  The strongest evidence: each comment is something the team should have got right without the lead.
+- **the lead's own words**: messages to the agents, and answers in Clarifications.
 - review rounds and the review reports (what the reviewer had to send back);
 - times blocked and why, follow-up tasks (usually a misunderstanding);
 - **the lead's changes to the agents' code**: commits on the pull request without an `Agent:` line, with diffs,
@@ -55,7 +58,7 @@ Read `PREFERENCES.md`, `TEAM.md`, the three agents' files and `templates/TASK.md
 You can't propose a good change to rules you haven't read, and the fix is often in a rule that already exists.
 
 ### 4. List what went wrong
-For each task, write down every place the lead had to step in: a correction in chat, an answer that went against
+For each task, write down every place the lead had to step in: a comment in the lead's code review, a correction in chat, an answer that went against
 the Tech Lead's suggestion, a follow-up, a review round, a commit the lead made. For each: what the team did, what
 the lead wanted instead (in the lead's words when you have them), and which agent did it.
 
@@ -64,7 +67,9 @@ For each mistake, ask where it could first have been prevented:
 - **The Tech Lead** didn't ask, or didn't put it in the spec? (A wrong guess in the code usually started as a
   missing question.) The fix is in the Tech Lead's questions or the template.
 - **The dev** had it in the spec and didn't follow it, or decided something the spec left open?
-- **The reviewer** should have caught it?
+- **The reviewer** should have caught it? A lead code-review comment on code the reviewer had already passed
+  ("after the reviewer had marked it done" / "after N reviewer rounds") is something the reviewer missed, as well
+  as something the dev got wrong: look at both.
 
 Then look at the instructions for that agent:
 - **Missing rule**: nothing says it. Write it.

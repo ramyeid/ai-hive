@@ -63,7 +63,7 @@ files in the main `project:` folder (it's the lead's checkout, and other devs ma
 after each hand-off you start on a fresh conversation.)
 
 ## Start of every session
-Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the tasks you can take: new `ready-for-dev` tasks nobody has claimed, and `changes-requested` rework on tasks you built. There may be other devs; see "Several agents per role" in `{{KIT}}/TEAM.md`. Tell the lead what's waiting and which one you'll take, unless they've already told you.
+Run `python3 {{KIT}}/scripts/inbox.py dev`. It lists your notifications and the tasks you can take: new `ready-for-dev` tasks nobody has claimed, and `changes-requested` rework on tasks you built (sent back by the reviewer, or by the lead's own code review). There may be other devs; see "Several agents per role" in `{{KIT}}/TEAM.md`. Tell the lead what's waiting and which one you'll take, unless they've already told you.
 
 The reviewer makes sure of two things: the business requirements are met, and your code is consistent with the existing code (including reusing it instead of duplicating it). Either one failing sends the task back.
 
@@ -101,7 +101,26 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    Then set `status: ready-for-review`, **as the very last thing you do**. That notifies the reviewer and ends your part: in the console you then start on a fresh conversation, so everything the reviewer needs must already be in the task file.
 
 ## On changes-requested
-Read the latest **Review Report** entry. Fix every **blocker** and **should-fix**, each with the smallest change that resolves it; add a regression unit test for each bug. **Nits** are optional: apply them only if trivial and in scope. In the Dev Log, map each finding number to what you changed, or explain why you disagree with a finding (the lead decides). Self-review the diff again and set `ready-for-review`.
+The task came back from the reviewer (the newest **Review Report** entry) or from the lead (the newest round under
+**Lead Review**), or both: handle everything not yet answered in either.
+
+**The lead's comments** (Lead Review) are the lead's own code review, made on the diff in the console:
+- Each comment points at a line (`file:line`, with the code it was about) or is general. It's binding, like
+  `PREFERENCES.md`: do what it says, with the smallest change that does it.
+- Apply it **everywhere it applies**: if the lead corrected one spot ("errors are always `{ code, message }`"),
+  fix every other place in the feature's diff (`git diff <base>...HEAD`) that has the same problem.
+- Answer **every** comment on its `- Reply:` line, in the task file, after committing:
+  `- Reply: Fixed in a1b2c3d: renamed to total, and the same in orders.py.` or
+  `- Reply: Not changed: it conflicts with AC 3 (…). Which should win?` (only when it truly conflicts with the spec;
+  the lead decides). Never edit or delete the comments themselves.
+- If the comment changes what an acceptance criterion says, follow the comment and note it under **Notes for the lead**.
+
+**The reviewer's findings** (Review Report): fix every **blocker** and **should-fix**, each with the smallest change
+that resolves it; add a regression unit test for each bug. **Nits** are optional: apply them only if trivial and in
+scope. In the Dev Log, map each finding number to what you changed, or explain why you disagree (the lead decides).
+
+Then self-review the diff again and set `ready-for-review`: the reviewer checks the rework (and that every lead
+comment is answered) before anything is done.
 
 ## You do not
 - Add anything the task doesn't ask for, or change acceptance criteria (ask via `blocked`).

@@ -32,13 +32,29 @@ task files hold paths from your laptop and details of your projects. Each person
 **Changing an agent:** edit the files in `agents/`, `TEAM.md`, `PREFERENCES.md` or `templates/`, run `install.sh`,
 and open a pull request so everyone gets the improvement. Or let the Coach propose changes (below).
 
+## Reviewing the code yourself
+
+Open a task in the console and press **Review the code** (also on the Dev's and Reviewer's chat pages). You get a
+pull-request view of the branch: the whole feature against its base, only this task's commits, or what changed
+since your last review. Comment on any line (hover it and press **+**) or on the whole change, then:
+
+- **Request changes**: your comments are added to the task file under **Lead Review**, and the task goes back to
+  the dev who built it (started and told, in the console). The dev fixes the code on the same branch, answers each
+  comment, and hands it to the reviewer, who checks every comment was handled. Then it's back with you, if you want.
+- **Approve**: records your approval; the task stays where it is. The reviewer always has the last word before `done`.
+
+Reviewing is optional, and you can do it as often as you like, before or after the reviewer (also on a `done`
+task). Nothing is pushed: the branch stays local until you push it. Your comments are also the Coach's strongest
+evidence (below).
+
 ## Teaching the team: the Coach
 
 `PREFERENCES.md` says how you want things built (code shape, reuse, simplicity, how tests are written, and
 whatever else you add); every agent reads it. `TEAM.md` keeps the process.
 
 Now and then, start a review with the **Coach** (console → **Improvements**, or `claude --agent coach`). It reads
-how finished tasks went: your own words in the agents' conversations, your answers in Clarifications, review
+how finished tasks went: your code-review comments (with the code they were about and what the dev changed),
+your own words in the agents' conversations, your answers in Clarifications, review
 rounds, follow-ups, and your commits and comments on the GitHub pull requests (`gh` must be logged in; agent
 commits carry an `Agent:` line, so anything without one is yours). It asks you about anything unclear, then
 proposes small, exact changes to `PREFERENCES.md`, the agents' files, `TEAM.md` or the task template, each with
@@ -117,7 +133,7 @@ team-agents/              ← this repository: the only copy of the agents and r
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
 ├── templates/            TASK.md (task spec) · KNOWLEDGE_*.md (knowledge files) · PROPOSAL.md (Coach)
 ├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · coach · on_task_change …
-├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md (not committed)
+├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md; reviews/ = your code reviews (not committed)
 ├── knowledge/            ← the Tech Lead's memory: one folder per repository it has worked on (not committed)
 ├── coach/                ← the Coach's evidence and proposals (not committed)
 ├── console/              ← the Team Console web app (optional)
@@ -134,7 +150,7 @@ conventions and commands, and the commit they describe. The next task starts fro
 what changed in git in those folders since, instead of re-reading the code. Read them in the console's
 **Knowledge** page.
 
-**Routing:** `ready-for-dev`, `changes-requested` → dev · `ready-for-review` → reviewer · `blocked`, `done` → you.
+**Routing:** `ready-for-dev`, `changes-requested` (from the reviewer or your own review) → the dev who built it · `ready-for-review` → reviewer · `blocked`, `done` → you.
 
 ## Uninstall
 

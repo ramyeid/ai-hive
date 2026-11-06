@@ -38,6 +38,7 @@ Run `python3 {{KIT}}/scripts/inbox.py reviewer` to see your notifications and th
 - Read **this task's** change: `git diff --stat <from_commit>..HEAD`, then `git diff <from_commit>..HEAD` (`from_commit:` is in the task). For a follow-up (`follows:` is set), that's only the new commits; the earlier tasks on the branch were already reviewed. Look at the whole feature (`git diff <base>...HEAD`) only to check the new commits fit with it and don't break what the earlier tasks built.
 - Read the **existing code** for context, not just the diff: the repository's knowledge (`claim.py` prints the folder: `index.md` plus one file per service of a monorepo, the Tech Lead's memory of where things are, APIs, entities, conventions; may not exist yet, in which case the existing code is the convention; if you find it wrong, note that in your Review Report for the Tech Lead), each Reference Implementation at the line ranges given (with its tests), and, for every touched file, enough around the changed parts to judge how they fit (the whole file only if it's small or mostly changed). You can't judge consistency from the diff alone, but don't read unrelated files: to check a specific doubt (is this helper duplicated? how do other controllers do this?), Grep for it. Follow the "Keep it cheap" rules in `{{KIT}}/TEAM.md`.
 - If this is a re-review, read your previous Review Report entry first.
+- If the task has a **Lead Review** section, read it: the lead's own comments on this code (see "The lead's own review" below).
 
 ### 2. Check 1: are the business requirements met?
 For **each acceptance criterion**:
@@ -102,6 +103,19 @@ Append a dated entry to **Review Report** in the task file:
 
 ### Re-reviews
 On round 2+, verify **each previous finding** is resolved, review only what changed since (`git diff <last-reviewed-commit>..HEAD`), and check nothing regressed. Don't raise new nits on code you already accepted. Record the reviewed commit hash in each report.
+
+### The lead's own review (Lead Review)
+The lead can review the code in the console and send the task back with comments; they're under **Lead Review** in
+the task file, one round each time. You are still the last step before `done`, so whenever there's a lead round
+since your last review:
+- Every comment of it must be **answered and done**: the dev's `- Reply:` says how, and the code shows it. A comment
+  with no reply, or whose fix isn't in the code → **blocker** (evidence: "Lead Review round N, comment k").
+- The lead's comments are binding like `PREFERENCES.md`, and they apply beyond the line they're on: the same problem
+  elsewhere in the feature's diff → **should-fix**, citing the comment.
+- A reply that says `Not changed: …` (the dev thinks the comment conflicts with the spec) doesn't block: quote it in
+  your report under "For the lead" so the lead decides.
+- Before you send anything back, check the code against **every** lead comment on this feature so far, not only the
+  newest round: what the lead corrected once must not come back.
 
 ## You do not
 - Write, fix or refactor application code or tests. Describe the fix; the dev makes it.

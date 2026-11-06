@@ -45,6 +45,8 @@ const state = {
   inboxUnread: 0,
   stream: {},         // name -> {thinking, text, tool}: what the agent is writing right now
   since: {},          // name -> when it started working (ms)
+  codeTask: {},       // dev/reviewer name -> the task whose code it's on, for "Review the code"
+  reviewSummary: {},  // task id -> the summary you're writing for your review
 };
 const emptyStream = () => ({ thinking: "", text: "", tool: "" });
 
@@ -223,6 +225,7 @@ async function refreshBadge() {
 
 function route() {
   const [, page = "", id = "", sub = "", name = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
+  if (page === "tasks" && id && sub === "review") return { page: "review", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
     "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
@@ -233,7 +236,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -251,7 +254,7 @@ async function render(quiet = false) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "tasks" && (r.page === "task" || r.page === "task-chat")) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
+    const on = nav === r.page || (nav === "tasks" && ["task", "task-chat", "review"].includes(r.page)) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -411,10 +414,12 @@ async function TaskDetail(r) {
   const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}</span></li>`).join("");
   const holder = t.assignee && state.agents[t.assignee];
   const chatButton = holder ? `<a class="btn role ${roleOf(t.assignee)}" href="#/agents/${t.assignee}">Open chat with ${esc(nameOf(t.assignee))}${t.status === "blocked" ? ", who blocked it" : ""}</a>` : "";
+  const lr = t.lead_review || {};
+  const reviewButton = t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a>` : "";
   // Names in Details link to that agent's chat (plain text if the agent was removed).
   const who = (id) => state.agents[id] ? `<a href="#/agents/${id}">${esc(nameOf(id))}</a>` : esc(nameOf(id));
   return `<p><a href="#/tasks" class="muted">All tasks</a></p>
-    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div>${chatButton}</div>
+    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div><div class="btn-row">${reviewButton}${chatButton}</div></div>
     <div class="task-layout">
       <article class="prose">${md(t.markdown)}</article>
       <aside class="task-side">
@@ -433,6 +438,7 @@ async function TaskDetail(r) {
           <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
           ${t.follows ? `<dt>Follows</dt><dd><a href="#/tasks/${esc(t.follows)}">${esc(t.follows)}</a></dd>` : ""}
           ${t.same_branch.length ? `<dt>Same branch</dt><dd>${t.same_branch.map((o) => `<a href="#/tasks/${esc(o.id)}" title="${esc(o.title)}">${esc(o.id)}</a> ${statusPill(o.status)}`).join("<br>")}</dd>` : ""}
+          ${t.from_commit ? `<dt>Your reviews</dt><dd>${lr.rounds ? `${lr.rounds} round${lr.rounds === 1 ? "" : "s"}, last at <code>${esc(lr.last.slice(0, 7))}</code>` : "None yet"}${lr.drafts ? `, ${lr.drafts} draft comment${lr.drafts === 1 ? "" : "s"}` : ""}</dd>` : ""}
           ${t.from_commit ? `<dt>Changes</dt><dd><code>git diff ${esc(t.from_commit)}..HEAD</code></dd>` : ""}
           <dt>Base</dt><dd><code>${esc(t.base)}</code></dd>
           <dt>Priority</dt><dd>${esc(t.priority)}</dd>
@@ -459,10 +465,18 @@ function costSection(c) {
 
 // ---- agent chat ----------------------------------------------------------------
 
+// The task whose code a dev or reviewer is on (or last worked on), for the "Review the code" button.
+async function codeTaskOf(name) {
+  if (!["dev", "reviewer"].includes(roleOf(name))) return null;
+  const tasks = (await api("/api/tasks")).filter((t) => t.from_commit && t[roleOf(name)] === name);
+  return tasks.find((t) => t.assignee === name) || tasks.sort((a, b) => b.updated.localeCompare(a.updated))[0] || null;
+}
+
 async function AgentChat(r) {
   const name = r.id;
   if (!state.agents[name]) throw new Error("There's no agent with that name. It may have been removed in Settings.");
-  await loadLive(name);
+  const [, task] = await Promise.all([loadLive(name), codeTaskOf(name).catch(() => null)]);
+  state.codeTask[name] = task;
   const a = ROLES[roleOf(name)];
   return `<div class="chat-page ${roleOf(name)}">
     <header class="agent-head" id="agent-head"></header>
@@ -496,8 +510,10 @@ function renderAgentChrome(name) {
         <datalist id="models-${name}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
         ${needsKey ? `<span class="warn">No ${esc(prov.label)} API key yet. <a href="#/settings">Add it in Settings</a></span>` : ""}
       </div>`;
+  const task = state.codeTask[name];
   head.innerHTML = `<div class="title"><h1>${esc(nameOf(name))} <button class="btn small" data-action="rename" data-agent="${name}">Rename</button></h1><p>${a.blurb}</p>${picker}</div>
     <div class="btn-row" style="align-items:center">
+      ${task ? `<a class="btn primary" href="${reviewHref(task.id)}" title="${esc(task.title)}">Review the code of ${esc(task.id)}</a>` : ""}
       <span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span>
       <label class="mode">Edits <select data-action="mode" data-agent="${name}" aria-label="File edit approvals">
         <option value="default" ${mode === "default" ? "selected" : ""}>Ask me first</option>
@@ -762,6 +778,201 @@ async function saveConfig(name, provider, model) {
   renderAgentChrome(name);
   if (route().page === "overview") render(true);
 }
+
+// ---- your code review (a pull request inside the console) ------------------------------------
+
+const REVIEW_VIEWS = [["feature", "Whole feature"], ["task", "This task's commits"], ["since", "Since your last review"]];
+const reviewView = () => new URLSearchParams(location.hash.split("?")[1] || "").get("view") || "feature";
+const reviewHref = (id, view) => `#/tasks/${encodeURIComponent(id)}/review${view && view !== "feature" ? `?view=${view}` : ""}`;
+const lineKey = (file, side, line) => `${file}\u0000${side}\u0000${line}`;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function commentWhere(c) {
+  if (!c.file) return "General comment";
+  if (!c.line) return `<code>${esc(c.file)}</code>`;
+  return c.side === "old" ? `<code>${esc(c.file)}</code> <span class="muted">removed line ${c.line}</span>` : `<code>${esc(c.file)}:${c.line}</code>`;
+}
+
+function draftCard(c, { where = false } = {}) {
+  return `<div class="review-comment draft" data-comment="${esc(c.id)}">
+    <div class="who"><span class="pill lead">Draft</span>${where ? ` ${commentWhere(c)}` : ""}</div>
+    ${where && c.code ? `<pre class="snippet">${esc(c.code)}</pre>` : ""}
+    <div class="prose body">${md(c.body)}</div>
+    <div class="btn-row"><button class="btn small" data-action="edit-comment" data-id="${esc(c.id)}">Edit</button>
+      <button class="btn small" data-action="delete-comment" data-id="${esc(c.id)}">Delete</button></div></div>`;
+}
+
+function diffFile(f, drafts, shown) {
+  const rows = [];
+  for (const h of f.hunks) {
+    rows.push(`<tr class="hunk"><td colspan="3">${esc(h.header)}</td></tr>`);
+    for (const l of h.lines) {
+      const side = l.t === "-" ? "old" : "new", line = side === "old" ? l.o : l.n, key = lineKey(f.path, side, line);
+      shown.add(key);
+      rows.push(`<tr class="${l.t === "+" ? "add" : l.t === "-" ? "del" : "ctx"}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}">
+        <td class="ln">${l.o ?? ""}</td><td class="ln">${l.n ?? ""}</td>
+        <td class="code"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${esc(l.s)}</td></tr>`);
+      for (const c of drafts.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="3">${draftCard(c)}</td></tr>`);
+    }
+  }
+  const changed = f.additions + f.deletions;
+  const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
+  return `<details class="review-file" ${changed > 400 ? "" : "open"}>
+    <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
+      <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></summary>
+    ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff">
+      <colgroup><col class="ln"><col class="ln"><col></colgroup><tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
+  </details>`;
+}
+
+function roundCard(r, dev) {
+  const asked = r.verdict === "changes";
+  const items = r.comments.map((c) => `<li><div class="who">${commentWhere(c)}</div>
+      ${c.code ? `<pre class="snippet">${esc(c.code)}</pre>` : ""}<div class="prose">${md(c.body)}</div>
+      ${asked ? `<div class="reply ${c.reply ? "" : "none"}"><span class="pill dev">${esc(dev ? nameOf(dev) : "Dev")}</span> ${c.reply ? esc(c.reply) : "No reply yet."}</div>` : ""}</li>`).join("");
+  return `<article class="review-round ${asked ? "changes" : "approved"}">
+    <header><strong>Round ${r.n}</strong> <span class="pill ${asked ? "lead" : "dev"}">${asked ? "Changes requested" : "Approved"}</span>
+      <span class="muted">${esc(ago(r.at))}, at <code>${esc(r.commit.slice(0, 7))}</code>, ${esc(r.describes.replace(/`/g, ""))}</span></header>
+    ${r.summary ? `<div class="prose">${md(r.summary)}</div>` : ""}
+    ${items ? `<ol class="round-comments">${items}</ol>` : ""}</article>`;
+}
+
+async function CodeReview(r) {
+  const view = reviewView();
+  const [t, d] = await Promise.all([api(`/api/tasks/${encodeURIComponent(r.id)}`), api(`/api/tasks/${encodeURIComponent(r.id)}/review?mode=${view}`)]);
+  const drafts = new Map();
+  for (const c of d.pending) {
+    if (!c.file || !c.line) continue;
+    const key = lineKey(c.file, c.side, c.line);
+    drafts.set(key, [...(drafts.get(key) || []), c]);
+  }
+  const shown = new Set();
+  const files = d.files.map((f) => diffFile(f, drafts, shown)).join("");
+  const elsewhere = d.pending.filter((c) => !c.file || !c.line || !shown.has(lineKey(c.file, c.side, c.line)));
+  const adds = d.files.reduce((n, f) => n + f.additions, 0), dels = d.files.reduce((n, f) => n + f.deletions, 0);
+  const tabs = REVIEW_VIEWS.map(([v, label]) => {
+    const off = v === "since" && !d.last_reviewed;
+    return off ? `<span class="tab off" title="After your first review">${label}</span>`
+      : `<a class="tab" href="${reviewHref(t.id, v)}" ${v === d.mode ? 'aria-current="page"' : ""}>${label}${v === "since" ? ` <code>${esc(d.last_reviewed.slice(0, 7))}</code>` : ""}</a>`;
+  }).join("");
+  const dev = d.dev && nameOf(d.dev);
+  return `<p><a href="#/tasks/${esc(t.id)}" class="muted">${esc(t.id)}</a></p>
+    <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
+      <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p></div>
+      ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
+    ${d.rounds.length ? `<section class="section"><h2>Your earlier reviews</h2>${d.rounds.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
+      : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("")}</section>` : ""}
+    <section class="section">
+      <nav class="tabs" aria-label="What to compare">${tabs}</nav>
+      <p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
+      ${files || `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
+    </section>
+    <section class="section review-submit" id="review-submit"><h2>Your review</h2>
+      ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
+      <div class="general"><label for="general-comment">A comment that isn't about one line</label>
+        <textarea id="general-comment" rows="3" placeholder="For example: errors here are always { code, message }."></textarea>
+        <div class="btn-row"><button class="btn small" data-action="add-general">Add comment</button></div></div>
+      <label for="review-summary">Summary <span class="muted">(optional)</span></label>
+      <textarea id="review-summary" rows="2">${esc(state.reviewSummary[t.id] || "")}</textarea>
+      <div class="btn-row">
+        <button class="btn primary" data-action="submit-review" data-verdict="changes" ${d.can_request_changes ? "disabled" : ""}>Request changes</button>
+        <button class="btn" data-action="submit-review" data-verdict="approve" ${d.head ? "" : "disabled"}>Approve</button></div>
+      <p class="hint">${d.can_request_changes ? esc(d.can_request_changes) + " " : ""}<b>Request changes</b> sends ${d.pending.length ? plural(d.pending.length, "draft comment") : "your comments"} back to ${esc(dev || "the dev who built it")}, who answers each one, fixes the code on the same branch, then hands it to the reviewer again. <b>Approve</b> only records your approval: the reviewer still has the last word before done.</p>
+    </section>`;
+}
+
+// Up to three lines ending at this one, on the same side, as the comment's code context.
+function codeAbove(row) {
+  const lines = [row.dataset.s];
+  let prev = row.previousElementSibling;
+  while (prev && lines.length < 3 && !prev.classList.contains("hunk")) {
+    if (prev.dataset.side === row.dataset.side || prev.classList.contains("ctx")) lines.unshift(prev.dataset.s);
+    prev = prev.previousElementSibling;
+  }
+  return lines.join("\n");
+}
+
+async function saveDraft(body) {
+  const id = route().id;
+  return act(() => api(`/api/tasks/${encodeURIComponent(id)}/review/comments`, { method: "POST", body }));
+}
+
+async function pingDev(dev, taskId) {
+  if (!dev || !state.agents[dev]) return false;
+  if (state.agents[dev].status === "stopped") {
+    const started = await act(() => api(`/api/agents/${dev}/start`, { method: "POST", body: {} }));
+    if (!started) return false;
+  }
+  return act(() => api(`/api/agents/${dev}/message`, { method: "POST",
+    body: { text: `I reviewed the code of ${taskId} and requested changes. Work on it per your instructions.` } }));
+}
+
+const reviewActions = {
+  "comment-line": (el) => {
+    const row = el.closest("tr");
+    let after = row;
+    while (after.nextElementSibling?.classList.contains("comment-row")) after = after.nextElementSibling;
+    if (after.nextElementSibling?.classList.contains("comment-form-row")) return after.nextElementSibling.querySelector("textarea").focus();
+    after.insertAdjacentHTML("afterend", `<tr class="comment-form-row"><td colspan="3"><form class="comment-form">
+      <textarea rows="3" aria-label="Your comment on line ${row.dataset.line}" placeholder="What should change here, and why?"></textarea>
+      <div class="btn-row"><button class="btn small primary" type="submit">Add comment</button><button class="btn small" type="button" data-action="cancel-comment">Cancel</button></div></form></td></tr>`);
+    const form = after.nextElementSibling.querySelector("form");
+    const text = form.querySelector("textarea");
+    text.focus();
+    text.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) form.requestSubmit(); });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!text.value.trim()) return text.focus();
+      const saved = await saveDraft({ body: text.value, file: row.dataset.file, line: Number(row.dataset.line), side: row.dataset.side, code: codeAbove(row) });
+      if (saved) render(true);
+    });
+  },
+  "cancel-comment": (el) => el.closest("tr").remove(),
+  "add-general": async () => {
+    const text = document.getElementById("general-comment");
+    if (!text.value.trim()) return text.focus();
+    if (await saveDraft({ body: text.value })) render(true);
+  },
+  "edit-comment": (el) => {
+    const card = el.closest(".review-comment");
+    if (card.querySelector("textarea")) return;
+    const body = card.querySelector(".body");
+    api(`/api/tasks/${encodeURIComponent(route().id)}/review?mode=${reviewView()}`).then((d) => {
+      const c = d.pending.find((x) => x.id === el.dataset.id);
+      if (!c) return render(true);
+      body.outerHTML = `<form class="comment-form"><textarea rows="3" aria-label="Edit your comment">${esc(c.body)}</textarea>
+        <div class="btn-row"><button class="btn small primary" type="submit">Save</button></div></form>`;
+      const form = card.querySelector("form");
+      form.querySelector("textarea").focus();
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const ok = await act(() => api(`/api/tasks/${encodeURIComponent(route().id)}/review/comments/${el.dataset.id}`,
+          { method: "PUT", body: { body: form.querySelector("textarea").value } }));
+        if (ok) render(true);
+      });
+    });
+  },
+  "delete-comment": async (el) => {
+    const ok = await act(() => api(`/api/tasks/${encodeURIComponent(route().id)}/review/comments/${el.dataset.id}`, { method: "DELETE" }));
+    if (ok) render(true);
+  },
+  "finish-review": () => document.getElementById("review-submit").scrollIntoView({ behavior: "smooth" }),
+  "submit-review": async (el) => {
+    const id = route().id, verdict = el.dataset.verdict;
+    const summary = document.getElementById("review-summary").value;
+    const general = document.getElementById("general-comment").value.trim();
+    if (general && !confirm("Your general comment hasn't been added yet. Submit without it?")) return;
+    const done = await act(() => api(`/api/tasks/${encodeURIComponent(id)}/review/submit`, { method: "POST", body: { verdict, summary, mode: reviewView() } }));
+    if (!done) return;
+    state.reviewSummary[id] = "";
+    if (verdict === "changes") {
+      const told = await pingDev(done.dev, id);
+      toast(told ? `Sent back to ${nameOf(done.dev)}, who's on it now.` : `Sent back to ${done.dev ? nameOf(done.dev) : "the dev"}. It's in their inbox.`);
+    } else toast("Approval recorded.");
+    location.hash = reviewHref(id, "feature");
+    render(true);
+  },
+};
 
 // ---- improvements (the Coach's proposals) and team history ---------------------------
 
@@ -1060,6 +1271,7 @@ const afterRender = {
 // ---- actions (event delegation) -------------------------------------------------
 
 const actions = {
+  ...reviewActions,
   start: (el) => act(() => api(`/api/agents/${el.dataset.agent}/start`, { method: "POST", body: {} }), `${nameOf(el.dataset.agent)} started.`),
   stop: (el) => act(() => api(`/api/agents/${el.dataset.agent}/stop`, { method: "POST" }), `${nameOf(el.dataset.agent)} stopped.`),
   interrupt: (el) => act(() => api(`/api/agents/${el.dataset.agent}/interrupt`, { method: "POST" })),
@@ -1184,6 +1396,10 @@ document.addEventListener("click", (e) => {
   }
   const row = e.target.closest("tr[data-href]");
   if (row && !e.target.closest("a")) location.hash = row.dataset.href;
+});
+
+document.addEventListener("input", (e) => {
+  if (e.target.id === "review-summary") state.reviewSummary[route().id] = e.target.value;
 });
 
 document.addEventListener("change", async (e) => {

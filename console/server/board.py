@@ -12,6 +12,7 @@ from .store import KIT
 sys.path.insert(0, str(KIT / "scripts"))
 from tasklib import INBOX, KNOWLEDGE, ORDER, ROUTING, TASKS, holder, parse, project_name, task_files  # noqa: E402
 import knowledge as kb  # noqa: E402
+import lead_review  # noqa: E402
 
 ROLES = ("techlead", "dev", "reviewer", "lead")
 _NOTE = re.compile(r"^- \[(?P<ts>[^\]]+)\] \*\*(?P<id>[^*]+)\*\* (?:\[(?P<project>[^\]]+)\] )?"
@@ -58,7 +59,8 @@ def get_task(task_id: str) -> dict | None:
             task = _summary(path)
             same_branch = [{"id": t["id"], "title": t["title"], "status": t["status"]} for t in list_tasks()
                            if t["id"] != task["id"] and t["project"] == task["project"] and t["branch"] == task["branch"]]
-            return {**task, "same_branch": sorted(same_branch, key=lambda t: t["id"]), "markdown": body, "path": str(path),
+            reviewed = lead_review.all_reviewed().get(task["id"], {})
+            return {**task, "lead_review": reviewed, "same_branch": sorted(same_branch, key=lambda t: t["id"]), "markdown": body, "path": str(path),
                     "activity": [a for a in activity(1000) if a["id"] == task_id]}
     return None
 

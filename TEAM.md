@@ -10,8 +10,14 @@ draft ──► ready-for-dev ──► in-dev ──► ready-for-review ──
   (techlead)        (techlead)          (dev)          (dev)             (reviewer)   (reviewer)
                                ▲                                 │
                                └─────── changes-requested ◄──────┘
-                                            (reviewer)
+                                       (reviewer, or the lead)
 ```
+
+**The lead's code review.** At any point after the dev hands off (`ready-for-review`, `changes-requested` or `done`),
+the lead can review the branch's diff in the console and **request changes**: the comments are added to the task
+file under **Lead Review** (one round each time), and the task goes back to `changes-requested` for the dev who
+built it. The lead may do this as often as needed, before or after the reviewer, or never. The **reviewer is always
+the last step before `done`**: after any rework the task goes through the reviewer again.
 
 | Status              | Set by   | Meaning                                              |
 |---------------------|----------|------------------------------------------------------|
@@ -20,7 +26,7 @@ draft ──► ready-for-dev ──► in-dev ──► ready-for-review ──
 | `in-dev`            | dev      | Dev has claimed it                                   |
 | `ready-for-review`  | dev      | Committed on the task branch, unit tests pass        |
 | `in-review`         | reviewer | Reviewer has claimed it                              |
-| `changes-requested` | reviewer | Findings to fix; see the Review Report section       |
+| `changes-requested` | reviewer, lead | Findings to fix: the newest Review Report entry or Lead Review round |
 | `done`              | reviewer | Requirements met, consistent with existing code     |
 | `blocked`           | anyone   | Needs a decision from the lead; say why in the file  |
 
@@ -41,7 +47,8 @@ without it the ID is just the role name. The kit's scripts read it, so commands 
 1. One task = one file: `tasks/TASK-<NNN>-<slug>.md`, created only with `python3 scripts/new_task.py <project-folder> "<title>"`.
    Its `project:` field is the folder where all the task's work happens; `base:` is the branch it starts from and is reviewed against. `base:` is the lead's choice and is often not `main` (a `develop`, release or feature branch). The Tech Lead asks the lead to confirm it while writing the spec (the readiness check requires it); after that, everyone uses it as given and never blocks on it.
 2. Only change the `status:` field to a value your role is allowed to set (table above).
-3. Never delete another role's section. Append to your own section; add dated entries.
+3. Never delete another role's section. Append to your own section; add dated entries. **Lead Review** is written by
+   the console: never edit its comments; the dev only fills in the `- Reply:` lines.
 4. If anything is ambiguous, set `status: blocked`, write the question under **Open Questions**, and stop. The lead decides.
 5. **One branch per feature, named `feature-<title>`** (e.g. `feature-filter-orders-by-status`), created from `base:` when the dev first claims it. Later tasks that add to, change or fix that feature (often a misunderstanding cleared up) are **follow-ups** (`new_task.py … --follow-up TASK-NNN`): same branch, new commits on top; never a new branch, never a rebase or force-push. Only one task per branch is in progress at a time. Each task records `from_commit:`, so its own changes are `git diff <from_commit>..HEAD`.
    Code changes happen only in the branch's **worktree** (`worktree:` field): a separate folder where the `branch:` is checked out, next to the project (`<project>.worktrees/feature-…`), reused by its follow-ups. Never switch branches or edit code in the main `project:` folder; that's the lead's checkout. Never touch other projects.

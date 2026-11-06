@@ -19,7 +19,8 @@ from .agents import AgentManager
 from .engines import PROVIDERS
 from .store import CONSOLE
 
-import migrate  # noqa: E402  (kit scripts are on sys.path via board)
+import lead_review  # noqa: E402  (kit scripts are on sys.path via board)
+import migrate  # noqa: E402
 
 TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
@@ -57,6 +58,20 @@ class AgentConfigBody(BaseModel):
 class ProposalDecision(BaseModel):
     note: str = ""
     afters: list[str] | None = None   # approve: the lead's edited version of each change's new text
+
+
+class ReviewComment(BaseModel):
+    body: str
+    file: str = ""
+    line: int | None = None
+    side: str = "new"
+    code: str = ""
+
+
+class ReviewSubmit(BaseModel):
+    verdict: str            # changes | approve
+    summary: str = ""
+    mode: str = "feature"   # the view the lead reviewed: feature | task | since
 
 
 class NameBody(BaseModel):
@@ -380,6 +395,40 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
             raise HTTPException(404, "Task not found.")
         found["cost"] = costs.summary()["tasks"].get(task_id, {"cost_usd": 0, "unpriced_tokens": 0, "tokens": 0, "rows": []})
         return found
+
+    # ---- the lead's code review ----------------------------------------------------------
+
+    def reviewing(fn, *args):
+        try:
+            return fn(*args)
+        except KeyError:
+            raise HTTPException(404, "Not found.")
+        except lead_review.ReviewError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.get("/api/tasks/{task_id}/review")
+    def review(task_id: str, mode: str = "feature"):
+        return reviewing(lead_review.diff, task_id, mode)
+
+    @app.post("/api/tasks/{task_id}/review/comments")
+    def review_comment(task_id: str, body: ReviewComment):
+        return reviewing(lead_review.add_comment, task_id, body.body, body.file, body.line, body.side, body.code)
+
+    @app.put("/api/tasks/{task_id}/review/comments/{cid}")
+    def review_comment_edit(task_id: str, cid: str, body: ReviewComment):
+        reviewing(lead_review.edit_comment, task_id, cid, body.body)
+        return {"ok": True}
+
+    @app.delete("/api/tasks/{task_id}/review/comments/{cid}")
+    def review_comment_delete(task_id: str, cid: str):
+        reviewing(lead_review.delete_comment, task_id, cid)
+        return {"ok": True}
+
+    @app.post("/api/tasks/{task_id}/review/submit")
+    def review_submit(task_id: str, body: ReviewSubmit):
+        done = reviewing(lead_review.submit, task_id, body.verdict, body.summary, body.mode)
+        manager.bus.publish({"kind": "board"})
+        return done
 
     def live_sessions() -> list[str]:
         return [r.session_id for r in manager.agents.values() if r.engine and r.session_id]

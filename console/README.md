@@ -40,6 +40,7 @@ Requirements:
 | **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
 | **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. Under **Who worked on it**, each agent's conversation on the task (who, when, the hand-off, cost), for debugging. |
+| **Code review** (a task's **Review the code**) | The branch's diff, like a pull request: the whole feature, this task's commits, or what changed since your last review. Comment on lines or on the whole change, then request changes (back to the dev who built it, who answers each comment) or approve. Your earlier rounds show with the dev's replies. |
 | **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
 | **Knowledge** | The Tech Lead's memory of each repository (`knowledge/<repo>/`): an index, plus one file per service of a monorepo, with purpose, code map, APIs, entities, conventions and task history. Each file shows how many files changed in its own folders since it was written. Read-only. |
 | **History** | Every past conversation. Read it, or continue it where it left off. |

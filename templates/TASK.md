@@ -107,3 +107,7 @@ approved:               # techlead: date the lead explicitly approved the final 
 
 ## Review Report
 <!-- reviewer: dated entries — verdict, AC-by-AC verification, findings (blocker / should-fix / nit) with evidence -->
+
+## Lead Review
+<!-- The lead's code reviews, added by the console. Never edit the comments. dev: answer every comment
+     of the newest round on its "- Reply:" line: `Fixed in <commit>: what changed`, or `Not changed: why`. -->
