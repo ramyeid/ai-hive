@@ -1324,10 +1324,56 @@ function reviewLayout() {
   try { return localStorage.getItem("reviewLayout") || (innerWidth < 900 ? "unified" : "split"); } catch { return "unified"; }
 }
 
+// Word-level changes inside a modified line, like GitHub: the removed line and the line that replaced it each get
+// the words that differ highlighted. Lines that share too little are left plain (they were rewritten, not edited).
+const inline = new WeakMap();   // diff line -> its HTML with the changed words marked
+const wordsOf = (text) => text.match(/\w+|\s+|[^\w\s]/g) || [];
+
+function markChanges(del, add) {
+  const a = wordsOf(del.s), b = wordsOf(add.s);
+  if (!a.length || !b.length || a.length * b.length > 60000) return;
+  const dp = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const same = [...a].filter((t, i) => t.trim()).length ? dp[0][0] : 0;
+  if (same < 0.3 * Math.max(a.length, b.length)) return;
+  const outA = [], outB = [];
+  let i = 0, j = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { outA.push([a[i++], false]); outB.push([b[j++], false]); }
+    else if (j < b.length && (i >= a.length || dp[i][j + 1] >= dp[i + 1][j])) outB.push([b[j++], true]);
+    else outA.push([a[i++], true]);
+  }
+  const html = (parts) => {
+    let out = "", open = false;
+    for (const [t, changed] of parts) {
+      const mark = changed && t.trim() !== "" || (changed && open);
+      if (mark && !open) { out += '<span class="chg">'; open = true; }
+      if (!mark && open) { out += "</span>"; open = false; }
+      out += esc(t);
+    }
+    return out + (open ? "</span>" : "");
+  };
+  inline.set(del, html(outA));
+  inline.set(add, html(outB));
+}
+
+// Pair each run of removed lines with the added lines right after it, in order (what GitHub compares word by word).
+function markHunk(lines) {
+  for (let k = 0; k < lines.length;) {
+    if (lines[k].t !== "-") { k++; continue; }
+    const dels = [];
+    while (k < lines.length && lines[k].t === "-") dels.push(lines[k++]);
+    const adds = [];
+    while (k < lines.length && lines[k].t === "+") adds.push(lines[k++]);
+    dels.forEach((d, n) => adds[n] && markChanges(d, adds[n]));
+  }
+}
+
 // One line of code as a cell you can comment on: the anchor holds where it is and its text.
 function codeCell(f, l, side, kind) {
   const line = side === "old" ? l.o : l.n;
-  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${esc(l.s)}</td>`;
+  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${inline.get(l) ?? esc(l.s)}</td>`;
 }
 
 // Lines of a hunk side by side: unchanged lines on both sides, removed lines next to the lines that replaced them.
@@ -1357,6 +1403,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
     }
   };
   for (const h of f.hunks) {
+    markHunk(h.lines);
     rows.push(`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`);
     if (layout === "split") {
       for (const p of pairUp(h.lines)) {

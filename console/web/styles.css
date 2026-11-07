@@ -724,3 +724,6 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .int-body small { color: var(--muted); font-size: 0.82rem; }
 .sub-crumb { margin: 0 0 6px; color: var(--muted); font-size: 0.85rem; }
 .sub-crumb a { color: var(--muted); }
+/* the words that changed inside a modified line (GitHub-style) */
+.code-diff td.del .chg, .code-diff tr.del .chg { background: color-mix(in srgb, var(--attention) 32%, transparent); border-radius: 3px; }
+.code-diff td.add .chg, .code-diff tr.add .chg { background: color-mix(in srgb, var(--dev) 34%, transparent); border-radius: 3px; }
