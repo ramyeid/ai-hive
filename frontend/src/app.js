@@ -1494,7 +1494,8 @@ function fileTree(files, drafts) {
   };
   return `<aside class="review-tree" aria-label="Changed files">
     <div class="tree-head"><b>Files</b> <span class="muted">${files.length}</span>
-      <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button></div>
+      <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button>
+      <button class="icon-btn tree-hide" data-action="review-tree" aria-label="Hide the files" title="Hide the files, show only the diff"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M10.5 6.2 8.7 8l1.8 1.8"/></svg></button></div>
     <ul class="tree">${render(root, "")}</ul></aside>`;
 }
 
@@ -1543,6 +1544,9 @@ async function CodeReview(r) {
   const layout = reviewLayout();
   const files = d.files.map((f, i) => diffFile(f, drafts, shown, posted, d.dev, layout, i)).join("");
   const treeOn = reviewTreeShown() && d.files.length > 0;
+  const treeStrip = `<button class="tree-strip" data-action="review-tree" aria-label="Show the files" title="Show the files">
+    <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M8.7 6.2 10.5 8 8.7 9.8"/></svg>
+    <span>Files ${d.files.length}</span></button>`;
   const elsewhere = d.pending.filter((c) => !c.file || !c.line || !shown.has(lineKey(c.file, c.side, c.line)));
   const adds = d.files.reduce((n, f) => n + f.additions, 0), dels = d.files.reduce((n, f) => n + f.deletions, 0);
   const tabs = REVIEW_VIEWS.map(([v, label]) => {
@@ -1563,7 +1567,7 @@ async function CodeReview(r) {
         <div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div></div>
       <p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
-      ${files ? `<div class="review-body ${treeOn ? "with-tree" : ""}">${treeOn ? fileTree(d.files, drafts) : ""}<div class="review-diffs">${files}</div></div>`
+      ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
         : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
     </section>
     <section class="section review-submit" id="review-submit"><h2>Your review</h2>
