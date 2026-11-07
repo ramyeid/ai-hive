@@ -53,23 +53,6 @@ bash scripts/install.sh
 
 Then restart the console. Run `scripts/install.sh` again too if you move the folder.
 
-### From a version before `data/`
-
-Earlier versions kept your data in `tasks/`, `knowledge/`, `coach/` and `console/data/`. To upgrade, clone the new
-version into a new folder and copy your data across; the old folder is only read, so you can go back to it.
-
-```bash
-bash ~/old-hive/console/service-stop.sh    # stop the old console (or its service) first
-git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive
-cd ~/hive
-bash scripts/migrate.sh ~/old-hive     # copies tasks, knowledge, coach and console/data into data/
-bash scripts/install.sh                # points the agents and Claude Code's hook at the new folder
-bash scripts/start.sh
-```
-
-`migrate.sh` checks that every copied file is identical to the original. If you run the console as a service,
-point it at `scripts/start.sh` in the new folder.
-
 ## Run on a server
 
 By default the console answers only on the machine it runs on. To open it from your laptop and phone (for example

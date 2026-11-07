@@ -98,7 +98,7 @@ team/           the agents, their process (TEAM.md), your preferences, templates
 backend/        the server (Python, FastAPI): agents, approvals, code review, Slack
 frontend/       the web console (vanilla JS, no build step)
 integrations/   Slack's app manifest
-scripts/        install, start, stop, migrate
+scripts/        install, start, stop
 assets/         logos and icons
 docs/           documentation
 ```

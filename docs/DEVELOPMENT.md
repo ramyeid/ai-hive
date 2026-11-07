@@ -33,7 +33,7 @@ backend/
   tests/                      with fakes/ (a fake Claude and a fake OpenAI-style API)
 frontend/src/               the single-page app (vanilla JS, no build step), served at /static
 integrations/slack/         the Slack app manifest
-scripts/                    install.sh, start.sh, stop.sh, migrate.sh
+scripts/                    install.sh, start.sh, stop.sh
 assets/                     logos and icons, served at /assets
 docs/
 data/                       local only, never committed: tasks/, knowledge/, coach/, console/ (settings, sessions)
