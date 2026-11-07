@@ -1345,6 +1345,8 @@ function markChanges(del, add) {
     else outA.push([a[i++], true]);
   }
   const html = (parts) => {
+    // a lone unchanged character between two changes (a quote, a comma) reads better inside the highlight
+    for (let k = 1; k < parts.length - 1; k++) if (!parts[k][1] && parts[k][0].length === 1 && parts[k - 1][1] && parts[k + 1][1]) parts[k][1] = true;
     let out = "", open = false;
     for (const [t, changed] of parts) {
       const mark = changed && t.trim() !== "" || (changed && open);
