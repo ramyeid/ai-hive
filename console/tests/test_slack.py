@@ -9,13 +9,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server import slack, store
+from server import slack, store, team
 from server.agents import AgentManager
 from server.slack import SlackBridge, to_mrkdwn
 from tests.fake_claude import FakeClient
 from tests.fake_openai import fake_openai_transport
 
-import tasklib  # noqa: E402  (the kit's scripts, on the path via the server)
+import coach as kit_coach  # noqa: E402  (the kit's scripts, on the path via the server)
+import tasklib  # noqa: E402
 
 LEAD, STRANGER, DM = "U0LEAD", "U0OTHER", "D0DM"
 
@@ -111,6 +112,24 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(web.posted), before)
 
+    async def test_an_approval_asked_in_a_conversation_also_shows_outside_the_thread_so_it_notifies(self):
+        bridge, web = await self._a_bridge()
+
+        await self._the_lead_writes(bridge, "Check the repo")
+
+        ask = await self._wait_for(lambda: next((m for m in web.posted if "wants to" in m["text"]), None))
+        self.assertEqual((ask.get("thread_ts"), ask.get("reply_broadcast")), ("1.0", True))
+
+    async def test_new_proposals_from_the_coach_are_announced(self):
+        bridge, web = await self._a_bridge()
+        await bridge.check_proposals()
+        self._a_coach_proposal("P-001")
+
+        await bridge.check_proposals()
+
+        self.assertIn("The Coach has 1 new proposal", web.posted[-1]["text"])
+        self.assertIn("P-001", web.posted[-1]["text"])
+
     def test_markdown_becomes_slack_formatting(self):
         text = to_mrkdwn("## Status\n- **TASK-012** is [ready](http://x/#/tasks/TASK-012/review) <now>")
 
@@ -123,7 +142,8 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(shutil.rmtree, root)
         (root / "tasks" / ".inbox").mkdir(parents=True)
         for module, name, value in ((tasklib, "TASKS", root / "tasks"), (tasklib, "INBOX", root / "tasks" / ".inbox"),
-                                    (store, "SETTINGS", root / "settings.json"), (slack, "STATE", root / "slack.json")):
+                                    (store, "SETTINGS", root / "settings.json"), (slack, "STATE", root / "slack.json"),
+                                    (kit_coach, "PROPOSALS", root / "coach" / "proposals"), (team, "KIT", root)):
             self.addCleanup(setattr, module, name, getattr(module, name))
             setattr(module, name, value)
         store.save_settings({"slack": {"users": LEAD}})
@@ -139,6 +159,10 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         (tasklib.TASKS / "TASK-001-total.md").write_text(
             f"---\nid: TASK-001\ntitle: Total\nstatus: {status}\nproject: /tmp/shop\nbase: main\nbranch: feature-total\n"
             f"from_commit: abc\ndev: dev\nreviewer:\n---\n")
+
+    def _a_coach_proposal(self, pid: str) -> None:
+        kit_coach.PROPOSALS.mkdir(parents=True, exist_ok=True)
+        (kit_coach.PROPOSALS / f"{pid}-x.md").write_text(f"---\nid: {pid}\ntitle: Simpler\nstatus: pending\n---\n\n## Why\nBecause.\n")
 
     async def _the_lead_writes(self, bridge: SlackBridge, text: str, user: str = LEAD) -> None:
         await bridge.on_event({"type": "message", "channel_type": "im", "channel": DM, "user": user, "text": text, "ts": "1.0"})

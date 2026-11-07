@@ -19,7 +19,7 @@ import json
 import os
 import re
 
-from . import board, ops, store
+from . import board, ops, store, team
 
 import tasklib  # noqa: E402  (the kit's scripts, on the path via board)
 from .agents import TEAM_ACTION
@@ -100,6 +100,7 @@ class SlackBridge:
         self.home = ""   # where notifications go: the channel in Settings, or a DM with the first member
         self.listening: dict[str, dict] = {}   # agent -> the Slack thread its next answer goes to
         self.seen: set[str] = set()
+        self.proposals_seen: set[str] | None = None
         self.state = {"threads": {}, "convos": {}, "asks": {}}
         try:
             self.state.update(json.loads(STATE.read_text(encoding="utf-8")))
@@ -140,7 +141,8 @@ class SlackBridge:
             self.error = f"Couldn't connect to Slack: {exc}"
             return
         queue = self.manager.bus.subscribe()   # now, so nothing from here on is missed
-        self.jobs = [asyncio.create_task(self._watch_bus(queue)), asyncio.create_task(self._watch_activity())]
+        self.jobs = [asyncio.create_task(self._watch_bus(queue)), asyncio.create_task(self._watch_activity()),
+                     asyncio.create_task(self._watch_proposals())]
 
     async def stop(self) -> None:
         for job in self.jobs:
@@ -335,7 +337,7 @@ class SlackBridge:
                    _button("Allow for this session", f"perm|{agent}|{pid}|always"),
                    _button("Deny", f"perm|{agent}|{pid}|deny", "danger"),
                    _link("Open the chat", ops.links(agent_id=agent)["chat"])]
-        ts = await self.post(channel, text, thread, buttons)
+        ts = await self.post(channel, self._ping(text), thread, buttons, broadcast=bool(thread))   # a reply alone wouldn't notify
         self.state["asks"][pid] = {"channel": channel, "ts": ts, "text": text}
         self._save()
 
@@ -432,7 +434,32 @@ class SlackBridge:
             return
         text, buttons = message
         thread = await self._thread(task)
-        await self.post(self.home, text, thread, buttons, broadcast=entry.get("to") in LOUD)
+        loud = entry.get("to") in LOUD
+        await self.post(self.home, self._ping(text) if loud else text, thread, buttons, broadcast=loud)
+
+    def _ping(self, text: str) -> str:
+        """In a channel, mention the people on the list so it notifies them (a direct message always does)."""
+        if self.home.startswith("D") or not self.cfg.get("users"):
+            return text
+        return " ".join(f"<@{u}>" for u in self.cfg["users"]) + " " + text
+
+    async def _watch_proposals(self) -> None:
+        while True:
+            try:
+                await self.check_proposals()
+            except Exception as exc:
+                self.error = f"Couldn't check the Coach's proposals: {exc}"
+            await asyncio.sleep(15)
+
+    async def check_proposals(self) -> None:
+        """Tell the lead when the Coach has new proposals waiting (the first check only notes what's there)."""
+        pending = {p["id"] for p in team.proposals() if p["status"] == "pending"}
+        new = sorted(pending - self.proposals_seen) if self.proposals_seen is not None else []
+        self.proposals_seen = pending
+        if new and self.home:
+            await self.post(self.home, self._ping(f"🧭 The Coach has {len(new)} new proposal{'s' if len(new) > 1 else ''} "
+                                                  f"to improve the team's instructions ({', '.join(new)}). Approve, edit or reject them."),
+                            buttons=[_link("See proposals", ops.links()["console"] + "#/improvements")])
 
     async def _thread(self, task: dict) -> str:
         found = self.state["threads"].get(task["id"])
