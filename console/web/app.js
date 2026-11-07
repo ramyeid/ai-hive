@@ -888,18 +888,64 @@ function placePosted(files, rounds, head) {
   return placed;
 }
 
-function diffFile(f, drafts, shown, posted = new Map(), dev = "") {
+// How you read diffs: "unified" (one column) or "split" (side by side), remembered in this browser.
+function reviewLayout() {
+  try { return localStorage.getItem("reviewLayout") || (innerWidth < 900 ? "unified" : "split"); } catch { return "unified"; }
+}
+
+// One line of code as a cell you can comment on: the anchor holds where it is and its text.
+function codeCell(f, l, side, kind) {
+  const line = side === "old" ? l.o : l.n;
+  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${esc(l.s)}</td>`;
+}
+
+// Lines of a hunk side by side: unchanged lines on both sides, removed lines next to the lines that replaced them.
+function pairUp(lines) {
   const rows = [];
-  for (const h of f.hunks) {
-    rows.push(`<tr class="hunk"><td colspan="3">${esc(h.header)}</td></tr>`);
-    for (const l of h.lines) {
-      const side = l.t === "-" ? "old" : "new", line = side === "old" ? l.o : l.n, key = lineKey(f.path, side, line);
+  let dels = [], adds = [];
+  const flush = () => {
+    for (let i = 0; i < Math.max(dels.length, adds.length); i++) rows.push({ o: dels[i] || null, n: adds[i] || null });
+    dels = []; adds = [];
+  };
+  for (const l of lines) {
+    if (l.t === "-") dels.push(l);
+    else if (l.t === "+") adds.push(l);
+    else { flush(); rows.push({ o: l, n: l, ctx: true }); }
+  }
+  flush();
+  return rows;
+}
+
+function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unified") {
+  const rows = [], cols = layout === "split" ? 4 : 3;
+  const comments = (keys) => {
+    for (const key of keys) {
       shown.add(key);
-      rows.push(`<tr class="${l.t === "+" ? "add" : l.t === "-" ? "del" : "ctx"}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}">
-        <td class="ln">${l.o ?? ""}</td><td class="ln">${l.n ?? ""}</td>
-        <td class="code"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${esc(l.s)}</td></tr>`);
-      for (const { c, r } of posted.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="3">${postedCard(c, r, dev)}</td></tr>`);
-      for (const c of drafts.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="3">${draftCard(c)}</td></tr>`);
+      for (const { c, r } of posted.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="${cols}">${postedCard(c, r, dev)}</td></tr>`);
+      for (const c of drafts.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="${cols}">${draftCard(c)}</td></tr>`);
+    }
+  };
+  for (const h of f.hunks) {
+    rows.push(`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`);
+    if (layout === "split") {
+      for (const p of pairUp(h.lines)) {
+        if (p.ctx) {   // an unchanged line is commented on as the new code, like in the unified view
+          rows.push(`<tr class="ctx"><td class="ln">${p.o.o}</td>${codeCell(f, p.o, "new", "ctx")}<td class="ln">${p.n.n}</td>${codeCell(f, p.n, "new", "ctx")}</tr>`);
+          comments([lineKey(f.path, "new", p.n.n)]);
+          continue;
+        }
+        const left = p.o ? `<td class="ln del">${p.o.o}</td>${codeCell(f, p.o, "old", "del")}` : `<td class="ln blank"></td><td class="code blank"></td>`;
+        const right = p.n ? `<td class="ln add">${p.n.n}</td>${codeCell(f, p.n, "new", "add")}` : `<td class="ln blank"></td><td class="code blank"></td>`;
+        rows.push(`<tr>${left}${right}</tr>`);
+        comments([...(p.o ? [lineKey(f.path, "old", p.o.o)] : []), ...(p.n ? [lineKey(f.path, "new", p.n.n)] : [])]);
+      }
+      continue;
+    }
+    for (const l of h.lines) {
+      const side = l.t === "-" ? "old" : "new", line = side === "old" ? l.o : l.n;
+      const kind = l.t === "+" ? "add" : l.t === "-" ? "del" : "ctx";
+      rows.push(`<tr class="${kind}"><td class="ln">${l.o ?? ""}</td><td class="ln">${l.n ?? ""}</td>${codeCell(f, l, side, kind)}</tr>`);
+      comments([lineKey(f.path, side, line)]);
     }
   }
   const changed = f.additions + f.deletions;
@@ -907,8 +953,9 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "") {
   return `<details class="review-file" ${changed > 400 ? "" : "open"}>
     <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></summary>
-    ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff">
-      <colgroup><col class="ln"><col class="ln"><col></colgroup><tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
+    ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
+      <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>
+      <tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
   </details>`;
 }
 
@@ -935,7 +982,8 @@ async function CodeReview(r) {
   }
   const shown = new Set();
   const posted = placePosted(d.files, d.rounds, d.head);
-  const files = d.files.map((f) => diffFile(f, drafts, shown, posted, d.dev)).join("");
+  const layout = reviewLayout();
+  const files = d.files.map((f) => diffFile(f, drafts, shown, posted, d.dev, layout)).join("");
   const elsewhere = d.pending.filter((c) => !c.file || !c.line || !shown.has(lineKey(c.file, c.side, c.line)));
   const adds = d.files.reduce((n, f) => n + f.additions, 0), dels = d.files.reduce((n, f) => n + f.deletions, 0);
   const tabs = REVIEW_VIEWS.map(([v, label]) => {
@@ -951,7 +999,9 @@ async function CodeReview(r) {
     ${d.rounds.length ? `<section class="section"><h2>Your earlier reviews</h2>${d.rounds.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
       : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("")}</section>` : ""}
     <section class="section">
-      <nav class="tabs" aria-label="What to compare">${tabs}</nav>
+      <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
+        <div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
+          `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div></div>
       <p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
       ${files || `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
     </section>
@@ -970,11 +1020,13 @@ async function CodeReview(r) {
 }
 
 // Up to three lines ending at this one, on the same side, as the comment's code context.
-function codeAbove(row) {
-  const lines = [row.dataset.s];
-  let prev = row.previousElementSibling;
+function codeAbove(cell) {
+  const side = cell.dataset.side, lines = [cell.dataset.s];
+  let prev = cell.closest("tr").previousElementSibling;
   while (prev && lines.length < 3 && !prev.classList.contains("hunk")) {
-    if (prev.dataset.side === row.dataset.side || prev.classList.contains("ctx")) lines.unshift(prev.dataset.s);
+    // the cell on the same side of that row (side by side), or that row's line if it's on this side (unified)
+    const pick = [...prev.querySelectorAll("td.code[data-s]")].find((c) => c.dataset.side === side || c.classList.contains("ctx"));
+    if (pick) lines.unshift(pick.dataset.s);
     prev = prev.previousElementSibling;
   }
   return lines.join("\n");
@@ -996,13 +1048,18 @@ async function pingDev(dev, taskId) {
 }
 
 const reviewActions = {
+  "review-layout": (el) => {
+    try { localStorage.setItem("reviewLayout", el.dataset.layout); } catch { /* remembered for this page only */ }
+    render(true);
+  },
   "comment-line": (el) => {
+    const cell = el.closest("td");
     const row = el.closest("tr");
     let after = row;
     while (after.nextElementSibling?.classList.contains("comment-row")) after = after.nextElementSibling;
     if (after.nextElementSibling?.classList.contains("comment-form-row")) return after.nextElementSibling.querySelector("textarea").focus();
-    after.insertAdjacentHTML("afterend", `<tr class="comment-form-row"><td colspan="3"><form class="comment-form">
-      <textarea rows="3" aria-label="Your comment on line ${row.dataset.line}" placeholder="What should change here, and why?"></textarea>
+    after.insertAdjacentHTML("afterend", `<tr class="comment-form-row"><td colspan="${row.cells.length}"><form class="comment-form">
+      <textarea rows="3" aria-label="Your comment on line ${cell.dataset.line}" placeholder="What should change here, and why?"></textarea>
       <div class="btn-row"><button class="btn small primary" type="submit">Add comment</button><button class="btn small" type="button" data-action="cancel-comment">Cancel</button></div></form></td></tr>`);
     const form = after.nextElementSibling.querySelector("form");
     const text = form.querySelector("textarea");
@@ -1011,7 +1068,7 @@ const reviewActions = {
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       if (!text.value.trim()) return text.focus();
-      const saved = await saveDraft({ body: text.value, file: row.dataset.file, line: Number(row.dataset.line), side: row.dataset.side, code: codeAbove(row) });
+      const saved = await saveDraft({ body: text.value, file: cell.dataset.file, line: Number(cell.dataset.line), side: cell.dataset.side, code: codeAbove(cell) });
       if (saved) render(true);
     });
   },
