@@ -284,7 +284,7 @@ function renderCrumb(r) {
     task: [link("#/tasks", "Board"), r.id], review: [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Code review"],
     "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
     agent: [state.agents[r.id] ? ({ orchestrator: "Orchestrator", coach: "Coach" }[roleOf(r.id)] || "Team") : "Agents", state.agents[r.id] ? nameOf(r.id) : r.id],
-    settings: ["Settings"], terminal: ["Terminal"], improvements: ["Coach", "Improvements"], team: ["Coach", "Team history"],
+    settings: r.id ? [link("#/settings", "Settings"), ...(r.sub ? [link(`#/settings/${r.id}`, (SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]), r.sub[0].toUpperCase() + r.sub.slice(1)] : [(SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]])] : ["Settings"], terminal: ["Terminal"], improvements: ["Coach", "Improvements"], team: ["Coach", "Team history"],
     "team-change": ["Coach", link("#/team", "Team history"), "Change"], "team-files": ["Coach", link("#/team", "Team history"), "Files"],
     knowledge: ["Library", "Knowledge"], "knowledge-file": ["Library", link("#/knowledge", "Knowledge"), r.id],
   }[r.page] || [];
@@ -1054,23 +1054,41 @@ async function SessionView(r) {
 
 // ---- settings -----------------------------------------------------------------
 
-const SETTINGS_SECTIONS = [["team", "Team"], ["models", "Models & keys"], ["slack", "Slack"], ["access", "Access & links"],
+const SETTINGS_SECTIONS = [["team", "Team"], ["models", "Models & keys"], ["integrations", "Integrations"], ["access", "Access & links"],
   ["workspace", "Workspace"], ["appearance", "Appearance"], ["about", "About"]];
 
 async function Settings(r) {
   await loadState();
+  if (r.id === "slack") { location.replace("#/settings/integrations/slack"); return null; }   // old link
   const section = SETTINGS_SECTIONS.some(([k]) => k === r.id) ? r.id : "team";
   const live = await api("/api/slack").catch(() => ({}));
   const keys = state.settings.providers.filter((p) => p.engine !== "claude" && p.has_key).length;
   const hint = { team: `${agentIds().length} agents`, models: keys ? `${keys} key${keys > 1 ? "s" : ""}` : "",
-    slack: live.connected ? `<span class="ok">● Connected</span>` : live.error ? `<span class="bad">● Error</span>` : "" };
+    integrations: live.connected ? `<span class="ok">● Slack</span>` : live.error ? `<span class="bad">● Slack</span>` : "" };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
-  const body = await { team: teamSection, models: modelsSection, slack: slackSection, access: accessSection, workspace: workspaceSection,
-    appearance: appearanceSection, about: aboutSection }[section](live);
+  const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
+    : await { team: teamSection, models: modelsSection, integrations: integrationsSection, access: accessSection, workspace: workspaceSection,
+      appearance: appearanceSection, about: aboutSection }[section](live);
   return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
 }
 
 const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}</h1>${text ? `<p>${text}</p>` : ""}</div></div>`;
+
+// The apps Hive connects to. Slack today; each new one gets a card here and its own page.
+const INTEGRATIONS = [
+  { id: "slack", name: "Slack", icon: "slack", text: "Talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in a thread." },
+];
+
+function integrationsSection(live) {
+  const status = (id) => id === "slack"
+    ? (live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>` : live.error ? `<span class="slack-status bad"><span class="dot"></span>Error</span>` : `<span class="slack-status"><span class="dot"></span>Not connected</span>`)
+    : "";
+  return settingsHead("Integrations", "The apps Hive works with. More will appear here.")
+    + `<div class="integrations">${INTEGRATIONS.map((i) => `<a class="integration" href="#/settings/integrations/${i.id}">
+        <span class="int-icon ${i.icon}" aria-hidden="true">${i.name.slice(0, 1)}</span>
+        <span class="int-body"><b>${esc(i.name)}</b>${status(i.id)}<small>${esc(i.text)}</small></span>
+        <span class="btn small">${i.id === "slack" && live.connected ? "Manage" : "Set up"}</span></a>`).join("")}</div>`;
+}
 
 async function modelsSection() {
   const seen = (await api("/api/costs")).models.filter((m) => m.provider !== "claude").map((m) => m.model);
@@ -1099,7 +1117,7 @@ async function accessSection() {
       <dl class="facts"><dt>Reached at</dt><dd>${remote ? `This machine, and ${a.hosts.map((h) => `<code>${esc(h)}</code>`).join(", ")} with a password` : "This machine only (<code>localhost</code>)"}</dd>
         <dt>Password</dt><dd>${remote ? (a.password ? "Set: each browser signs in once (30 days)" : "Missing") : "Not needed"}</dd>
         <dt>Terminal page</dt><dd>${a.terminal ? "On: anyone who can open the console gets a shell on this machine" : "Off"}</dd></dl>
-      <p class="hint">These are server settings: <code>HOST</code>, <code>CONSOLE_HOSTS</code>, <code>CONSOLE_PASSWORD</code> and <code>ENABLE_TERMINAL</code> when you start the console. See <code>console/README.md</code>, "Opening it from other machines".</p></section>`;
+      <p class="hint">These are server settings: <code>HOST</code>, <code>CONSOLE_HOSTS</code>, <code>CONSOLE_PASSWORD</code> and <code>ENABLE_TERMINAL</code> when you start the console. See <code>docs/INSTALL.md</code>, "Run on a server".</p></section>`;
 }
 
 function workspaceSection() {
@@ -1129,7 +1147,7 @@ async function aboutSection() {
       <dt>Version</dt><dd>${a.commit ? `<code>${esc(a.commit)}</code> on <code>${esc(a.branch)}</code>, ${esc(ago(a.date))}: ${esc(a.subject)}` : "Not a git repository"}</dd>
       ${a.commit ? `<dt>Not pushed</dt><dd>${a.ahead === null ? "No upstream branch" : a.ahead ? `${a.ahead} commit${a.ahead > 1 ? "s" : ""}` : "Nothing: up to date with the remote"}${a.dirty ? ", plus uncommitted changes" : ""}</dd>` : ""}
       <dt>Kit</dt><dd><code>${esc(a.kit)}</code></dd>
-      <dt>Read more</dt><dd><code>README.md</code> (the kit), <code>console/README.md</code> (this console), <code>TEAM.md</code> and <code>PREFERENCES.md</code> (how the team works)</dd></dl>`;
+      <dt>Documentation</dt><dd><code>README.md</code>, and in <code>docs/</code>: <code>INSTALL.md</code>, <code>USAGE.md</code>, <code>CONSOLE.md</code>, <code>DEVELOPMENT.md</code>. The team's process: <code>TEAM.md</code> and <code>PREFERENCES.md</code></dd></dl>`;
 }
 
 async function linksSection() {
@@ -1156,7 +1174,7 @@ async function slackSection(live) {
   const state_ = live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>`
     : live.error ? `<span class="slack-status bad"><span class="dot"></span>${esc(live.error)}</span>`
     : `<span class="slack-status"><span class="dot"></span>Not connected</span>`;
-  return settingsHead("Slack", "") + `<section>
+  return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Slack</p>` + settingsHead("Slack", "") + `<section>
     <p style="max-width:68ch">${state_} ${live.connected ? `<button class="btn small" data-action="slack-test">Send a test message</button>` : ""}</p>
     <p class="muted" style="max-width:68ch">Talk to the Orchestrator (or any agent: start with its name, "Nabil: …") by messaging the app, approve agents' requests with buttons, and follow each task in a thread with buttons for what's next. The console connects out to Slack, so it works from your laptop or a server behind a VPN, with nothing exposed. One Slack app per running console.</p>
     <details ${live.connected ? "" : "open"}><summary>How to set it up (5 minutes)</summary><ol class="setup-steps">

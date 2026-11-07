@@ -3,7 +3,7 @@
 # Then: Basic Information → App-Level Tokens → Generate (scope connections:write) → the xapp-… token;
 #       Install App → Install to Workspace → the xoxb-… bot token. Paste both in the console's Settings → Slack.
 display_information:
-  name: Team Console
+  name: AI Hive Team Console
   description: Talk to your agent team (Orchestrator, Tech Lead, Dev, Reviewer, Coach) and approve their requests.
   background_color: "#18202a"
 features:
@@ -12,7 +12,7 @@ features:
     messages_tab_enabled: true
     messages_tab_read_only_enabled: false
   bot_user:
-    display_name: Team Console
+    display_name: AI Hive Team Console
     always_online: true
 oauth_config:
   scopes:

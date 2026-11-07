@@ -715,3 +715,12 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .tabs a[aria-current="page"] { border-bottom-color: var(--role, var(--brand)); }
 .feed li { grid-template-columns: 64px 26px minmax(0, 1fr); }
 .avatar.you { background: var(--ink); color: var(--panel); font-size: 0.6rem; }
+.integrations { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.integration { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); text-decoration: none; }
+.integration:hover { border-color: color-mix(in srgb, var(--brand) 50%, var(--rule)); }
+.int-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: #4a154b; color: #fff; font-weight: 700; }
+.int-body { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.int-body .slack-status { font-size: 0.8rem; }
+.int-body small { color: var(--muted); font-size: 0.82rem; }
+.sub-crumb { margin: 0 0 6px; color: var(--muted); font-size: 0.85rem; }
+.sub-crumb a { color: var(--muted); }
