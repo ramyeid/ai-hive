@@ -22,7 +22,7 @@ bash ~/team-agents/install.sh
 
 `install.sh` puts the agents and the `/board` and `/ship` commands into `~/.claude/`, and adds the task
 hook to `~/.claude/settings.json`. Your existing settings are kept, and a backup is saved as `settings.json.bak`.
-It overwrites any personal agents or commands with the same names (`techlead`, `dev`, `reviewer`, `coach`, `board`, `ship`).
+It overwrites any personal agents or commands with the same names (`orchestrator`, `techlead`, `dev`, `reviewer`, `coach`, `board`, `ship`).
 
 **Updating:** `git pull`, then run `install.sh` again. Do the same if you move the folder.
 
@@ -123,16 +123,22 @@ chat header. Names are only for you: scripts and task files use the IDs.
 `bash console/start.sh` opens the **Team Console** at http://127.0.0.1:8420: chat with each agent,
 approve their actions, start and stop them, and see tasks, inboxes and history. See `console/README.md`.
 
+In the console, the **Orchestrator** runs the team for you: ask it where things stand and it answers with links
+(a task, its code review); ask it to start an agent, hand a task on, pass a message or start the Coach, and it
+does so once you press **Allow**. Connect **Slack** (Settings → Slack) to do all of this from Slack, including
+Allow / Deny buttons and a thread per task with "Review the diff" / "Hand to …" buttons. It works the same with
+the console on your laptop or on a server behind a VPN.
+
 ## What lives where
 
 ```
 team-agents/              ← this repository: the only copy of the agents and rules
 ├── TEAM.md               how the team works: lifecycle, branches, hand-offs
 ├── PREFERENCES.md        how you want things built; every agent follows it
-├── agents/               techlead.md · dev.md · reviewer.md · coach.md   (installed into ~/.claude/agents)
+├── agents/               orchestrator.md · techlead.md · dev.md · reviewer.md · coach.md   (installed into ~/.claude/agents)
 ├── commands/             board.md · ship.md             (installed into ~/.claude/commands)
 ├── templates/            TASK.md (task spec) · KNOWLEDGE_*.md (knowledge files) · PROPOSAL.md (Coach)
-├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · coach · on_task_change …
+├── scripts/              new_task · claim · inbox · board · check_ready · knowledge · coach · lead_review · orchestrate · on_task_change …
 ├── tasks/                ← your board: TASK-*.md for all projects + BOARD.md; reviews/ = your code reviews (not committed)
 ├── knowledge/            ← the Tech Lead's memory: one folder per repository it has worked on (not committed)
 ├── coach/                ← the Coach's evidence and proposals (not committed)

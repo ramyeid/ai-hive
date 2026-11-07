@@ -16,6 +16,7 @@
   --dev: #0e7c66;
   --reviewer: #a85a08;
   --coach: #8b3a8f;
+  --orchestrator: #2f6b9a;
   --lead: #16202a;
   --attention: #b4236b;
   --danger: #b42318;
@@ -23,6 +24,7 @@
   --dev-soft: #ddf1ec;
   --reviewer-soft: #f7ead9;
   --coach-soft: #f4e4f4;
+  --orchestrator-soft: #e0ecf5;
   --lead-soft: #e3e7eb;
   --attention-soft: #fae3ee;
   --focus: #4453c9;
@@ -44,6 +46,7 @@
     --dev: #4cc3a4;
     --reviewer: #e2a457;
     --coach: #d690d9;
+    --orchestrator: #84b9e2;
     --lead: #e6eaee;
     --attention: #f06aa8;
     --danger: #f97066;
@@ -51,6 +54,7 @@
     --dev-soft: #173a33;
     --reviewer-soft: #3d2c16;
     --coach-soft: #3a2139;
+    --orchestrator-soft: #1d3346;
     --lead-soft: #26303a;
     --attention-soft: #4a1d33;
     --focus: #939df4;
@@ -77,6 +81,7 @@ code, pre { font-family: var(--mono); font-size: 0.86em; }
 .dev { --role: var(--dev); --role-soft: var(--dev-soft); }
 .reviewer { --role: var(--reviewer); --role-soft: var(--reviewer-soft); }
 .coach { --role: var(--coach); --role-soft: var(--coach-soft); }
+.orchestrator { --role: var(--orchestrator); --role-soft: var(--orchestrator-soft); }
 .lead { --role: var(--lead); --role-soft: var(--lead-soft); }
 
 /* ---- shell --------------------------------------------------------------- */
@@ -371,6 +376,12 @@ form.provider input { width: 100%; flex: none; }
 .review-submit .drafts { margin-bottom: 14px; }
 .review-submit label { display: block; font-weight: 500; }
 .review-submit .general { margin-bottom: 16px; }
+.slack-status { display: inline-flex; align-items: center; gap: 6px; }
+.slack-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.slack-status.on .dot { background: var(--dev); }
+.slack-status.bad .dot { background: var(--attention); }
+.setup-steps { max-width: 72ch; padding-left: 1.3em; }
+.setup-steps li + li { margin-top: 6px; }
 .older-round > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 @media (max-width: 720px) {
   .code-diff col.ln { width: 2.6em; }

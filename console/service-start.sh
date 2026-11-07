@@ -21,7 +21,7 @@ for _ in $(seq 1 90); do
     exit 1
   fi
   if grep -q "Uvicorn running on" service.log 2>/dev/null; then
-    echo "Console running in the background (pid $(cat service.pid)) → http://127.0.0.1:$PORT"
+    echo "Console running in the background (pid $(cat service.pid)) → ${CONSOLE_URL:-http://127.0.0.1:$PORT}"
     echo "Log: $(pwd)/service.log   Stop: bash service-stop.sh"
     if [ "${ENABLE_TERMINAL:-1}" = "0" ]; then echo "Terminal page: off"
     else echo "Terminal page: on (anyone who can open the console gets a shell here; ENABLE_TERMINAL=0 turns it off)"; fi

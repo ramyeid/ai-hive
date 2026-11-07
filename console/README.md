@@ -38,6 +38,7 @@ Requirements:
 | Page | What it's for |
 |------|---------------|
 | **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
+| **Orchestrator** | Your assistant for running the team. Ask where things stand ("what's waiting on me?") and get links to the right page; ask it to start or stop agents, hand a task to someone, pass a message on, or start the Coach. Each of those waits for your **Allow** (here or in Slack). |
 | **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
 | **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. Under **Who worked on it**, each agent's conversation on the task (who, when, the hand-off, cost), for debugging. |
 | **Code review** (a task's **Review the code**) | The branch's diff, like a pull request: the whole feature, this task's commits, or what changed since your last review. Comment on lines or on the whole change, then request changes (back to the dev who built it, who answers each comment) or approve. Your earlier rounds show with the dev's replies. |
@@ -46,7 +47,51 @@ Requirements:
 | **History** | Every past conversation. Read it, or continue it where it left off. |
 | **Improvements** | Start a review with the Coach, and approve, edit or reject what it proposes: each proposal shows the exact change, why, and the tasks behind it. |
 | **Team history** | Every change to the team's instructions, newest first: who (the Coach or a person), when, why, and the diff. Read the team as it was at any change, or undo one. |
-| **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). Provider keys and model prices. |
+| **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). The console's address (for links), Slack, provider keys and model prices. |
+
+## The Orchestrator and Slack
+
+The **Orchestrator** runs the team for you, through you. It reads the board and answers in a few lines with links
+(a task, its code review, an agent's chat). It can start and stop agents, hand a task to an agent, pass your
+message to one, and start the Coach, using `scripts/orchestrate.py`, and **every one of those actions waits for
+your Allow**. Nothing is handed on automatically: you decide, or the Orchestrator proposes and you approve.
+It runs in the console only (it gets its key to the console from it), not from a terminal.
+
+**Slack** (Settings → Slack, setup steps there; the app manifest is `console/slack-app.yml`):
+- Message the app: the Orchestrator answers in the thread. Start with a name to talk to that agent instead
+  ("Nabil: keep the old route working"); keep replying in the thread to keep talking to whoever answered.
+- Agents' approval requests come with **Allow / Allow for this session / Deny** buttons. The console shows them too;
+  whichever you answer first counts.
+- Every task gets a thread. Each hand-off is posted in it with buttons for what's next: **Review the diff** (your
+  code review page), **Hand to Wael (Reviewer)**, **Hand back to Nabil (Dev)**… An agent you hand a task to from
+  Slack posts its summary in that thread when it's done.
+- Only the Slack members you list can talk to it or press buttons.
+
+It uses Socket Mode: the console connects out to Slack, so the same setup works on your laptop and on a server
+behind a VPN, with nothing exposed. On a server you can give the tokens as `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`,
+`SLACK_USERS` and `SLACK_CHANNEL` instead. Use **one Slack app per running console** (one for your laptop, one for
+the server): two consoles on the same app would each get only some of the messages.
+
+**Links** use the address in Settings → **Console address** (or `CONSOLE_URL` on the server). On a server behind
+your VPN, set it to the address you open it with, and links from Slack open on your laptop and on your phone
+(when it's on the VPN).
+
+## Opening it from other machines
+
+By default the console answers only on this machine (http://localhost:8420). On a server you open from your
+laptop and phone, either:
+
+- keep it on 127.0.0.1 behind your own reverse proxy (nginx) with its own login or IP allowlist (requests then
+  arrive as local, so the console doesn't ask for a password); or
+- let the console answer on the network itself, with a password each browser signs in with once (30 days):
+
+```bash
+HOST=0.0.0.0 CONSOLE_HOSTS=hive.internal.example.com CONSOLE_PASSWORD='a long password' \
+  CONSOLE_URL=http://hive.internal.example.com:8420 bash console/service-start.sh
+```
+
+`CONSOLE_HOSTS` lists the names people type to reach it; any other name is refused. The console won't start with
+`CONSOLE_HOSTS` and no `CONSOLE_PASSWORD`. Use HTTPS in front of it if your network isn't trusted.
 
 ## Conversations per task, and no more /clear
 
@@ -76,7 +121,7 @@ browser tab (or type `exit`).
 
 **Anyone who can open the console can run any command on that machine.** Keep the console itself
 protected: on your own laptop it only listens on 127.0.0.1; on a server, keep it behind your login and
-IP allowlist, or turn the terminal off. Like every other request, the terminal needs the key that only the page the
+IP allowlist or the console's password (see "Opening it from other machines"), or turn the terminal off. Like every other request, the terminal needs the key that only the page the
 console serves knows, and it refuses requests made for any other host name.
 
 Behind nginx, add these lines to the `location` block so the terminal's WebSocket gets through:

@@ -9,13 +9,14 @@ import json
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, Form, HTTPException, Request, WebSocket
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import board, chats, costs, store, team, terminal
-from .agents import AgentManager
+from . import access, board, chats, costs, ops, store, team, terminal
+from .agents import ORCHESTRATOR_KEY, TEAM_ACTION, AgentManager
+from .slack import SlackBridge
 from .engines import PROVIDERS
 from .store import CONSOLE
 
@@ -23,8 +24,8 @@ import lead_review  # noqa: E402  (kit scripts are on sys.path via board)
 import migrate  # noqa: E402
 
 TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
-LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 WEB = CONSOLE / "web"
+APPROVAL_WAIT = 100   # seconds an Orchestrator request waits for the lead before answering "still waiting"
 
 
 # ---- request bodies ---------------------------------------------------------------
@@ -74,6 +75,24 @@ class ReviewSubmit(BaseModel):
     mode: str = "feature"   # the view the lead reviewed: feature | task | since
 
 
+class TeamAction(BaseModel):
+    action: str             # start | stop | tell | hand | coach
+    agent: str = ""         # id or name
+    task: str = ""
+    text: str = ""          # tell: the message; hand: a note for the agent; coach: what to review
+
+
+class SlackBody(BaseModel):
+    bot_token: str | None = None    # None = keep, "" = remove
+    app_token: str | None = None
+    users: str | None = None        # Slack member IDs allowed to use it, comma-separated
+    channel: str | None = None      # "" = direct messages to the first user
+
+
+class ConsoleUrlBody(BaseModel):
+    console_url: str
+
+
 class NameBody(BaseModel):
     name: str
 
@@ -98,34 +117,63 @@ def public_settings() -> dict:
     settings = store.load_settings()
     settings.pop("providers", None)
     settings["providers"] = store.public_providers(PROVIDERS)
+    settings["slack"] = store.public_slack()
+    settings["console_url_effective"] = ops.console_url()
     return settings
 
 
-def create_app(manager: AgentManager | None = None) -> FastAPI:
+def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | None = None) -> FastAPI:
     migrate.main()   # upgrade data from older versions of the kit (safe to repeat)
+    access.check_config()
     manager = manager or AgentManager()
+    slack = slack_bridge or SlackBridge(manager)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         watcher = asyncio.create_task(_watch_board(manager))
+        await slack.start()
         yield
         watcher.cancel()
+        await slack.stop()
         await manager.stop_all()
 
     app = FastAPI(title="Agent Team Console", lifespan=lifespan)
     app.state.manager = manager
 
     @app.middleware("http")
-    async def local_only(request: Request, call_next):
-        # Blocks other websites from driving your agents (DNS rebinding / CSRF).
+    async def guard(request: Request, call_next):
+        # Only the host names you allow (blocks DNS rebinding); other machines sign in first (see access.py);
+        # every API call carries the page's key (blocks other websites driving your agents).
         host = (request.headers.get("host") or "").split(":")[0]
-        if host not in LOCAL_HOSTS:
-            return JSONResponse({"detail": "Local access only."}, status_code=403)
-        if request.url.path.startswith("/api/"):
+        path = request.url.path
+        if not access.allowed(host):
+            return JSONResponse({"detail": "This console doesn't answer to that address."}, status_code=403)
+        if path.startswith("/api/orchestrator/"):   # the Orchestrator's own key, from this machine only
+            key = request.headers.get("x-orchestrator") or ""
+            if not access.is_local(host) or not secrets.compare_digest(key, ORCHESTRATOR_KEY):
+                return JSONResponse({"detail": "Only the Orchestrator, on this machine."}, status_code=401)
+            return await call_next(request)
+        if not access.is_local(host) and not access.signed_in(request.cookies) and path != "/login":
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Sign in again: reload the page."}, status_code=401)
+            return HTMLResponse(access.login_page(), status_code=200)
+        if path.startswith("/api/"):
             token = request.headers.get("x-token") or request.query_params.get("token")
             if not secrets.compare_digest(token or "", TOKEN):
                 return JSONResponse({"detail": "Reload the page."}, status_code=401)
         return await call_next(request)
+
+    @app.post("/login")
+    async def login(request: Request, password: str = Form(""), next: str = Form("")):
+        if not access.password_ok(password):
+            await asyncio.sleep(1)   # slows down guessing
+            return HTMLResponse(access.login_page("That's not the password."), status_code=401)
+        target = "/" + (next if next.startswith("#/") else "")
+        response = RedirectResponse(target, status_code=303)
+        secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+        response.set_cookie(access.COOKIE, access.session_value(), max_age=access.MAX_AGE,
+                            httponly=True, samesite="lax", secure=secure)
+        return response
 
     def runner(name: str):
         if name not in manager.agents:
@@ -212,7 +260,8 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
     async def terminal_socket(ws: WebSocket):
         # The HTTP middleware doesn't cover WebSockets, so the same checks happen here:
         # local host only, and the page's key (sent as the first message).
-        if (ws.headers.get("host") or "").split(":")[0] not in LOCAL_HOSTS:
+        host = (ws.headers.get("host") or "").split(":")[0]
+        if not access.allowed(host) or not (access.is_local(host) or access.signed_in(ws.cookies)):
             await ws.close(code=4403)
             return
         await terminal.session(ws, lambda token: secrets.compare_digest(token or "", TOKEN),
@@ -429,6 +478,97 @@ def create_app(manager: AgentManager | None = None) -> FastAPI:
         done = reviewing(lead_review.submit, task_id, body.verdict, body.summary, body.mode)
         manager.bus.publish({"kind": "board"})
         return done
+
+    # ---- the Orchestrator's view of the team and its actions (each one approved by the lead) ----
+
+    def _ops(fn, *args):
+        try:
+            return fn(*args)
+        except ops.OpsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.get("/api/orchestrator/status")
+    def orchestrator_status():
+        return ops.status(manager)
+
+    @app.get("/api/orchestrator/tasks/{task_id}")
+    def orchestrator_task(task_id: str):
+        return _ops(ops.task, task_id)
+
+    def _plan(body: TeamAction):
+        """Check the action can happen now, and describe it for the lead's approval."""
+        act = body.action
+        if act == "coach":
+            return f"Start a Coach review ({body.text or 'since its last review'})", lambda: ops.coach(manager, body.text)
+        agent = _ops(ops.find_agent, body.agent)
+        if act == "start":
+            return f"Start {ops.label(agent)}", lambda: ops.start(manager, agent)
+        if act == "stop":
+            return f"Stop {ops.label(agent)}", lambda: ops.stop(manager, agent)
+        if act == "tell":
+            if not body.text.strip():
+                raise HTTPException(409, "The message is empty.")
+            return (f"Send {ops.label(agent)} this message:\n\n{body.text.strip()}",
+                    lambda: ops.tell(manager, agent, body.text))
+        if act == "hand":
+            t = _ops(ops.check_hand, manager, body.task, agent)
+            note = f"\n\nWith this note: {body.text.strip()}" if body.text.strip() else ""
+            return (f"Hand {t['id']} ({t['title']}) to {ops.label(agent)}{note}",
+                    lambda: ops.hand(manager, t["id"], agent, body.text))
+        raise HTTPException(400, "Actions: start, stop, tell, hand, coach.")
+
+    @app.post("/api/orchestrator/act")
+    async def orchestrator_act(body: TeamAction):
+        summary, do = _plan(body)
+        orchestrator = next((r for r in manager.agents.values() if r.role == "orchestrator"), None)
+        if not orchestrator:
+            raise HTTPException(409, "There's no Orchestrator on the team.")
+
+        async def approve_then_do():
+            allowed, message = await orchestrator.ask(TEAM_ACTION, {"summary": summary, "action": body.action})
+            if not allowed:
+                return {"done": False, "message": f"The lead said no{': ' + message if message else '.'}"}
+            try:
+                return {"done": True, "message": await do()}
+            except ops.OpsError as exc:
+                return {"done": False, "message": str(exc)}
+
+        job = asyncio.create_task(approve_then_do())   # carries on if the lead answers after the reply below
+        try:
+            return await asyncio.wait_for(asyncio.shield(job), APPROVAL_WAIT)
+        except asyncio.TimeoutError:
+            return {"done": False, "waiting": True,
+                    "message": "Waiting for the lead's approval (in the console or Slack). It will happen once they approve."}
+
+    # ---- links, and the Slack connection ----------------------------------------------------
+
+    @app.put("/api/settings/console-url")
+    async def save_console_url(body: ConsoleUrlBody):
+        try:
+            store.save_settings({"console_url": body.console_url})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        return public_settings()
+
+    @app.put("/api/settings/slack")
+    async def save_slack(body: SlackBody):
+        try:
+            store.save_settings({"slack": body.model_dump(exclude_none=True)})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        await slack.restart()
+        return public_settings()
+
+    @app.get("/api/slack")
+    async def slack_status():
+        return slack.status()
+
+    @app.post("/api/tasks/{task_id}/hand/{agent}")
+    async def hand_task(task_id: str, agent: str):
+        try:
+            return {"message": await ops.hand(manager, task_id, agent)}
+        except ops.OpsError as exc:
+            raise HTTPException(409, str(exc))
 
     def live_sessions() -> list[str]:
         return [r.session_id for r in manager.agents.values() if r.engine and r.session_id]

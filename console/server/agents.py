@@ -8,7 +8,9 @@ OpenAI-compatible engine for OpenAI, DeepSeek, Qwen and Kimi.
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import secrets
 import uuid
 from pathlib import Path
 
@@ -16,6 +18,12 @@ from . import chats, store
 from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT
+
+# The Orchestrator's key to the console's team actions (scripts/orchestrate.py). New on every start;
+# only the Orchestrator gets it, and every action it asks for still waits for the lead's approval.
+ORCHESTRATOR_KEY = secrets.token_urlsafe(24)
+TEAM_ACTION = "Team action"   # how the Orchestrator's actions appear in approval requests
+
 
 def load_agent(role: str) -> tuple[str, str, str]:
     """A role's instructions (with the kit path filled in), its default Claude model and effort level."""
@@ -94,6 +102,9 @@ class AgentRunner:
         self.bus.publish(event)
 
     async def ask(self, tool: str, tool_input: dict) -> tuple[bool, str]:
+        if self.role == "orchestrator" and tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            return False, ("The Orchestrator doesn't edit files: hand the work to the agent whose job it is "
+                           "(`orchestrate.py hand` or `tell`), with the lead's approval.")
         if self.role == "coach" and tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
             target = Path(str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")).expanduser()
             if not target.resolve().is_relative_to((KIT / "coach").resolve()):
@@ -107,8 +118,9 @@ class AgentRunner:
         self.emit("permission", id=pid, tool=tool, input=tool_input)
         self._set_status("waiting")
         decision, message = await future
-        if self.engine:
-            self._set_status("working")
+        if not self.pending:
+            self._set_status("working" if self.engine and self.turn and not self.turn.done()
+                             else "idle" if self.engine else "stopped")
         if decision == "always":
             self.always_allow.add(tool)
         return decision in ("allow", "always"), message
@@ -158,7 +170,9 @@ class AgentRunner:
             agent=self.name, role=self.role, instructions=instructions, provider=provider.id, model=model,
             workspace=Path(settings["workspace"]), kit=KIT, session_id=self.session_id,
             resume=bool(resume), permission_mode=settings["permission_mode"].get(self.name, "default"),
-            api_key=api_key, base_url=base_url, effort=effort)
+            api_key=api_key, base_url=base_url, effort=effort,
+            env={"CONSOLE_API": f"http://127.0.0.1:{os.environ.get('PORT', '8420')}",
+                 "CONSOLE_ORCHESTRATOR_KEY": ORCHESTRATOR_KEY} if self.role == "orchestrator" else None)
         engine = make_engine(config, self, **self.engine_options)
         try:
             await engine.start()

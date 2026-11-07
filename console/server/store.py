@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import re
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +16,9 @@ SESSIONS = DATA / "sessions"
 INDEX = SESSIONS / "index.json"
 SETTINGS = DATA / "settings.json"
 
-ROLES = ("techlead", "dev", "reviewer", "coach")   # the Coach is outside the task flow: always exactly one
+# The Orchestrator (your assistant for running the team) and the Coach are outside the task flow: exactly one each.
+ROLES = ("orchestrator", "techlead", "dev", "reviewer", "coach")
+SINGLE = {"orchestrator": "Orchestrator", "coach": "Coach"}
 # Display names, given at random to new agents (rename them in Settings). The ID (dev-2) stays
 # what the scripts and task files use; the name is only what you see.
 NAMES = """Kareem Hossam Aliaa Zeinab Tarek Nour Yasmine Rania Hany Sherif Amr Laila Dina Salma
@@ -29,7 +32,13 @@ DEFAULT_SETTINGS = {
     "agents": {role: {"role": role, "provider": "claude", "model": ""} for role in ROLES},
     "providers": {},   # id -> {"api_key": ..., "base_url": ...}; never sent to the browser
     "prices": {},      # model -> {"input": US$ per 1M tokens, "output": US$ per 1M tokens}
+    "console_url": "",  # the address you open the console at, for links ("" = http://localhost:8420)
+    # Slack (see slack.py): tokens never go to the browser. SLACK_BOT_TOKEN / SLACK_APP_TOKEN / SLACK_USERS /
+    # SLACK_CHANNEL in the server's environment take precedence (handy on a server).
+    "slack": {"bot_token": "", "app_token": "", "users": "", "channel": ""},
 }
+
+SLACK_ENV = {"bot_token": "SLACK_BOT_TOKEN", "app_token": "SLACK_APP_TOKEN", "users": "SLACK_USERS", "channel": "SLACK_CHANNEL"}
 
 
 def now() -> str:
@@ -64,9 +73,11 @@ def load_settings() -> dict:
                                    for aid in settings["agents"]}
     settings["providers"] = saved.get("providers", {})
     settings["prices"] = saved.get("prices", {})
-    if not any(a["role"] == "coach" for a in settings["agents"].values()):   # installs from before the Coach
-        settings["agents"]["coach"] = {"role": "coach", "name": "", "provider": "claude", "model": ""}
-        settings["permission_mode"]["coach"] = "default"
+    settings["slack"] = {**DEFAULT_SETTINGS["slack"], **saved.get("slack", {})}
+    for role in SINGLE:   # installs from before the Coach / the Orchestrator
+        if not any(a["role"] == role for a in settings["agents"].values()):
+            settings["agents"][role] = {"role": role, "name": "", "provider": "claude", "model": ""}
+            settings["permission_mode"][role] = "default"
     unnamed = [a for a in settings["agents"].values() if not a["name"]]
     for agent in unnamed:   # first run, or agents from before names existed: name them once
         agent["name"] = pick_name(settings["agents"])
@@ -106,6 +117,20 @@ def save_settings(changes: dict) -> dict:
     for agent, choice in changes.get("agents", {}).items():
         settings["agents"][agent] = {**settings["agents"][agent], "provider": choice["provider"],
                                      "model": choice.get("model", "").strip()}
+    if "console_url" in changes:
+        url = changes["console_url"].strip().rstrip("/")
+        if url and not re.match(r"^https?://[^\s/]+(:\d+)?(/\S*)?$", url):
+            raise ValueError("Enter the address with http:// or https://, like http://hive.internal:8420.")
+        settings["console_url"] = url
+    for key, value in changes.get("slack", {}).items():
+        value = " ".join(str(value).split())
+        if key == "bot_token" and value and not value.startswith("xoxb-"):
+            raise ValueError("The bot token starts with xoxb- (OAuth & Permissions in your Slack app).")
+        if key == "app_token" and value and not value.startswith("xapp-"):
+            raise ValueError("The app-level token starts with xapp- (Basic Information → App-Level Tokens).")
+        if key in ("users", "channel"):
+            value = ",".join(u for u in re.split(r"[\s,]+", value) if u)
+        settings["slack"][key] = value
     for model, price in changes.get("prices", {}).items():
         if price is None:
             settings["prices"].pop(model, None)
@@ -128,8 +153,8 @@ def add_agent(role: str) -> str:
     """Add another agent for a role. Returns its ID (dev-2, dev-3, …)."""
     if role not in ROLES:
         raise ValueError(f"Unknown role: {role}")
-    if role == "coach":
-        raise ValueError("The team has one Coach.")
+    if role in SINGLE:
+        raise ValueError(f"The team has one {SINGLE[role]}.")
     settings = load_settings()
     taken = set(settings["agents"])
     agent_id = role if role not in taken else next(f"{role}-{n}" for n in range(2, 100) if f"{role}-{n}" not in taken)
@@ -229,3 +254,25 @@ def save_messages(session_id: str, messages: list[dict]) -> None:
 
 def load_messages(session_id: str) -> list[dict]:
     return _read_json(SESSIONS / f"{session_id}.messages.json", [])
+
+
+def slack_config() -> dict:
+    """The Slack settings in effect: the server's environment first, then Settings."""
+    saved = load_settings()["slack"]
+    cfg = {k: os.environ.get(env) or saved.get(k, "") for k, env in SLACK_ENV.items()}
+    cfg["users"] = [u for u in re.split(r"[\s,]+", cfg["users"]) if u]
+    return cfg
+
+
+def public_slack() -> dict:
+    """For the browser: whether each token is set (and where from), never the tokens."""
+    saved = load_settings()["slack"]
+    out = {}
+    for key, env in SLACK_ENV.items():
+        value = os.environ.get(env) or saved.get(key, "")
+        from_env = bool(os.environ.get(env))
+        if key.endswith("token"):
+            out[key] = {"set": bool(value), "hint": value[-4:] if value else "", "from_env": from_env}
+        else:
+            out[key] = {"value": value, "from_env": from_env}
+    return out

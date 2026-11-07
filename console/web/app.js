@@ -4,12 +4,13 @@ const TOKEN = window.CONSOLE_TOKEN;
 const view = document.getElementById("view");
 
 const ROLES = {
+  orchestrator: { name: "Orchestrator", role: "Your assistant for the team", blurb: "Tells you where things stand, with links, and starts agents, hands tasks on or passes messages, each after you approve. Also in Slack.", quick: ["Where are we?", "What's waiting on me?"] },
   techlead: { name: "Tech Lead", role: "Tech lead / staff engineer", blurb: "Designs the change against the codebase and turns it into a complete, approved task spec.", quick: ["Show me the board", "What's still in draft?"] },
   dev: { name: "Dev", role: "Developer", blurb: "Builds exactly what the spec asks, in the project's style.", quick: ["Check your inbox"] },
   reviewer: { name: "Reviewer", role: "Reviewer", blurb: "Checks the requirements are met and the code is consistent with what exists.", quick: ["Check your inbox"] },
   coach: { name: "Coach", role: "Coach", blurb: "Reviews how finished tasks went and proposes improvements to the team's instructions, for your approval.", quick: ["Review everything since your last review", "What did you propose last time?"] },
 };
-const OWNER_LABEL = { techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer", coach: "Coach", lead: "You" };
+const OWNER_LABEL = { orchestrator: "Orchestrator", techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer", coach: "Coach", lead: "You" };
 // Agents are identified by id: the role, then -2, -3… for extra agents of the same role.
 const roleOf = (id) => state.agents[id]?.role || String(id).split("-")[0];
 // Each agent has a display name (Kareem), given at random and renamed in Settings; shown as "Kareem (Tech Lead)".
@@ -117,6 +118,7 @@ const stageLabel = (status) => (STAGES.find((s) => s.status === status) || { lab
 const statusPill = (status) => `<span class="pill ${status === "blocked" ? "lead" : ownerOf(status)}">${esc(stageLabel(status))}</span>`;
 
 function toolArg(name, input = {}) {
+  if (name === "Team action") return input.summary || "";
   if (input.command) return input.command;
   if (input.file_path) return input.file_path;
   if (input.pattern) return input.path ? `${input.pattern}  in ${input.path}` : input.pattern;
@@ -128,6 +130,7 @@ function toolArg(name, input = {}) {
 }
 
 function toolDetail(name, input = {}) {
+  if (name === "Team action") return input.summary || "";
   if (input.command) return input.command;
   if (name === "Edit" || name === "MultiEdit") {
     const edits = input.edits || [input];
@@ -631,12 +634,12 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
         const d = decisions[e.id];
         if (d) return `<div class="answered">${d.decision === "deny" ? "You denied" : d.decision === "always" ? "You allowed (for the rest of this session)" : "You allowed"} ${esc(e.tool)}${d.message ? `: ${esc(d.message)}` : ""}</div>`;
         if (!pendingIds.has(e.id)) return `<div class="answered">Request for ${esc(e.tool)} expired.</div>`;
-        return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to use ${esc(e.tool)}</h3>
+        return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to ${e.tool === "Team action" ? "do this" : `use ${esc(e.tool)}`}</h3>
           <pre>${esc(toolDetail(e.tool, e.input))}</pre>
           <input type="text" class="reason" placeholder="Optional: tell the agent why you deny it" aria-label="Reason">
           <div class="btn-row">
             <button class="btn role" data-action="allow" data-decision="allow" data-agent="${agent}" data-pid="${esc(e.id)}">Allow once</button>
-            <button class="btn" data-action="allow" data-decision="always" data-agent="${agent}" data-pid="${esc(e.id)}">Allow ${esc(e.tool)} for this session</button>
+            <button class="btn" data-action="allow" data-decision="always" data-agent="${agent}" data-pid="${esc(e.id)}">${e.tool === "Team action" ? "Allow all team actions for this session" : `Allow ${esc(e.tool)} for this session`}</button>
             <button class="btn danger" data-action="allow" data-decision="deny" data-agent="${agent}" data-pid="${esc(e.id)}">Deny</button>
           </div></div>`;
       }
@@ -711,6 +714,8 @@ async function Settings() {
       <p class="muted" style="margin:0">Agents start here and can work in any project under it without extra permission prompts. Pick the folder that holds your projects. Takes effect the next time an agent starts.</p>
       <div class="row"><input type="text" id="workspace" value="${esc(state.settings.workspace)}"><button class="btn primary">Save</button></div>
     </form>
+    ${await linksSection()}
+    ${await slackSection()}
     <section class="section"><h2>AI providers</h2>
       <p class="muted" style="max-width:68ch">Choose the provider and model for each agent in its chat header, while the agent is stopped. Keys are kept on this server in <code>console/data/settings.json</code> and are never shown again in the browser.</p>
       <div class="providers">${state.settings.providers.map(providerCard).join("")}</div></section>
@@ -727,10 +732,57 @@ async function Settings() {
     <section class="section"><h2>Agent kit</h2><dl class="facts"><dt>Kit folder</dt><dd><code>${esc(state.kit)}</code></dd><dt>Task board</dt><dd><code>${esc(state.kit)}/tasks</code></dd></dl></section>`;
 }
 
+async function linksSection() {
+  const s = state.settings;
+  return `<section class="section"><h2>Console address</h2>
+    <form class="form" id="console-url-form">
+      <label for="console-url">The address you open the console at</label>
+      <p class="muted" style="margin:0;max-width:68ch">Used in links the Orchestrator and Slack give you (a task, its code review, an agent's chat). On a server behind your VPN, use the name you open it with there, so links work from your laptop and your phone. Empty: <code>http://localhost:8420</code>, or <code>CONSOLE_URL</code> from the server's environment.</p>
+      <div class="row"><input type="text" id="console-url" value="${esc(s.console_url || "")}" placeholder="${esc(s.console_url_effective)}" spellcheck="false"><button class="btn primary">Save</button></div>
+      <p class="hint">Links use <code>${esc(s.console_url_effective)}</code>${s.console_url ? "" : " (set CONSOLE_URL on the server, or type an address above)"}.</p>
+    </form></section>`;
+}
+
+async function slackSection() {
+  const sl = state.settings.slack, live = await api("/api/slack").catch(() => ({}));
+  const token = (k, label, prefix) => {
+    const t = sl[k];
+    const note = t.from_env ? `Using <code>${k === "bot_token" ? "SLACK_BOT_TOKEN" : "SLACK_APP_TOKEN"}</code> from the server's environment.` : t.set ? `Saved, ends in ${esc(t.hint)}.` : "Not set.";
+    return `<label for="slack-${k}">${label}</label>
+      <input type="password" id="slack-${k}" autocomplete="off" placeholder="${t.set ? "Paste a new token to replace it" : `${prefix}…`}" ${t.from_env ? "disabled" : ""}>
+      <p class="hint">${note}</p>`;
+  };
+  const state_ = live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>`
+    : live.error ? `<span class="slack-status bad"><span class="dot"></span>${esc(live.error)}</span>`
+    : `<span class="slack-status"><span class="dot"></span>Not connected</span>`;
+  return `<section class="section"><h2>Slack</h2>
+    <p style="max-width:68ch">${state_}</p>
+    <p class="muted" style="max-width:68ch">Talk to the Orchestrator (or any agent: start with its name, "Nabil: …") by messaging the app, approve agents' requests with buttons, and follow each task in a thread with buttons for what's next. The console connects out to Slack, so it works from your laptop or a server behind a VPN, with nothing exposed. One Slack app per running console.</p>
+    <details><summary>How to set it up (5 minutes)</summary><ol class="setup-steps">
+      <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> → <b>Create New App</b> → <b>From a manifest</b>, pick the workspace, and paste <code>console/slack-app.yml</code> from the kit. (In a company workspace, an admin may need to approve the app.)</li>
+      <li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate</b>, with the scope <code>connections:write</code>: that's the <code>xapp-…</code> token.</li>
+      <li><b>Install App</b> → <b>Install to Workspace</b>: that's the <code>xoxb-…</code> bot token.</li>
+      <li>Your Slack member ID: in Slack, your profile → ⋮ → <b>Copy member ID</b> (<code>U…</code>). Add everyone who may talk to the team and approve requests.</li>
+      <li>Paste them below and save. Then message the app in Slack.</li></ol></details>
+    <form class="form" id="slack-form">
+      ${token("bot_token", "Bot token", "xoxb-")}
+      ${token("app_token", "App-level token", "xapp-")}
+      <label for="slack-users">Who can use it (Slack member IDs)</label>
+      <input type="text" id="slack-users" value="${esc(sl.users.value)}" placeholder="U01234ABCD, U05678EFGH" spellcheck="false" ${sl.users.from_env ? "disabled" : ""}>
+      <p class="hint">Only these people can message the agents and press Allow. Anyone else is turned away.</p>
+      <label for="slack-channel">Where task updates go <span class="muted">(optional)</span></label>
+      <input type="text" id="slack-channel" value="${esc(sl.channel.value)}" placeholder="A channel ID like C0123ABCD; empty = a direct message to the first person above" spellcheck="false" ${sl.channel.from_env ? "disabled" : ""}>
+      <p class="hint">For a channel, invite the app to it first (<code>/invite @Team Console</code>).</p>
+      <div class="btn-row"><button class="btn primary">Save and connect</button>
+        ${sl.bot_token.set && !sl.bot_token.from_env ? `<button type="button" class="btn danger" data-action="slack-disconnect">Disconnect</button>` : ""}</div>
+    </form></section>`;
+}
+
 function teamSection() {
   const rows = Object.entries(ROLES).map(([role, r]) => {
     const ids = agentIds().filter((id) => roleOf(id) === role);
-    return `<div class="team-role ${role}"><h3>${r.name}s <small class="muted">${ids.length}</small></h3>
+    const single = role === "coach" || role === "orchestrator";
+    return `<div class="team-role ${role}"><h3>${single ? r.name : `${r.name}s`} ${single ? "" : `<small class="muted">${ids.length}</small>`}</h3>
       <ul>${ids.map((id) => {
         const ag = state.agents[id];
         const choice = state.settings.agents[id] || {};
@@ -739,7 +791,9 @@ function teamSection() {
           <span class="muted">${esc(providerOf(choice.provider || "claude").label)}${choice.model ? `, ${esc(choice.model)}` : ""}</span>
           ${ids.length > 1 ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${ag.status !== "stopped" ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</li>`;
       }).join("")}</ul>
-      ${role === "coach" ? `<p class="muted">One Coach, outside the task flow. Start a review from Improvements.</p>` : `<button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button>`}</div>`;
+      ${role === "coach" ? `<p class="muted">One Coach, outside the task flow. Start a review from Improvements.</p>`
+        : role === "orchestrator" ? `<p class="muted">One Orchestrator: your assistant for running the team, here and in Slack. It acts only after you approve.</p>`
+        : `<button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button>`}</div>`;
   }).join("");
   return `<section class="section"><h2>Team</h2>
     <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Each agent gets a random name; type over it to rename. Choose each agent's provider and model in its chat header.</p>
@@ -1294,6 +1348,20 @@ const afterRender = {
         body: { api_key: key || null, base_url: form.base_url.value.trim() } }), "Provider saved.");
       if (saved) { state.settings = saved; render(true); }
     }));
+    document.getElementById("console-url-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const saved = await act(() => api("/api/settings/console-url", { method: "PUT", body: { console_url: document.getElementById("console-url").value } }), "Address saved.");
+      if (saved) { state.settings = saved; render(true); }
+    });
+    document.getElementById("slack-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const value = (id) => document.getElementById(id);
+      const body = {};
+      for (const [k, id] of [["bot_token", "slack-bot_token"], ["app_token", "slack-app_token"]]) if (!value(id).disabled && value(id).value.trim()) body[k] = value(id).value.trim();
+      for (const [k, id] of [["users", "slack-users"], ["channel", "slack-channel"]]) if (!value(id).disabled) body[k] = value(id).value;
+      const saved = await act(() => api("/api/settings/slack", { method: "PUT", body }));
+      if (saved) { state.settings = saved; render(true); const s = await api("/api/slack"); toast(s.connected ? "Connected to Slack." : s.error || "Saved. Add both tokens and at least one member ID to connect.", !s.connected && !!s.error); }
+    });
     document.getElementById("settings-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const saved = await act(() => api("/api/settings", { method: "PUT", body: { workspace: document.getElementById("workspace").value } }), "Settings saved.");
@@ -1345,6 +1413,11 @@ const actions = {
     if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
   },
   "new-shell": () => openShell(),
+  "slack-disconnect": async () => {
+    if (!confirm("Disconnect Slack and forget its tokens?")) return;
+    const saved = await act(() => api("/api/settings/slack", { method: "PUT", body: { bot_token: "", app_token: "" } }), "Slack disconnected.");
+    if (saved) { state.settings = saved; render(true); }
+  },
   "start-review": async () => {
     const scope = document.getElementById("review-scope").value;
     const target = document.getElementById("review-target").value.trim();

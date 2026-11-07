@@ -43,6 +43,7 @@ class EngineConfig:
     base_url: str = ""
     role: str = ""             # techlead | dev | reviewer | coach
     effort: str = ""           # Claude only: low | medium | high | xhigh | max ("" = the default)
+    env: dict | None = None    # extra environment for the agent's commands (the Orchestrator's console key)
 
 
 class AgentEngine(ABC):

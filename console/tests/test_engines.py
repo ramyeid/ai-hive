@@ -149,7 +149,7 @@ def main():
         c.put("/api/agents/techlead/config", json={"provider": "deepseek", "model": "missing-model"}, headers=H)
         c.post("/api/agents/techlead/message", json={"text": "hi"}, headers=H)
         wait(c, "techlead", lambda a: a["status"] == "idle", "techlead error turn")
-        err = [e for e in events(c, c.get("/api/state", headers=H).json()["agents"][0]["session_id"]) if e["kind"] == "error"]
+        err = [e for e in events(c, next(a for a in c.get("/api/state", headers=H).json()["agents"] if a["name"] == "techlead")["session_id"]) if e["kind"] == "error"]
         check(err and "404" in err[0]["text"] and "model name" in err[0]["text"], "a wrong model name gives a clear error")
         c.post("/api/agents/techlead/stop", headers=H)
 
