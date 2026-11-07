@@ -37,8 +37,8 @@ Reviewing is optional and can happen before or after the reviewer, as often as y
 
 ## Teaching the team: the Coach
 
-[`PREFERENCES.md`](../PREFERENCES.md) says how you want things built and is binding for every agent;
-[`TEAM.md`](../TEAM.md) holds the process.
+[`PREFERENCES.md`](../team/PREFERENCES.md) says how you want things built and is binding for every agent;
+[`TEAM.md`](../team/TEAM.md) holds the process.
 
 Start a review with the Coach from **Improvements** (or ask the Orchestrator). It reads how finished tasks went:
 your code-review comments and what changed in response, your words in the agents' conversations, review rounds,
@@ -72,7 +72,7 @@ and a name you can change (shown as "Nabil (Dev)").
 
 ## The Tech Lead's knowledge
 
-For each repository it works on, the Tech Lead keeps notes in `knowledge/<repo>/`: an index, plus one file per
+For each repository it works on, the Tech Lead keeps notes in `data/knowledge/<repo>/`: an index, plus one file per
 service of a monorepo, with purpose, code map, APIs, entities, conventions and commands, and the commit they
 describe. Each task starts from them and re-checks only what changed in git since. Read them on the **Knowledge** page.
 
@@ -87,9 +87,4 @@ claude --agent reviewer
 AGENT_ID=dev-2 claude --agent dev        # a second developer
 ```
 
-Tell the dev or reviewer *"Check your inbox."* to pick up work. Useful commands in any tab:
-
-- `/board`: every task across all projects, and what's waiting on you.
-- `/ship TASK-007`: runs dev → reviewer (→ dev …, up to 3 rounds) automatically.
-
-Type `/clear` between tasks in a terminal. The console starts a fresh conversation for you after each hand-off.
+Tell the dev or reviewer *"Check your inbox."* to pick up work. Type `/clear` between tasks in a terminal. The console starts a fresh conversation for you after each hand-off.

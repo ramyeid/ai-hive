@@ -6,7 +6,7 @@
 |---|---|
 | OS | macOS or Linux |
 | [Claude Code](https://code.claude.com) | Installed and logged in (`claude` works in your terminal) |
-| Python 3 | For the kit's scripts |
+| Python 3 | For the team's tools |
 | git | Each feature gets its own branch and worktree |
 | [uv](https://docs.astral.sh/uv/) | For the console. macOS: `brew install uv`. Linux: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | [GitHub CLI](https://cli.github.com) (optional) | Logged in (`gh auth login`), so the Coach can read your pull requests |
@@ -15,43 +15,60 @@
 
 ```bash
 git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive-ai-squad
-bash ~/hive-ai-squad/install.sh
+cd ~/hive-ai-squad
+bash scripts/install.sh
 ```
 
-`install.sh`:
-- copies the agents into `~/.claude/agents/` and the `/board` and `/ship` commands into `~/.claude/commands/`;
-- adds the task hook and the kit's permissions to `~/.claude/settings.json`, keeping your settings and saving a backup as `settings.json.bak`.
+`scripts/install.sh`:
+- copies the agents into `~/.claude/agents/`;
+- adds the task hook and Hive's permissions to `~/.claude/settings.json`, keeping your settings and saving a backup as `settings.json.bak`.
 
-It replaces any personal agents or commands with the same names: `orchestrator`, `techlead`, `dev`, `reviewer`,
-`coach`, `board`, `ship`.
+It replaces any personal agents with the same names: `orchestrator`, `techlead`, `dev`, `reviewer`, `coach`.
 
 ## Start the console
 
 ```bash
-bash console/start.sh
+bash scripts/start.sh
 ```
 
-The first start installs the console's dependencies (pinned in `console/uv.lock`) in about a minute, then opens
+The first start installs the backend's dependencies (pinned in `backend/uv.lock`) in about a minute, then opens
 **http://127.0.0.1:8420**. Stop it with Ctrl+C.
 
 To keep it running in the background:
 
 ```bash
-bash console/service-start.sh    # output goes to console/service.log
-bash console/service-stop.sh
+bash scripts/start.sh --background    # output goes to data/hive.log
+bash scripts/stop.sh
 ```
 
-Use `PORT=8500` for another port. `service-start.sh` doesn't restart the console after a crash or reboot; use your
+Use `PORT=8500` for another port. `--background` doesn't restart the console after a crash or reboot; use your
 system's service manager (systemd, launchd) for that, with `uv` on its `PATH`.
 
 ## Update
 
 ```bash
 git pull
-bash install.sh
+bash scripts/install.sh
 ```
 
-Then restart the console. Run `install.sh` again too if you move the folder.
+Then restart the console. Run `scripts/install.sh` again too if you move the folder.
+
+### From a version before `data/`
+
+Earlier versions kept your data in `tasks/`, `knowledge/`, `coach/` and `console/data/`. To upgrade, clone the new
+version into a new folder and copy your data across; the old folder is only read, so you can go back to it.
+
+```bash
+bash ~/old-hive/console/service-stop.sh    # stop the old console (or its service) first
+git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive
+cd ~/hive
+bash scripts/migrate.sh ~/old-hive     # copies tasks, knowledge, coach and console/data into data/
+bash scripts/install.sh                # points the agents and Claude Code's hook at the new folder
+bash scripts/start.sh
+```
+
+`migrate.sh` checks that every copied file is identical to the original. If you run the console as a service,
+point it at `scripts/start.sh` in the new folder.
 
 ## Run on a server
 
@@ -66,7 +83,7 @@ HOST=0.0.0.0 \
 CONSOLE_HOSTS=hive.internal.example.com \
 CONSOLE_PASSWORD='a long password' \
 CONSOLE_URL=http://hive.internal.example.com:8420 \
-bash console/service-start.sh
+bash scripts/start.sh --background
 ```
 
 | Variable | Purpose |
@@ -88,11 +105,11 @@ proxy_set_header Connection "upgrade";
 ## Connect Slack
 
 1. At [api.slack.com/apps](https://api.slack.com/apps): **Create New App** → **From a manifest**, pick the
-   workspace and paste [`console/slack-app.yml`](../console/slack-app.yml). In a company workspace, an admin may need
+   workspace and paste [`integrations/slack/slack-app.yml`](../integrations/slack/slack-app.yml). In a company workspace, an admin may need
    to approve the app.
 2. **Basic Information** → **App-Level Tokens** → **Generate**, with the scope `connections:write`: the `xapp-…` token.
 3. **Install App** → **Install to Workspace**: the `xoxb-…` bot token.
-4. **Basic Information** → **Display Information**: upload `brand/app-icon-sage-1024.png` as the icon.
+4. **Basic Information** → **Display Information**: upload `assets/app-icon-sage-1024.png` as the icon.
 5. In the console, **Settings → Integrations → Slack**: paste both tokens and the Slack member IDs of the people
    allowed to use it (profile → ⋮ → **Copy member ID**), then **Save and connect** and **Send a test message**.
 
@@ -113,11 +130,11 @@ Each agent runs on Claude by default, through your Claude Code login. To use ano
 | Qwen | `DASHSCOPE_API_KEY` |
 | Kimi | `MOONSHOT_API_KEY` |
 
-Keys saved in Settings stay in `console/data/settings.json` on the server and are never sent back to the browser.
+Keys saved in Settings stay in `data/console/settings.json` on the server and are never sent back to the browser.
 An environment variable takes precedence over a saved key.
 
 ## Uninstall
 
-1. Delete `~/.claude/agents/{orchestrator,techlead,dev,reviewer,coach}.md` and `~/.claude/commands/{board,ship}.md`.
-2. In `~/.claude/settings.json`, remove the `on_task_change.py` hook and the kit's entries under `permissions`.
+1. Delete `~/.claude/agents/{orchestrator,techlead,dev,reviewer,coach}.md`.
+2. In `~/.claude/settings.json`, remove the `on_task_change.py` hook and Hive's entries under `permissions`.
 3. Delete the repository folder.

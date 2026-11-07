@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/hive-logo.svg" alt="Hive" width="96">
+  <img src="assets/hive-logo.svg" alt="Hive" width="96">
 </p>
 
 <h1 align="center">Hive</h1>
@@ -48,7 +48,7 @@ next. Nothing is pushed to your remote.
 - **Feature branches** (`feature-<title>`) from the base branch you confirm; follow-up tasks add commits to the same branch.
 - **Readiness checks** before a spec reaches a developer, and **approval prompts** before any command runs.
 - **Knowledge cache**: the Tech Lead keeps notes per repository and service, refreshed from git, so each task starts from what it already knows.
-- **Your preferences, enforced**: [`PREFERENCES.md`](PREFERENCES.md) (code style, reuse, simplicity, test structure) is binding for every agent.
+- **Your preferences, enforced**: [`PREFERENCES.md`](team/PREFERENCES.md) (code style, reuse, simplicity, test structure) is binding for every agent.
 
 **Your review**
 - **Pull-request view** of any task's diff: the whole feature, this task's commits, or what changed since your last review; unified or side by side.
@@ -72,8 +72,9 @@ Requirements: [Claude Code](https://code.claude.com) (logged in), Python 3, git 
 
 ```bash
 git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive-ai-squad
-bash ~/hive-ai-squad/install.sh
-bash ~/hive-ai-squad/console/start.sh      # opens http://127.0.0.1:8420
+cd ~/hive-ai-squad
+bash scripts/install.sh
+bash scripts/start.sh      # opens http://127.0.0.1:8420
 ```
 
 Open the Tech Lead and describe what you need, for example: *"In ~/code/my-api, users need to reset their password
@@ -87,19 +88,20 @@ by email."* See [Installation](docs/INSTALL.md) for servers, Slack and other AI 
 | [Usage](docs/USAGE.md) | A task from start to finish, code review, the Coach, several agents per role, the terminal |
 | [Console](docs/CONSOLE.md) | Every page of the console, approvals, costs, the browser terminal |
 | [Development](docs/DEVELOPMENT.md) | Repository layout, architecture, tests, adding an AI provider |
-| [`TEAM.md`](TEAM.md) | The process every agent follows |
-| [`PREFERENCES.md`](PREFERENCES.md) | How you want things built |
+| [`TEAM.md`](team/TEAM.md) | The process every agent follows |
+| [`PREFERENCES.md`](team/PREFERENCES.md) | How you want things built |
 
 ## Repository layout
 
 ```
-agents/       the agents' instructions (installed into ~/.claude/agents)
-console/      the web console and the Slack integration
-scripts/      board, claims, worktrees, knowledge, code review, Coach, Orchestrator
-templates/    task, knowledge and proposal templates
-brand/        logos and icons
-docs/         documentation
+team/           the agents, their process (TEAM.md), your preferences, templates, and the tools they run
+backend/        the server (Python, FastAPI): agents, approvals, code review, Slack
+frontend/       the web console (vanilla JS, no build step)
+integrations/   Slack's app manifest
+scripts/        install, start, stop, migrate
+assets/         logos and icons
+docs/           documentation
 ```
 
-Your board (`tasks/`), the Tech Lead's notes (`knowledge/`) and the Coach's work (`coach/`) stay on your machine and
-are never committed.
+Everything that is yours (the board, the Tech Lead's notes, the Coach's work, settings and conversations) lives in
+`data/`, stays on your machine and is never committed.

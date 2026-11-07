@@ -1,13 +1,9 @@
-# Personal: each person's task board, notifications and activity log
-tasks/
-
-# Personal: the Tech Lead's memory of each service (describes your company's code)
-knowledge/
-
-# Personal: the Coach's evidence and proposals (quote your tasks and conversations)
-coach/
+# Your data: the board, the Tech Lead's notes, the Coach's work, the console's settings and sessions.
+# Local only, never committed.
+data/
 
 # Python
+.venv/
 __pycache__/
 *.pyc
 

@@ -1,0 +1,22 @@
+[project]
+name = "hive"
+version = "0.1.0"
+description = "Hive's backend: runs the agents and serves the console and the Slack integration."
+requires-python = ">=3.10"   # the Claude Agent SDK needs 3.10+; uv downloads a suitable Python if needed
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "claude-agent-sdk>=0.2",
+    "httpx>=0.27",
+    "websockets>=12",
+    "python-multipart>=0.0.9",   # the sign-in form, when the console runs on a server
+    "slack-sdk>=3.27",           # Slack (Socket Mode)
+    "aiohttp>=3.9",              # Slack's Socket Mode connection
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hive"]

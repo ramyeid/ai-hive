@@ -1,6 +1,6 @@
 # Console
 
-Start it with `bash console/start.sh` and open **http://127.0.0.1:8420**. See [Installation](INSTALL.md) for
+Start it with `bash scripts/start.sh` and open **http://127.0.0.1:8420**. See [Installation](INSTALL.md) for
 running it in the background or on a server.
 
 ## Navigation
@@ -32,15 +32,15 @@ When an agent wants to do something your settings don't already allow, it pauses
 and in Slack. Nothing runs until you answer.
 
 - On Claude, anything your Claude Code settings allow runs without asking.
-- On other providers, reading and searching in the agents' home folder and the kit, editing task files and running
-  the kit's scripts don't ask; everything else does.
+- On other providers, reading and searching in the agents' home folder and the Hive folder, editing task files and running
+  the team's tools don't ask; everything else does.
 - Set an agent's **Edits** to *Allow automatically* in Settings → Team to skip file-edit prompts for it.
 - The Orchestrator's actions (start, stop, hand on, message, Coach) always ask.
 
 ## Conversations
 
 When an agent hands a task on, the console saves that conversation with the task and starts the agent on a fresh
-one, so there's no need for `/clear`. A task's conversations are kept in `tasks/chats/TASK-NNN/` and shown on its
+one, so there's no need for `/clear`. A task's conversations are kept in `data/tasks/chats/TASK-NNN/` and shown on its
 page. They're for you only: agents work from the task file, never from past conversations.
 
 ## Cost
