@@ -337,6 +337,22 @@ function renderRail() {
   highlightNav(route());
 }
 
+// The sidebar folded down to icons, remembered in this browser. On a phone the sidebar is a menu instead.
+const wideScreen = () => matchMedia("(min-width: 721px)").matches;
+function setRailMini(mini) {
+  document.body.classList.toggle("rail-mini", mini);
+  const button = document.querySelector(".rail-collapse");
+  const label = mini ? "Expand the sidebar ([)" : "Collapse the sidebar ([)";
+  button.setAttribute("aria-label", label.replace(" ([)", ""));
+  button.title = label;
+  try { localStorage.setItem("railMini", mini ? "1" : ""); } catch { /* this page only */ }
+}
+function toggleRail() {
+  if (wideScreen()) setRailMini(!document.body.classList.contains("rail-mini"));
+  else closeRail();
+}
+try { if (localStorage.getItem("railMini")) setRailMini(true); } catch { /* expanded */ }
+
 function openRail() { document.body.classList.add("rail-open"); document.querySelector(".scrim").hidden = false; }
 function closeRail() { document.body.classList.remove("rail-open"); const s = document.querySelector(".scrim"); if (s) s.hidden = true; }
 
@@ -395,6 +411,7 @@ document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openJump(); }
   else if (e.key === "/" && !typing && !document.getElementById("ask-pill").hidden) { e.preventDefault(); openDrawer(); }
   else if (e.key === "Escape" && !document.getElementById("drawer").hidden) closeDrawer();
+  else if (e.key === "[" && !typing && !e.metaKey && !e.ctrlKey && !document.querySelector("dialog[open]")) toggleRail();
 });
 
 // ---- ask the Orchestrator from any page -------------------------------------------
@@ -1395,7 +1412,7 @@ function pairUp(lines) {
   return rows;
 }
 
-function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unified") {
+function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unified", index = 0) {
   const rows = [], cols = layout === "split" ? 4 : 3;
   const comments = (keys) => {
     for (const key of keys) {
@@ -1430,7 +1447,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   }
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
-  return `<details class="review-file" ${changed > 400 ? "" : "open"}>
+  return `<details class="review-file" id="file-${index}" data-path="${esc(f.path)}" ${changed > 400 ? "" : "open"}>
     <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></summary>
     ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
@@ -1438,6 +1455,67 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
       <tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
   </details>`;
 }
+
+// The changed files under their folders, like GitHub's file tree. Folders with a single subfolder and no files of
+// their own are shown on one line (backend/src/hive). Each folder can be folded; a file jumps to its diff.
+function fileTree(files, drafts) {
+  const root = { dirs: new Map(), files: [] };
+  files.forEach((f, index) => {
+    const parts = f.path.split("/");
+    let node = root;
+    for (const dir of parts.slice(0, -1)) {
+      if (!node.dirs.has(dir)) node.dirs.set(dir, { dirs: new Map(), files: [] });
+      node = node.dirs.get(dir);
+    }
+    node.files.push({ f, index, name: parts.at(-1) });
+  });
+  const notes = (path) => [...drafts.values()].flat().filter((c) => c.file === path).length;
+  const STATUS = { added: ["A", "Added"], deleted: ["D", "Deleted"], renamed: ["R", "Renamed"] };
+  const render = (node, prefix) => {
+    const dirs = [...node.dirs].sort(([a], [b]) => a.localeCompare(b)).map(([name, sub]) => {
+      let label = name, path = `${prefix}${name}/`;
+      while (!sub.files.length && sub.dirs.size === 1) {   // a chain of single folders reads as one path
+        const [[next, deeper]] = sub.dirs;
+        label += `/${next}`; path += `${next}/`; sub = deeper;
+      }
+      return `<li><details open data-dir="${esc(path)}"><summary class="tree-dir" title="${esc(path)}">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4.2l1.5 1.6h7.3v7.4H1.5z"/></svg><span>${esc(label)}</span></summary>
+        <ul>${render(sub, path)}</ul></details></li>`;
+    });
+    const items = node.files.sort((a, b) => a.name.localeCompare(b.name)).map(({ f, index, name }) => {
+      const [letter, word] = STATUS[f.status] || ["M", "Modified"];
+      const n = notes(f.path);
+      return `<li><button class="tree-file" data-action="jump-file" data-index="${index}" title="${esc(f.path)}">
+        <span class="st ${letter}" title="${word}">${letter}</span><span class="name">${esc(name)}</span>
+        ${n ? `<span class="notes" title="${plural(n, "draft comment")}">${n}</span>` : ""}
+        <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></button></li>`;
+    });
+    return dirs.join("") + items.join("");
+  };
+  return `<aside class="review-tree" aria-label="Changed files">
+    <div class="tree-head"><b>Files</b> <span class="muted">${files.length}</span>
+      <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button></div>
+    <ul class="tree">${render(root, "")}</ul></aside>`;
+}
+
+// Whether the file tree is shown next to the diff, remembered in this browser.
+function reviewTreeShown() {
+  try { return localStorage.getItem("reviewTree") !== "hidden"; } catch { return true; }
+}
+
+// The file at the top of the screen is highlighted in the tree while you scroll the diff. A file you jumped to
+// stays highlighted until you scroll yourself (the last files can't scroll up to the top).
+let treeFrame = 0, jumpedTo = null;
+addEventListener("scroll", () => {
+  if (treeFrame || !document.querySelector(".review-tree")) return;
+  treeFrame = requestAnimationFrame(() => {
+    treeFrame = 0;
+    const files = [...document.querySelectorAll(".review-file")];
+    const current = (jumpedTo?.isConnected && jumpedTo) || files.filter((f) => f.getBoundingClientRect().top < 120).pop() || files[0];
+    document.querySelectorAll(".tree-file").forEach((b) => b.classList.toggle("current", current && b.dataset.index === current.id.slice(5)));
+  });
+}, { passive: true });
+for (const type of ["wheel", "touchmove", "keydown"]) addEventListener(type, () => { jumpedTo = null; }, { passive: true });
 
 function roundCard(r, dev) {
   const asked = r.verdict === "changes";
@@ -1463,7 +1541,8 @@ async function CodeReview(r) {
   const shown = new Set();
   const posted = placePosted(d.files, d.rounds, d.head);
   const layout = reviewLayout();
-  const files = d.files.map((f) => diffFile(f, drafts, shown, posted, d.dev, layout)).join("");
+  const files = d.files.map((f, i) => diffFile(f, drafts, shown, posted, d.dev, layout, i)).join("");
+  const treeOn = reviewTreeShown() && d.files.length > 0;
   const elsewhere = d.pending.filter((c) => !c.file || !c.line || !shown.has(lineKey(c.file, c.side, c.line)));
   const adds = d.files.reduce((n, f) => n + f.additions, 0), dels = d.files.reduce((n, f) => n + f.deletions, 0);
   const tabs = REVIEW_VIEWS.map(([v, label]) => {
@@ -1480,10 +1559,12 @@ async function CodeReview(r) {
       : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("")}</section>` : ""}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
+        ${d.files.length ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         <div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div></div>
       <p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
-      ${files || `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
+      ${files ? `<div class="review-body ${treeOn ? "with-tree" : ""}">${treeOn ? fileTree(d.files, drafts) : ""}<div class="review-diffs">${files}</div></div>`
+        : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
     </section>
     <section class="section review-submit" id="review-submit"><h2>Your review</h2>
       ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
@@ -1528,6 +1609,24 @@ async function pingDev(dev, taskId) {
 }
 
 const reviewActions = {
+  "review-tree": () => {
+    try { localStorage.setItem("reviewTree", reviewTreeShown() ? "hidden" : "shown"); } catch { /* this page only */ }
+    render(true);
+  },
+  "jump-file": (el) => {
+    const file = document.getElementById(`file-${el.dataset.index}`);
+    if (!file) return;
+    file.open = true;
+    jumpedTo = file;
+    file.scrollIntoView({ block: "start", behavior: "smooth" });
+  },
+  "tree-fold": (el) => {
+    const open = el.dataset.open === "true";
+    document.querySelectorAll(".review-tree details").forEach((d) => { d.open = open; });
+    el.dataset.open = String(!open);
+    el.textContent = open ? "Collapse all" : "Expand all";
+    el.title = open ? "Fold every folder" : "Unfold every folder";
+  },
   "review-layout": (el) => {
     try { localStorage.setItem("reviewLayout", el.dataset.layout); } catch { /* remembered for this page only */ }
     render(true);
@@ -1940,6 +2039,7 @@ const actions = {
     renderRail();
   },
   "open-rail": () => openRail(),
+  "toggle-rail": () => toggleRail(),
   "close-rail": () => closeRail(),
   jump: () => openJump(),
   "jump-go": () => document.getElementById("jump-dialog").close(),
