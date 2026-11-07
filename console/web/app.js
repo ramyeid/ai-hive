@@ -151,6 +151,7 @@ async function loadState() {
   improvements.textContent = data.improvements;
   improvements.hidden = !data.improvements;
   document.getElementById("nav-terminal").hidden = !data.terminal;
+  state.improvements = data.improvements;
   state.agents = Object.fromEntries(data.agents.map((a) => [a.name, a]));
   renderRail();
 }
@@ -183,6 +184,7 @@ function onEvent(event) {
     renderRail();
     refreshIf(["overview"]);
     if (route().page === "agent" && route().id === event.agent.name) renderAgentChrome(event.agent.name);
+    if (event.agent.name === "orchestrator") renderDrawer();
     return;
   }
   if (event.kind === "team") {
@@ -191,7 +193,7 @@ function onEvent(event) {
   }
   if (event.kind === "board") {
     clearTimeout(boardTimer);
-    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task", "inbox"]); refreshBadge(); }, 300);
+    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task"]); refreshCounts(); }, 300);
     return;
   }
   if (event.kind === "delta") {
@@ -207,6 +209,7 @@ function onEvent(event) {
     (state.live[event.agent] ||= []).push(event);
     const r = route();
     if (r.page === "agent" && r.id === event.agent) renderTranscriptInto(event.agent);
+    if (event.agent === "orchestrator") renderDrawer();
     if (r.page === "overview") refreshIf(["overview"]);
   }
 }
@@ -215,14 +218,30 @@ function refreshIf(pages) {
   if (pages.includes(route().page)) render(true);
 }
 
-async function refreshBadge() {
-  try {
-    const inbox = await api("/api/inbox/lead");
-    const badge = document.getElementById("inbox-badge");
-    badge.textContent = inbox.notifications.length;
-    badge.hidden = inbox.notifications.length === 0;
-  } catch { /* shown elsewhere */ }
+// What needs you (Home's badge): approvals, blocked tasks, tasks waiting for a hand-off, the Coach's proposals.
+function needsCount() {
+  const approvals = Object.values(state.agents).reduce((n, a) => n + (a.pending?.length || 0), 0);
+  const tasks = (state.tasks || []).filter((t) => ["blocked", "ready-for-review", "ready-for-dev"].includes(t.status)
+    || (t.status === "changes-requested" && !["working", "waiting"].includes(state.agents[t.dev]?.status))).length;
+  return approvals + tasks + (state.improvements ? 1 : 0);
 }
+
+function showCounts() {
+  const n = needsCount();
+  for (const id of ["home-badge", "home-badge-tab"]) {
+    const badge = document.getElementById(id);
+    badge.textContent = n;
+    badge.hidden = n === 0;
+  }
+}
+
+async function refreshCounts() {
+  try {
+    state.tasks = await api("/api/tasks");
+  } catch { return; }
+  renderRail();
+}
+const refreshBadge = refreshCounts;
 
 // ---- routing ------------------------------------------------------------------
 
@@ -231,7 +250,7 @@ function route() {
   if (page === "tasks" && id && sub === "review") return { page: "review", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
-    "": "overview", tasks: id ? "task" : "tasks", agents: "agent", inbox: "inbox", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
+    "": "overview", tasks: id ? "task" : "tasks", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -239,7 +258,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, inbox: Inbox, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -252,12 +271,30 @@ async function render(quiet = false) {
     if (seq === renderSeq) view.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
   }
   highlightNav(r);
+  renderCrumb(r);
+  document.getElementById("ask-pill").hidden = r.page === "agent" || !state.agents.orchestrator;   // in a chat, the composer is right there
+  closeRail();
+}
+
+// Where you are, at the top of every page.
+function renderCrumb(r) {
+  const link = (href, text) => `<a href="${href}">${esc(text)}</a>`;
+  const parts = {
+    overview: ["Home"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
+    task: [link("#/tasks", "Board"), r.id], review: [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Code review"],
+    "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
+    agent: [state.agents[r.id] ? ({ orchestrator: "Orchestrator", coach: "Coach" }[roleOf(r.id)] || "Team") : "Agents", state.agents[r.id] ? nameOf(r.id) : r.id],
+    settings: ["Settings"], terminal: ["Terminal"], improvements: ["Coach", "Improvements"], team: ["Coach", "Team history"],
+    "team-change": ["Coach", link("#/team", "Team history"), "Change"], "team-files": ["Coach", link("#/team", "Team history"), "Files"],
+    knowledge: ["Library", "Knowledge"], "knowledge-file": ["Library", link("#/knowledge", "Knowledge"), r.id],
+  }[r.page] || [];
+  document.getElementById("crumb").innerHTML = parts.map((p, i) => i === parts.length - 1 && !p.startsWith("<a") ? `<b>${esc(p)}</b>` : p.startsWith("<a") ? p : esc(p)).join('<span class="sep">›</span>');
 }
 
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "tasks" && ["task", "task-chat", "review"].includes(r.page)) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
+    const on = nav === r.page || (nav === "orchestrator-tab" && r.page === "agent" && r.id === "orchestrator") || (nav === "tasks" && ["task", "task-chat", "review"].includes(r.page)) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -265,14 +302,142 @@ function highlightNav(r) {
   });
 }
 
+// The task each agent is on right now (from the board), shown under its name.
+function busyWith(name) {
+  return (state.tasks || []).find((t) => ["in-dev", "in-review", "draft", "blocked"].includes(t.status) && t.assignee === name);
+}
+
+function avatar(name, cls = "") {
+  return `<span class="avatar ${roleOf(name)} ${cls}" aria-hidden="true">${esc((personOf(name) || "?").slice(0, 1).toUpperCase())}</span>`;
+}
+
+function railAgent(name) {
+  const st = state.agents[name]?.status || "stopped";
+  const task = busyWith(name);
+  const sub = (roleOf(name) === "orchestrator" ? "Your assistant, also in Slack" : OWNER_LABEL[roleOf(name)]) + (task ? ` · ${task.id}` : "");
+  const marker = st === "waiting" ? `<span class="pill attention">Approve</span>` : `<span class="dot ${st}" title="${STATUS_TEXT[st]}"></span>`;
+  return `<a class="rail-agent ${roleOf(name)}" data-agent="${name}" href="#/agents/${name}" title="${esc(nameOf(name))}: ${STATUS_TEXT[st]}">
+    ${avatar(name)}<span class="who">${esc(personOf(name))}<small>${esc(sub)}</small></span>${marker}</a>`;
+}
+
 function renderRail() {
-  document.getElementById("rail-agents").innerHTML = agentIds().map((name) => {
-    const st = state.agents[name]?.status || "stopped";
-    return `<a class="rail-agent ${roleOf(name)}" data-agent="${name}" href="#/agents/${name}">
-      <span class="who">${esc(personOf(name))}<small>${ROLES[roleOf(name)].role}</small></span>
-      <span class="status ${st}" title="${STATUS_TEXT[st]}">${st === "waiting" ? "Approve" : ""}</span></a>`;
-  }).join("");
+  const ids = agentIds();
+  const of = (roles) => ids.filter((n) => roles.includes(roleOf(n))).map(railAgent).join("");
+  document.getElementById("rail-orchestrator").innerHTML = of(["orchestrator"]);
+  document.getElementById("rail-team").innerHTML = of(["techlead", "dev", "reviewer"]);
+  document.getElementById("rail-coach").innerHTML = of(["coach"]);
+  let collapsed = [];
+  try { collapsed = JSON.parse(localStorage.getItem("railCollapsed") || "[]"); } catch { /* not remembered */ }
+  document.querySelectorAll(".rail-section").forEach((sec) => {
+    const closed = collapsed.includes(sec.dataset.section);
+    sec.classList.toggle("collapsed", closed);
+    sec.querySelector(".rail-toggle").setAttribute("aria-expanded", String(!closed));
+  });
+  showCounts();
   highlightNav(route());
+}
+
+function openRail() { document.body.classList.add("rail-open"); document.querySelector(".scrim").hidden = false; }
+function closeRail() { document.body.classList.remove("rail-open"); const s = document.querySelector(".scrim"); if (s) s.hidden = true; }
+
+// ---- jump anywhere (⌘K) ----------------------------------------------------------
+
+const PAGES_TO_JUMP = [["Home", "#/"], ["Board", "#/tasks"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
+  ["Team history", "#/team"], ["Knowledge", "#/knowledge"], ["Settings", "#/settings"], ["Terminal", "#/terminal"]];
+
+async function openJump() {
+  const dialog = document.getElementById("jump-dialog");
+  if (dialog.open) return;
+  dialog.showModal();
+  const input = document.getElementById("jump-input");
+  input.value = "";
+  input.focus();
+  if (!state.tasks) await refreshCounts();
+  showJump("");
+}
+
+function jumpItems(q) {
+  q = q.trim().toLowerCase();
+  const items = [
+    ...agentIds().map((n) => ({ label: nameOf(n), hint: "Agent", href: `#/agents/${n}`, key: `${n} ${nameOf(n)}` })),
+    ...(state.tasks || []).map((t) => ({ label: `${t.id} ${t.title}`, hint: `${t.project_name} · ${stageLabel(t.status)}`, href: `#/tasks/${t.id}`, key: `${t.id} ${t.title} ${t.project_name}` })),
+    ...PAGES_TO_JUMP.filter(([l]) => l !== "Terminal" || state.terminal).map(([label, href]) => ({ label, hint: "Page", href, key: label })),
+  ];
+  if (!q) return [...items.filter((i) => i.hint === "Page"), ...items.filter((i) => i.hint === "Agent")].slice(0, 12);
+  return items.filter((i) => i.key.toLowerCase().includes(q)).slice(0, 12);
+}
+
+function showJump(q) {
+  const list = document.getElementById("jump-list");
+  list.innerHTML = jumpItems(q).map((i, n) => `<li role="option" ${n === 0 ? 'aria-selected="true"' : ""}><a href="${i.href}" data-action="jump-go">${esc(i.label)}<small>${esc(i.hint)}</small></a></li>`).join("")
+    || `<li class="none">Nothing matches.</li>`;
+}
+
+document.getElementById("jump-input").addEventListener("input", (e) => showJump(e.target.value));
+document.getElementById("jump-input").addEventListener("keydown", (e) => {
+  const options = [...document.querySelectorAll("#jump-list li[role=option]")];
+  const at = options.findIndex((o) => o.getAttribute("aria-selected") === "true");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const next = options[(at + (e.key === "ArrowDown" ? 1 : -1) + options.length) % options.length];
+    options.forEach((o) => o.removeAttribute("aria-selected"));
+    next?.setAttribute("aria-selected", "true");
+    next?.scrollIntoView({ block: "nearest" });
+  } else if (e.key === "Enter" && options[at]) {
+    e.preventDefault();
+    location.hash = options[at].querySelector("a").getAttribute("href");
+    document.getElementById("jump-dialog").close();
+  }
+});
+document.getElementById("jump-dialog").addEventListener("click", (e) => { if (e.target.id === "jump-dialog") e.target.close(); });
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openJump(); }
+  else if (e.key === "/" && !typing && !document.getElementById("ask-pill").hidden) { e.preventDefault(); openDrawer(); }
+  else if (e.key === "Escape" && !document.getElementById("drawer").hidden) closeDrawer();
+});
+
+// ---- ask the Orchestrator from any page -------------------------------------------
+
+async function openDrawer() {
+  const drawer = document.getElementById("drawer");
+  drawer.hidden = false;
+  document.body.classList.add("drawer-open");
+  if (state.agents.orchestrator?.session_id && !state.live.orchestrator?.length) await loadLive("orchestrator").catch(() => {});
+  renderDrawer();
+  drawer.querySelector("textarea")?.focus();
+}
+
+function closeDrawer() {
+  document.getElementById("drawer").hidden = true;
+  document.body.classList.remove("drawer-open");
+}
+
+function renderDrawer() {
+  const drawer = document.getElementById("drawer");
+  if (!drawer || drawer.hidden) return;
+  const a = state.agents.orchestrator || { status: "stopped", pending: [] };
+  const draft = drawer.querySelector("textarea")?.value || "";
+  const events = (state.live.orchestrator || []).filter((e) => ["user", "text", "permission", "decision", "error"].includes(e.kind)).slice(-30);
+  drawer.innerHTML = `<header>${avatar("orchestrator")}<div><b>${esc(nameOf("orchestrator"))}</b><small><span class="dot ${a.status}"></span>${STATUS_TEXT[a.status]}</small></div>
+      <a class="btn small" href="#/agents/orchestrator">Full chat</a><button class="icon-btn" data-action="close-drawer" aria-label="Close">✕</button></header>
+    <div class="drawer-msgs transcript">${events.length ? transcriptHTML(events, { pending: a.pending || [], agent: "orchestrator" })
+      : `<p class="muted">Ask where things stand, or ask it to start an agent, hand a task on or pass a message. It asks you before it acts.</p>`}</div>
+    <form class="drawer-form" data-form="drawer">
+      <div class="chips">${["Where are we?", "What's waiting on me?"].map((q) => `<button type="button" class="chip-btn" data-action="drawer-quick">${q}</button>`).join("")}</div>
+      <textarea rows="2" placeholder="Message the Orchestrator (Enter to send)" aria-label="Message the Orchestrator">${esc(draft)}</textarea></form>`;
+  const msgs = drawer.querySelector(".drawer-msgs");
+  msgs.scrollTop = msgs.scrollHeight;
+  const text = drawer.querySelector("textarea");
+  text.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendToOrchestrator(text.value); }
+  });
+}
+
+async function sendToOrchestrator(text) {
+  if (!text.trim()) return;
+  const ok = await act(() => api("/api/agents/orchestrator/message", { method: "POST", body: { text } }));
+  if (ok) { const t = document.querySelector("#drawer textarea"); if (t) t.value = ""; }
 }
 
 // ---- overview ----------------------------------------------------------------
@@ -288,82 +453,151 @@ function doing(name) {
   return last.text.replace(/[#*`_>]/g, "").slice(0, 200);
 }
 
+// Who can take a task now (free agents first). Rework goes back to the dev who built it, a re-review to the same reviewer.
+function handCandidates(t) {
+  const of = (role) => agentIds().filter((n) => roleOf(n) === role);
+  const free = (n) => !busyWith(n) && !["working", "waiting"].includes(state.agents[n]?.status);
+  const byFree = (list) => list.sort((a, b) => free(b) - free(a));
+  if (t.status === "changes-requested") return t.dev && state.agents[t.dev] ? [t.dev] : [];
+  if (t.status === "ready-for-review") return t.reviewer && state.agents[t.reviewer] ? [t.reviewer] : byFree(of("reviewer"));
+  if (t.status === "ready-for-dev") return byFree(of("dev"));
+  if (t.status === "draft") return t.techlead && state.agents[t.techlead] ? [t.techlead] : [];
+  return [];
+}
+
+function handButtons(t, max = 2, firstPrimary = true) {
+  return handCandidates(t).slice(0, max).map((n, i) =>
+    `<button class="btn small ${firstPrimary && i === 0 ? "primary" : ""}" data-action="hand" data-task="${esc(t.id)}" data-agent="${n}">Hand ${t.status === "changes-requested" ? "back " : ""}to ${esc(personOf(n))}</button>`).join("");
+}
+
+const reviewLink = (t, primary = false) => t.from_commit ? `<a class="btn small ${primary ? "primary" : ""}" href="${reviewHref(t.id)}">Review the diff</a>` : "";
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? "Working late" : h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
 async function Overview() {
-  const data = await api("/api/dashboard");
-  await Promise.all(agentIds().filter((n) => state.agents[n]?.session_id && !state.live[n]?.length).map(loadLive));
-
-  const stations = agentIds().map((name) => {
-    const ag = state.agents[name] || { status: "stopped" };
-    const running = ag.status !== "stopped";
-    return `<section class="station ${roleOf(name)} ${ag.status === "waiting" ? "waiting" : ""}">
-      <header><h2><a href="#/agents/${name}">${esc(nameOf(name))}</a></h2><span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span></header>
-      <p class="model">${esc(modelLabel(name))}</p>
-      <p class="doing">${esc(doing(name))}</p>
-      <div class="btn-row">
-        <a class="btn small ${ag.status === "waiting" ? "role" : ""}" href="#/agents/${name}">${ag.status === "waiting" ? "Review request" : "Open chat"}</a>
-        ${running ? `<button class="btn small" data-action="stop" data-agent="${name}">Stop</button>`
-                  : `<button class="btn small" data-action="start" data-agent="${name}">Start</button>`}
-      </div></section>`;
-  }).join("");
-
-  const tasks = data.tasks;
-  const lane = (s) => {
-    const items = tasks.filter((t) => t.status === s.status);
-    return `<div class="stage ${s.owner}">
-      <div class="stage-head"><h3>${s.label}<span class="count">${items.length}</span></h3><small>${s.owner === "lead" ? "Accepted" : `With ${OWNER_LABEL[s.owner]}`}</small></div>
-      ${items.slice(0, 6).map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, ${t.status === "blocked" ? "blocked by " : ""}${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}
-      ${items.length > 6 ? `<a class="muted" href="#/tasks?status=${s.status}">${items.length - 6} more</a>` : ""}
-    </div>`;
-  };
-  const blocked = tasks.filter((t) => t.status === "blocked");
-
-  const needs = [];
+  const tasks = await api("/api/tasks");
+  state.tasks = tasks;
+  const cards = [];
   for (const [name, ag] of Object.entries(state.agents)) {
-    for (const p of ag.pending || []) needs.push(`<li><span class="what"><a href="#/agents/${name}">${esc(nameOf(name))} wants to run ${esc(p.tool)}</a>: <code>${esc(toolArg(p.tool, p.input).slice(0, 80))}</code></span></li>`);
+    for (const p of ag.pending || []) {
+      cards.push(`<article class="need approval">
+        <div class="k">${avatar(name)} Approval · ${esc(nameOf(name))}</div>
+        <div class="t"><code>${esc(toolArg(p.tool, p.input).slice(0, 140))}</code></div>
+        <div class="btn-row"><button class="btn small primary" data-action="allow" data-decision="allow" data-agent="${name}" data-pid="${esc(p.id)}">Allow</button>
+          <button class="btn small" data-action="allow" data-decision="deny" data-agent="${name}" data-pid="${esc(p.id)}">Deny</button>
+          <a class="btn small" href="#/agents/${name}">Open chat</a></div></article>`);
+    }
   }
-  for (const t of blocked) needs.push(`<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)} is blocked${t.assignee ? ` by ${esc(nameOf(t.assignee))}` : ""}</a>: ${esc(t.title)}</span><span class="when">${ago(t.updated)}</span></li>`);
-  if (data.unread.lead) needs.push(`<li><span class="what"><a href="#/inbox/lead">${data.unread.lead} new notification${data.unread.lead > 1 ? "s" : ""} for you</a></span></li>`);
-
-  const activity = data.activity.slice(0, 10).map((a) => `<li><span class="what"><a href="#/tasks/${esc(a.id)}">${esc(a.id)}</a> ${esc(a.title)} <span class="muted">(${esc(a.project)})</span><br>${statusPill(a.to)}</span><span class="when">${ago(a.ts)}</span></li>`).join("");
-
-  return `<div class="page-head"><div><h1>Overview</h1>
-      <p>${tasks.length ? `${tasks.length} task${tasks.length > 1 ? "s" : ""} across ${data.projects.length} project${data.projects.length > 1 ? "s" : ""}.` : "No tasks yet."} Agents work from <code>${esc(state.settings?.workspace)}</code>.</p></div>
-      <a class="btn" href="#/agents/techlead">Start a new task with the Tech Lead</a></div>
-    <div class="stations">${stations}</div>
-    <p class="team-link"><a href="#/settings">Add or remove agents</a></p>
-    <section class="section"><h2>Who has each task</h2>
-      ${tasks.length ? `<div class="pipeline">${blocked.length ? `<div class="stage stage-blocked lead"><div class="stage-head"><h3>Blocked<span class="count">${blocked.length}</span></h3><small>Needs your decision</small></div>${blocked.map((t) => `<a class="chip" href="#/tasks/${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.id)}, ${esc(t.project_name)}${t.assignee ? `, blocked by ${esc(nameOf(t.assignee))}` : ""}</small></a>`).join("")}</div>` : ""}${STAGES.map(lane).join("")}</div>`
-                     : `<div class="empty">Tell the Tech Lead what you need, for example "In ~/code/my-api, users need to reset their password by email." The task will show up here.</div>`}
-    </section>
-    <div class="two-col section">
-      <section><h2>Needs you</h2>${needs.length ? `<ul class="list needs">${needs.join("")}</ul>` : `<p class="muted">Nothing is waiting on you.</p>`}</section>
-      <section><h2>Recent activity</h2>${activity ? `<ul class="list">${activity}</ul>` : `<p class="muted">Status changes will appear here.</p>`}</section>
-    </div>`;
+  const card = (t, kind, label, who, buttons) => `<article class="need ${kind}">
+      <div class="k">${who ? avatar(who) : ""} ${esc(label)}</div>
+      <div class="t"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">· ${esc(t.project_name)}</span></div>
+      <div class="btn-row">${buttons}</div></article>`;
+  for (const t of tasks.filter((x) => x.status === "blocked")) {
+    const who = t.blocked_by || t.assignee;
+    cards.push(card(t, "blocked", `Blocked · ${who ? nameOf(who) : "needs you"}`, who,
+      `${who ? `<a class="btn small primary" href="#/agents/${who}">Answer</a>` : ""}<a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>`));
+  }
+  for (const t of tasks.filter((x) => x.status === "ready-for-review")) {
+    cards.push(card(t, "review", `Ready for review${t.dev ? ` · ${nameOf(t.dev)} finished it` : ""}`, t.dev, reviewLink(t, true) + handButtons(t, 2, false)));
+  }
+  for (const t of tasks.filter((x) => x.status === "changes-requested" && !state.agents[x.dev]?.status?.match(/working|waiting/))) {
+    cards.push(card(t, "rework", "Sent back for changes", t.dev, handButtons(t, 1) + reviewLink(t)));
+  }
+  for (const t of tasks.filter((x) => x.status === "ready-for-dev")) {
+    cards.push(card(t, "dev", "Ready for a dev: who builds it?", "", handButtons(t, 3)));
+  }
+  if (state.improvements) {
+    cards.push(`<article class="need coach"><div class="k">${state.agents.coach ? avatar("coach") : ""} The Coach</div>
+      <div class="t">${state.improvements} proposed improvement${state.improvements > 1 ? "s" : ""} to the team's instructions</div>
+      <div class="btn-row"><a class="btn small primary" href="#/improvements">See proposals</a></div></article>`);
+  }
+  const working = Object.values(state.agents).filter((a) => ["working", "waiting"].includes(a.status)).length;
+  const moving = tasks.filter((t) => ["draft", "in-dev", "in-review"].includes(t.status));
+  const done = tasks.filter((t) => t.status === "done").sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 5);
+  const row = (t) => `<tr><td><a href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a> <span class="muted">· ${esc(t.project_name)}</span></td>
+    <td class="right">${statusPill(t.status)}${t.assignee ? ` <span class="muted">${esc(personOf(t.assignee))}</span>` : ""}</td></tr>`;
+  return `<div class="page-head"><div><h1>${greeting()}</h1>
+      <p>${cards.length ? `${cards.length} thing${cards.length > 1 ? "s" : ""} need${cards.length > 1 ? "" : "s"} you.` : "Nothing needs you right now."}
+        ${working ? `${working} agent${working > 1 ? "s are" : " is"} working.` : "No agent is working."}</p></div>
+      <a class="btn primary" href="#/agents/${agentIds().find((n) => roleOf(n) === "techlead") || "techlead"}">New task</a></div>
+    ${cards.length ? `<div class="needs-grid">${cards.join("")}</div>` : ""}
+    <div class="home-cols">
+      <section class="card-box"><h2>In progress</h2>${moving.length ? `<table class="plain">${moving.map(row).join("")}</table>` : `<p class="muted">Nothing is being worked on. <a href="#/tasks">Open the board</a>.</p>`}</section>
+      <section class="card-box"><h2>Recently done</h2>${done.length ? `<table class="plain">${done.map((t) => `<tr><td><a href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a></td><td class="right">${reviewLink(t)}</td></tr>`).join("")}</table>` : `<p class="muted">Finished tasks show up here.</p>`}</section>
+    </div>
+    ${tasks.length ? "" : `<div class="empty">Tell the Tech Lead what you need, for example "In ~/code/my-api, users need to reset their password by email." The task will show up here.</div>`}`;
 }
 
 // ---- tasks -----------------------------------------------------------------
 
-const taskFilter = { project: "", status: "open", q: "" };
+const taskFilter = { project: "", status: "open", q: "", agent: "" };
+const boardView = () => { try { return localStorage.getItem("boardView") || "board"; } catch { return "board"; } };
+
+const COLUMNS = [
+  { key: "blocked", label: "Blocked", sub: "needs you", statuses: ["blocked"] },
+  { key: "draft", label: "Draft", sub: "Tech Lead", statuses: ["draft"] },
+  { key: "ready-for-dev", label: "Ready for dev", sub: "waiting for you", statuses: ["ready-for-dev"] },
+  { key: "in-dev", label: "In dev", sub: "Dev", statuses: ["in-dev", "changes-requested"] },
+  { key: "ready-for-review", label: "Ready for review", sub: "waiting for you", statuses: ["ready-for-review"] },
+  { key: "in-review", label: "In review", sub: "Reviewer", statuses: ["in-review"] },
+  { key: "done", label: "Done", sub: "newest first", statuses: ["done"] },
+];
+
+function boardCard(t) {
+  const who = t.status === "blocked" ? (t.blocked_by || t.assignee) : t.assignee || (t.status === "done" ? t.dev : "");
+  const tag = t.status === "blocked" ? `<span class="tag bad">Blocked</span>` : t.status === "changes-requested" ? `<span class="tag warn">Rework</span>` : "";
+  const devBusy = ["working", "waiting"].includes(state.agents[t.dev]?.status);
+  const actions = t.status === "blocked" ? (who ? `<a class="btn small primary" href="#/agents/${who}">Answer</a>` : "")
+    : t.status === "ready-for-review" ? reviewLink(t, true) + handButtons(t, 1, false)
+    : t.status === "ready-for-dev" ? handButtons(t, 1)
+    : t.status === "changes-requested" && !devBusy ? handButtons(t, 1)
+    : t.status === "done" ? reviewLink(t) : "";
+  return `<article class="bcard ${t.status === "blocked" ? "blocked" : ""}">
+    <a class="cover" href="#/tasks/${esc(t.id)}" aria-label="${esc(t.id)} ${esc(t.title)}"></a>
+    <div class="meta"><span>${esc(t.id)}</span>${tag}</div>
+    <div class="title">${esc(t.title)}<small>${esc(t.project_name)}</small></div>
+    ${who || costText(t.cost) ? `<div class="foot">${who && state.agents[who] ? `${avatar(who)}<span>${esc(personOf(who))}</span>` : ""}<span class="cost">${esc(costText(t.cost))}</span></div>` : ""}
+    ${actions ? `<div class="btn-row">${actions}</div>` : ""}</article>`;
+}
 
 async function Tasks() {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   if (params.get("status")) taskFilter.status = params.get("status");
   const tasks = await api("/api/tasks");
+  state.tasks = tasks;
+  const view = boardView();
   const projects = [...new Set(tasks.map((t) => t.project_name))].sort();
-  const shown = tasks.filter((t) =>
-    (!taskFilter.project || t.project_name === taskFilter.project) &&
-    (taskFilter.status === "all" || (taskFilter.status === "open" ? t.status !== "done" : t.status === taskFilter.status)) &&
+  const involves = (t, n) => [t.assignee, t.dev, t.reviewer, t.techlead, t.blocked_by].includes(n);
+  const matching = tasks.filter((t) =>
+    (!taskFilter.project || t.project_name === taskFilter.project) && (!taskFilter.agent || involves(t, taskFilter.agent)) &&
     (!taskFilter.q || `${t.id} ${t.title}`.toLowerCase().includes(taskFilter.q.toLowerCase())));
   const option = (value, label, current) => `<option value="${esc(value)}" ${value === current ? "selected" : ""}>${esc(label)}</option>`;
-
-  const unlinked = (await api("/api/costs")).unlinked;
-  return `<div class="page-head"><div><h1>Tasks</h1><p>Every task across your projects. Task files live in <code>${esc(state.kit)}/tasks</code>.</p>
-      ${costText(unlinked) ? `<p>Conversations not linked to any task: ${esc(costText(unlinked))}. <a href="#/history">See History</a></p>` : ""}</div></div>
-    <div class="filters">
-      <input type="text" id="task-q" placeholder="Search by ID or title" value="${esc(taskFilter.q)}" aria-label="Search tasks">
+  const techlead = agentIds().find((n) => roleOf(n) === "techlead") || "techlead";
+  const head = `<div class="board-bar"><h1>Board</h1>
       <select id="task-project" aria-label="Project">${option("", "All projects", taskFilter.project)}${projects.map((p) => option(p, p, taskFilter.project)).join("")}</select>
-      <select id="task-status" aria-label="Status">${option("open", "Open tasks", taskFilter.status)}${option("all", "All tasks", taskFilter.status)}${option("blocked", "Blocked", taskFilter.status)}${STAGES.map((s) => option(s.status, s.label, taskFilter.status)).join("")}</select>
-    </div>
+      <select id="task-agent" aria-label="Agent">${option("", "Anyone", taskFilter.agent)}${agentIds().filter((n) => ["techlead", "dev", "reviewer"].includes(roleOf(n))).map((n) => option(n, nameOf(n), taskFilter.agent)).join("")}</select>
+      <input type="text" id="task-q" placeholder="Search tasks" value="${esc(taskFilter.q)}" aria-label="Search tasks">
+      ${view === "list" ? `<select id="task-status" aria-label="Status">${option("open", "Open tasks", taskFilter.status)}${option("all", "All tasks", taskFilter.status)}${option("blocked", "Blocked", taskFilter.status)}${STAGES.map((s) => option(s.status, s.label, taskFilter.status)).join("")}</select>` : ""}
+      <span class="segmented" role="group" aria-label="View">${[["board", "Board"], ["list", "List"]].map(([v, l]) =>
+        `<button class="btn small" data-action="board-view" data-view="${v}" aria-pressed="${v === view}">${l}</button>`).join("")}</span>
+      <a class="btn primary" href="#/agents/${techlead}">New task</a></div>`;
+  if (!tasks.length) return head + `<div class="empty">No tasks yet. Open the Tech Lead and describe what you need.</div>`;
+
+  if (view === "board") {
+    const cols = COLUMNS.map((c) => {
+      const items = matching.filter((t) => c.statuses.includes(t.status)).sort((a, b) => b.updated.localeCompare(a.updated));
+      return `<section class="bcol ${c.key}"><h2>${c.label} <span class="count">${items.length}</span></h2><small>${c.sub}</small>
+        <div class="bcards">${items.map(boardCard).join("") || `<p class="none">None</p>`}</div></section>`;
+    }).join("");
+    return head + `<div class="board">${cols}</div>`;
+  }
+
+  const shown = matching.filter((t) => taskFilter.status === "all" || (taskFilter.status === "open" ? t.status !== "done" : t.status === taskFilter.status));
+  const unlinked = (await api("/api/costs")).unlinked;
+  return head + `${costText(unlinked) ? `<p class="muted">Conversations not linked to any task: ${esc(costText(unlinked))}. <a href="#/history">See Activity</a></p>` : ""}
     ${shown.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Task</th><th>Project</th><th>Stage</th><th>With</th><th>Spec ready</th><th>Cost so far</th><th>Updated</th></tr></thead>
       <tbody>${shown.map((t) => `<tr data-href="#/tasks/${esc(t.id)}">
@@ -372,7 +606,7 @@ async function Tasks() {
         <td><span class="ready"><span class="bar" aria-hidden="true"><i style="width:${t.ready.total ? Math.round(100 * t.ready.done / t.ready.total) : 0}%"></i></span>${t.ready.done}/${t.ready.total}</span></td>
         <td class="num">${esc(costText(t.cost)) || '<span class="muted">None yet</span>'}</td>
         <td class="num">${ago(t.updated)}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="empty">${tasks.length ? "No tasks match these filters." : "No tasks yet. Open the Tech Lead and describe what you need."}</div>`}`;
+      : `<div class="empty">No tasks match these filters.</div>`}`;
 }
 
 const PROMPTS = {
@@ -412,44 +646,61 @@ async function TaskChat(r) {
     <div class="transcript ${roleOf(c.agent)}" style="overflow:visible">${transcriptHTML(c.events, { agent: c.agent })}</div>`;
 }
 
+const PROGRESS = [["draft", "Draft"], ["ready-for-dev", "Ready for dev"], ["in-dev", "In dev"], ["ready-for-review", "Ready for review"], ["in-review", "In review"], ["done", "Done"]];
+
+function progressLine(t) {
+  const where = t.status === "changes-requested" ? "in-dev" : t.status === "blocked" ? (t.activity.find((a) => a.to !== "blocked")?.to || "draft") : t.status;
+  const at = PROGRESS.findIndex(([k]) => k === where);
+  return `<ol class="progress ${t.status === "blocked" ? "is-blocked" : ""}" aria-label="Progress">${PROGRESS.map(([k, label], i) =>
+    `<li class="${i < at ? "done" : i === at ? "now" : ""}" ${i === at ? 'aria-current="step"' : ""}>${i === at && t.status === "changes-requested" ? "Rework" : i === at && t.status === "blocked" ? `${label} · blocked` : label}</li>`).join("")}</ol>`;
+}
+
 async function TaskDetail(r) {
+  const tab = new URLSearchParams(location.hash.split("?")[1] || "").get("tab") || "spec";
   const [t, chatList] = await Promise.all([api(`/api/tasks/${encodeURIComponent(r.id)}`), api(`/api/tasks/${encodeURIComponent(r.id)}/chats`)]);
-  const timeline = t.activity.slice().reverse().map((a) => `<li class="${ownerOf(a.to)}">${statusPill(a.to)}<br><span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}</span></li>`).join("");
-  const holder = t.assignee && state.agents[t.assignee];
-  const chatButton = holder ? `<a class="btn role ${roleOf(t.assignee)}" href="#/agents/${t.assignee}">Open chat with ${esc(nameOf(t.assignee))}${t.status === "blocked" ? ", who blocked it" : ""}</a>` : "";
   const lr = t.lead_review || {};
-  const reviewButton = t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a>` : "";
-  // Names in Details link to that agent's chat (plain text if the agent was removed).
-  const who = (id) => state.agents[id] ? `<a href="#/agents/${id}">${esc(nameOf(id))}</a>` : esc(nameOf(id));
-  return `<p><a href="#/tasks" class="muted">All tasks</a></p>
-    <div class="page-head"><div><h1>${esc(t.title)}</h1><p>${esc(t.id)} in ${esc(t.project_name)}, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div><div class="btn-row">${reviewButton}${chatButton}</div></div>
+  const holder = t.assignee && state.agents[t.assignee];
+  const who = (id) => state.agents[id] ? `<a href="#/agents/${id}">${avatar(id)} ${esc(personOf(id))}</a>` : esc(nameOf(id));
+  const tabs = [["spec", "Spec"], ["chats", `Conversations${chatList.length ? ` · ${chatList.length}` : ""}`], ...(t.from_commit ? [["reviews", `Your reviews${lr.rounds ? ` · ${lr.rounds}` : ""}`]] : []),
+    ["activity", "Activity"], ["cost", `Cost${costText(t.cost) ? ` · ${costText(t.cost)}` : ""}`]];
+  let body = "";
+  if (tab === "chats") body = chatsSection(t, chatList);
+  else if (tab === "activity") {
+    const items = t.activity.slice().reverse().map((a) => `<li>${statusPill(a.to)} <span class="muted">${ago(a.ts)}${a.from ? `, from ${esc(stageLabel(a.from))}` : ""}${a.by ? `, ${a.to === "blocked" ? "by" : "with"} ${esc(nameOf(a.by))}` : ""}${a.actor === "lead" ? ", by you" : ""}</span></li>`).join("");
+    body = items ? `<ul class="timeline">${items}</ul>` : `<p class="muted">No status changes recorded yet.</p>`;
+  } else if (tab === "cost") body = costSection(t.cost);
+  else if (tab === "reviews") {
+    const rev = await api(`/api/tasks/${encodeURIComponent(t.id)}/review?mode=since`).catch(() => ({ rounds: [] }));
+    body = (rev.rounds.length ? rev.rounds.slice().reverse().map((x) => roundCard(x, rev.dev)).join("") : `<p class="muted">You haven't reviewed this code yet.</p>`)
+      + `<p><a class="btn primary" href="${reviewHref(t.id)}">Open the code review${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a></p>`;
+  } else body = `<article class="prose">${md(t.markdown)}</article>`;
+  return `<div class="task-head"><div class="title"><small>${esc(t.id)} · ${esc(t.project_name)}</small><h1>${esc(t.title)}</h1>
+      <p class="muted">${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div>
+      <div class="btn-row">
+        ${t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : ""}
+        ${handButtons(t, 2, !t.from_commit)}
+        ${holder && !handCandidates(t).includes(t.assignee) ? `<a class="btn" href="#/agents/${t.assignee}">${t.status === "blocked" ? "Answer" : "Open chat with"} ${esc(personOf(t.assignee))}</a>` : ""}
+        <details class="menu"><summary class="btn" aria-label="More">⋯</summary><div class="menu-list">
+          <button data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button>
+          ${agentIds().filter((n) => ["techlead", "dev", "reviewer"].includes(roleOf(n))).map((n) => `<button data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">Draft a message to ${esc(nameOf(n))}</button>`).join("")}
+        </div></details></div></div>
+    ${progressLine(t)}
     <div class="task-layout">
-      <article class="prose">${md(t.markdown)}</article>
+      <div><nav class="tabs" aria-label="Task">${tabs.map(([k, label]) => `<a href="#/tasks/${esc(t.id)}${k === "spec" ? "" : `?tab=${k}`}" ${k === tab ? 'aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>${body}</div>
       <aside class="task-side">
-        ${chatsSection(t, chatList)}
-        <section><h2>More work on this feature</h2><p class="muted">A change, an addition or a fix to what this task built: the Tech Lead writes a follow-up task, and the dev adds commits to <code>${esc(t.branch)}</code> instead of starting a new branch.</p>
-          <button class="btn small" data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button></section>
-        <section><h2>Hand it to an agent</h2><p class="muted">Opens the chat with a message ready to send.</p>
-          <div class="btn-row">${agentIds().map((n) => `<button class="btn small" data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">${esc(nameOf(n))}</button>`).join("")}</div></section>
-        <section><h2>Cost so far</h2>${costSection(t.cost)}</section>
-        <section><h2>Details</h2><dl class="facts">
-          <dt>Project</dt><dd><code>${esc(t.project)}</code></dd>
-          ${t.techlead ? `<dt>Tech Lead</dt><dd>${who(t.techlead)}</dd>` : ""}
-          ${t.dev ? `<dt>Dev</dt><dd>${who(t.dev)}</dd>` : ""}
-          ${t.reviewer ? `<dt>Reviewer</dt><dd>${who(t.reviewer)}</dd>` : ""}
-          ${t.worktree ? `<dt>Worktree</dt><dd><code>${esc(t.worktree)}</code></dd>` : ""}
-          <dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>
-          ${t.follows ? `<dt>Follows</dt><dd><a href="#/tasks/${esc(t.follows)}">${esc(t.follows)}</a></dd>` : ""}
-          ${t.same_branch.length ? `<dt>Same branch</dt><dd>${t.same_branch.map((o) => `<a href="#/tasks/${esc(o.id)}" title="${esc(o.title)}">${esc(o.id)}</a> ${statusPill(o.status)}`).join("<br>")}</dd>` : ""}
-          ${t.from_commit ? `<dt>Your reviews</dt><dd>${lr.rounds ? `${lr.rounds} round${lr.rounds === 1 ? "" : "s"}, last at <code>${esc(lr.last.slice(0, 7))}</code>` : "None yet"}${lr.drafts ? `, ${lr.drafts} draft comment${lr.drafts === 1 ? "" : "s"}` : ""}</dd>` : ""}
-          ${t.from_commit ? `<dt>Changes</dt><dd><code>git diff ${esc(t.from_commit)}..HEAD</code></dd>` : ""}
-          <dt>Base</dt><dd><code>${esc(t.base)}</code></dd>
-          <dt>Priority</dt><dd>${esc(t.priority)}</dd>
-          <dt>Created</dt><dd>${esc(t.created)}</dd>
-          <dt>Approved</dt><dd>${esc(t.approved || "Not yet")}</dd>
-          <dt>Spec ready</dt><dd>${t.ready.done} of ${t.ready.total} checks</dd>
-          <dt>File</dt><dd><code>${esc(t.path)}</code></dd></dl></section>
-        <section><h2>History</h2>${timeline ? `<ul class="timeline">${timeline}</ul>` : `<p class="muted">No status changes recorded yet.</p>`}</section>
+        <section class="side-box"><h3>People</h3><dl class="kv people">
+          <dt>Spec</dt><dd>${t.techlead ? who(t.techlead) : "—"}</dd><dt>Built</dt><dd>${t.dev ? who(t.dev) : "Not yet"}</dd><dt>Review</dt><dd>${t.reviewer ? who(t.reviewer) : "Not yet"}</dd></dl></section>
+        <section class="side-box"><h3>Code</h3><dl class="kv">
+          ${t.branch ? `<dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>` : ""}<dt>Base</dt><dd><code>${esc(t.base || "main")}</code></dd>
+          ${t.worktree ? `<dt>Worktree</dt><dd><code title="${esc(t.worktree)}">…/${esc(t.worktree.split("/").slice(-2).join("/"))}</code></dd>` : ""}
+          ${t.from_commit ? `<dt>Your reviews</dt><dd>${lr.rounds ? `${lr.rounds}, last at <code>${esc(lr.last.slice(0, 7))}</code>` : "None yet"}</dd>` : ""}</dl></section>
+        ${t.same_branch.length || t.follows ? `<section class="side-box"><h3>Same feature</h3><ul class="side-list">
+          ${t.follows ? `<li>Follows <a href="#/tasks/${esc(t.follows)}">${esc(t.follows)}</a></li>` : ""}
+          ${t.same_branch.map((o) => `<li><a href="#/tasks/${esc(o.id)}">${esc(o.id)} ${esc(o.title)}</a> ${statusPill(o.status)}</li>`).join("")}</ul></section>` : ""}
+        <section class="side-box"><h3>Details</h3><dl class="kv">
+          <dt>Project</dt><dd><code title="${esc(t.project)}">${esc(t.project_name)}</code></dd><dt>Priority</dt><dd>${esc(t.priority || "—")}</dd>
+          <dt>Created</dt><dd>${esc(t.created || "—")}</dd><dt>Approved</dt><dd>${esc(t.approved || "Not yet")}</dd>
+          <dt>Spec ready</dt><dd>${t.ready.done} of ${t.ready.total} checks</dd><dt>File</dt><dd><code>${esc(t.path.split("/").pop())}</code></dd></dl></section>
       </aside>
     </div>`;
 }
@@ -481,54 +732,90 @@ async function AgentChat(r) {
   const [, task] = await Promise.all([loadLive(name), codeTaskOf(name).catch(() => null)]);
   state.codeTask[name] = task;
   const a = ROLES[roleOf(name)];
-  return `<div class="chat-page ${roleOf(name)}">
+  if (!state.tasks) await refreshCounts();
+  return `<div class="chat-layout ${roleOf(name)}">
+   <div class="chat-page">
     <header class="agent-head" id="agent-head"></header>
     <div class="transcript" id="transcript"><div id="tx-events"></div><div id="tx-live" aria-live="polite"></div></div>
+    <div id="pinned-asks"></div>
     <form class="composer" id="composer">
-      <label class="hint" for="composer-text">Message ${esc(nameOf(name))}. Enter sends, Shift+Enter adds a line.</label>
-      <textarea id="composer-text" rows="3" placeholder="${roleOf(name) === "techlead" ? "Describe what you need, and in which project folder." : "Tell the agent what to do."}">${esc(state.drafts[name] || "")}</textarea>
-      <div class="row"><div class="quick">${a.quick.map((q) => `<button type="button" class="btn small" data-action="quick" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>
-        <button class="btn role" type="submit" id="send">Send</button></div>
-    </form></div>`;
+      <div class="quick">${a.quick.map((q) => `<button type="button" class="chip-btn" data-action="quick" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+      <div class="compose-box"><textarea id="composer-text" rows="2" aria-label="Message ${esc(nameOf(name))}"
+        placeholder="${roleOf(name) === "techlead" ? "Describe what you need, and in which project folder." : `Message ${esc(personOf(name))}… (Enter to send, Shift+Enter for a new line, # for a task)`}">${esc(state.drafts[name] || "")}</textarea>
+        <button class="btn primary" type="submit" id="send">Send</button></div>
+      <ul class="suggest" id="task-suggest" hidden></ul>
+    </form>
+   </div>
+   <aside class="chat-side" id="chat-side"></aside></div>`;
+}
+
+// The panel next to a chat: the task it's on, this conversation, what it did before (or, for the Orchestrator
+// and the Coach, what's waiting on you).
+function renderChatSide(name) {
+  const side = document.getElementById("chat-side");
+  if (!side) return;
+  const role = roleOf(name);
+  const events = state.live[name] || [];
+  const cost = events.filter((e) => e.kind === "result").reduce((n, e) => n + (e.cost_usd || 0), 0);
+  const started = events.find((e) => e.ts)?.ts;
+  const convo = `<section class="side-box"><h3>This conversation</h3>
+      <dl class="kv"><dt>Started</dt><dd>${started ? esc(ago(started)) : "Not yet"}</dd><dt>Cost</dt><dd>${cost ? money(cost) : "Nothing yet"}</dd></dl>
+      ${state.agents[name]?.status !== "stopped" ? `<button class="btn small" data-action="new" data-agent="${name}">New conversation</button>` : ""}</section>`;
+  if (role === "orchestrator" || role === "coach") {
+    const asks = Object.entries(state.agents).flatMap(([n, a]) => (a.pending || []).map((p) => ({ n, p })));
+    const extra = role === "coach"
+      ? `<section class="side-box"><h3>Improvements</h3><p>${state.improvements ? `${state.improvements} proposal${state.improvements > 1 ? "s" : ""} waiting for you.` : "No proposals waiting."}</p>
+          <a class="btn small primary" href="#/improvements">${state.improvements ? "Review them" : "Start a review"}</a></section>`
+      : `<section class="side-box"><h3>Waiting for you</h3>${asks.length ? `<ul class="side-list">${asks.map(({ n, p }) =>
+          `<li><a href="#/agents/${n}">${esc(personOf(n))}</a>: ${esc(toolArg(p.tool, p.input).slice(0, 70))}</li>`).join("")}</ul>` : `<p class="muted">No approvals waiting.</p>`}
+          <p class="muted">${needsCount()} thing${needsCount() === 1 ? "" : "s"} on <a href="#/">Home</a>.</p></section>`;
+    side.innerHTML = extra + convo;
+    return;
+  }
+  const t = busyWith(name) || state.codeTask[name];
+  const field = role === "techlead" ? "techlead" : role;
+  const earlier = (state.tasks || []).filter((x) => x[field] === name && x.id !== t?.id).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 5);
+  side.innerHTML = `${t ? `<section class="side-box"><h3>Task</h3><a class="side-title" href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a>
+      <dl class="kv"><dt>Status</dt><dd>${statusPill(t.status)}</dd>${t.branch ? `<dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>` : ""}${t.base ? `<dt>Base</dt><dd><code>${esc(t.base)}</code></dd>` : ""}</dl>
+      <div class="btn-row"><a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>${t.from_commit ? `<a class="btn small" href="${reviewHref(t.id)}">Diff</a>` : ""}</div></section>`
+      : `<section class="side-box"><h3>Task</h3><p class="muted">Not on a task right now.</p></section>`}
+    ${convo}
+    ${earlier.length ? `<section class="side-box"><h3>Earlier tasks</h3><ul class="side-list">${earlier.map((x) =>
+      `<li><a href="#/tasks/${esc(x.id)}">${esc(x.id)} ${esc(x.title)}</a> <span class="muted">${esc(stageLabel(x.status).toLowerCase())}</span></li>`).join("")}</ul></section>` : ""}`;
 }
 
 function renderAgentChrome(name) {
   const head = document.getElementById("agent-head");
   if (!head) return;
-  const a = ROLES[roleOf(name)];
   const ag = state.agents[name] || { status: "stopped" };
-  const mode = state.settings?.permission_mode?.[name] || "default";
   const running = ag.status !== "stopped";
   const busy = ag.status === "working" || ag.status === "waiting";
-  const choice = choiceOf(name);
-  const prov = providerOf(choice.provider);
+  const prov = providerOf(choiceOf(name).provider);
   const needsKey = prov.engine !== "claude" && !prov.has_key;
-  const picker = running
-    ? `<p class="model">Running on ${esc(modelLabel(name))}</p>`
-    : `<div class="model-pick">
-        <label>Provider <select data-action="provider" data-agent="${name}">${(state.settings?.providers || []).map((p) =>
-          `<option value="${p.id}" ${p.id === choice.provider ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select></label>
-        <label>Model <input type="text" list="models-${name}" data-action="model" data-agent="${name}" value="${esc(choice.model)}"
-          placeholder="${prov.engine === "claude" ? "Default from the agent file" : `For example ${esc(prov.models?.[0] || "")}`}" spellcheck="false"></label>
-        <datalist id="models-${name}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
-        ${needsKey ? `<span class="warn">No ${esc(prov.label)} API key yet. <a href="#/settings">Add it in Settings</a></span>` : ""}
-      </div>`;
+  const now = busyWith(name);
   const task = state.codeTask[name];
-  head.innerHTML = `<div class="title"><h1>${esc(nameOf(name))} <button class="btn small" data-action="rename" data-agent="${name}">Rename</button></h1><p>${a.blurb}</p>${picker}</div>
-    <div class="btn-row" style="align-items:center">
-      ${task ? `<a class="btn primary" href="${reviewHref(task.id)}" title="${esc(task.title)}">Review the code of ${esc(task.id)}</a>` : ""}
-      <span class="status ${ag.status}">${STATUS_TEXT[ag.status]}</span>
-      <label class="mode">Edits <select data-action="mode" data-agent="${name}" aria-label="File edit approvals">
-        <option value="default" ${mode === "default" ? "selected" : ""}>Ask me first</option>
-        <option value="acceptEdits" ${mode === "acceptEdits" ? "selected" : ""}>Allow automatically</option></select></label>
+  const role = roleOf(name);
+  const pill = { stopped: "Stopped", starting: "Starting", idle: "Ready", working: "Working", waiting: "Needs you" }[ag.status];
+  head.innerHTML = `${avatar(name, "big")}
+    <div class="title"><h1>${esc(personOf(name))} <span class="state-pill ${ag.status}">${pill}</span></h1>
+      <p>${esc(OWNER_LABEL[role])}${now ? ` · on <a href="#/tasks/${esc(now.id)}"><b>${esc(now.id)}</b> ${esc(now.title)}</a>` : role === "orchestrator" ? " · your assistant, also in Slack" : ""}
+        · <a class="model-tag" href="#/settings/team" title="Change it in Settings → Team">${esc(modelLabel(name).replace(", ", " · "))} ↗</a>
+        ${needsKey ? ` · <span class="warn">no ${esc(prov.label)} key: <a href="#/settings/models">add it</a></span>` : ""}</p></div>
+    <div class="btn-row head-actions">
+      ${task && ["dev", "reviewer"].includes(role) ? `<a class="btn primary" href="${reviewHref(task.id)}" title="${esc(task.title)}">Review the code</a>` : ""}
       ${busy ? `<button class="btn" data-action="interrupt" data-agent="${name}">Interrupt</button>` : ""}
-      ${running ? `<button class="btn" data-action="new" data-agent="${name}" title="Start over with a clean context (like /clear)">New session</button>
-                   <button class="btn danger" data-action="stop" data-agent="${name}">Stop</button>`
-                : `<button class="btn role" data-action="start" data-agent="${name}">Start</button>`}
+      ${running ? `<button class="btn" data-action="stop" data-agent="${name}">Stop</button>` : `<button class="btn primary" data-action="start" data-agent="${name}">Start</button>`}
+      <details class="menu"><summary class="btn" aria-label="More">⋯</summary><div class="menu-list">
+        <button data-action="rename" data-agent="${name}">Rename</button>
+        ${running ? `<button data-action="new" data-agent="${name}">New conversation (like /clear)</button>` : ""}
+        <a href="#/settings/team">Model and approvals</a>
+        ${["techlead", "dev", "reviewer"].includes(role) ? `<button data-action="show-inbox" data-agent="${name}">Its inbox (for debugging)</button>` : ""}
+      </div></details>
     </div>`;
   const send = document.getElementById("send");
   if (send) send.disabled = busy;
   renderTranscriptInto(name);
+  renderChatSide(name);
 }
 
 function renderTranscriptInto(name) {
@@ -536,8 +823,13 @@ function renderTranscriptInto(name) {
   if (!box) return;
   const atBottom = nearBottom(box);
   const ag = state.agents[name] || {};
-  document.getElementById("tx-events").innerHTML = transcriptHTML(state.live[name] || [], { pending: ag.pending || [], agent: name })
+  document.getElementById("tx-events").innerHTML = transcriptHTML(state.live[name] || [], { pending: ag.pending || [], agent: name, pinned: true })
     || `<div class="msg system">${ag.status === "stopped" ? "This agent isn't running. Press Start, or just send a message and it will start." : "No messages yet."}</div>`;
+  const pinned = document.getElementById("pinned-asks");
+  if (pinned) {
+    const reqs = (state.live[name] || []).filter((e) => e.kind === "permission" && (ag.pending || []).some((p) => p.id === e.id));
+    pinned.innerHTML = reqs.map((e, i) => askCard(e, name, i === 0)).join("");
+  }
   renderLive(name, atBottom);
 }
 
@@ -588,7 +880,7 @@ async function resync() {
       }
       renderAgentChrome(r.id);
     } else {
-      refreshIf(["overview", "tasks", "task", "inbox"]);
+      refreshIf(["overview", "tasks", "task"]);
     }
   } catch { /* the connection indicator shows the problem */ }
 }
@@ -608,14 +900,70 @@ setInterval(async () => {
 }, 6000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
 
-function transcriptHTML(events, { pending = [], agent = "" } = {}) {
+function askCard(e, agent, first = false) {
+  return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to ${e.tool === "Team action" ? "do this" : e.tool === "Bash" ? "run a command" : `use ${esc(e.tool)}`}</h3>
+    <pre>${esc(toolDetail(e.tool, e.input))}</pre>
+    <input type="text" class="reason" placeholder="Optional: tell the agent why you deny it" aria-label="Reason">
+    <div class="btn-row">
+      <button class="btn primary" data-action="allow" data-decision="allow" data-agent="${agent}" data-pid="${esc(e.id)}">Allow${first ? " <kbd>⏎</kbd>" : ""}</button>
+      <button class="btn" data-action="allow" data-decision="always" data-agent="${agent}" data-pid="${esc(e.id)}">${e.tool === "Team action" ? "Allow all team actions for this session" : `Allow ${esc(e.tool)} for this session`}</button>
+      <button class="btn danger" data-action="allow" data-decision="deny" data-agent="${agent}" data-pid="${esc(e.id)}">Deny${first ? " <kbd>Esc</kbd>" : ""}</button>
+    </div></div>`;
+}
+
+// A run of tool calls in one line: "Read 4 files, ran 2 commands · 12 s". Click to see each one.
+const TOOL_WORDS = { Read: ["read", "file"], Grep: ["searched", "time"], Glob: ["searched", "time"], Edit: ["edited", "file"], MultiEdit: ["edited", "file"],
+  Write: ["wrote", "file"], Bash: ["ran", "command"], WebFetch: ["fetched", "page"], WebSearch: ["searched the web", "time"], TodoWrite: ["updated the plan", "time"] };
+function toolRunSummary(tools, results) {
+  const counts = new Map();
+  for (const t of tools) {
+    const [verb, noun] = TOOL_WORDS[t.name] || [`used ${t.name}`, "time"];
+    const key = `${verb}|${noun}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const parts = [...counts].map(([key, n]) => {
+    const [verb, noun] = key.split("|");
+    return noun === "time" && n === 1 ? verb : `${verb} ${n} ${noun}${n > 1 ? "s" : ""}`;
+  });
+  const text = parts.join(", ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function toolItem(e, results) {
+  const res = results[e.id];
+  const open = state.openTools.has(e.id) ? "open" : "";
+  return `<details class="tool ${res?.is_error ? "failed" : ""}" data-tool="${esc(e.id)}" ${open}>
+    <summary><span class="name">${esc(e.name)}</span><span class="arg">${esc(toolArg(e.name, e.input))}</span><span class="state">${res ? (res.is_error ? "Failed" : "Done") : "Running"}</span></summary>
+    <pre>${esc(res ? res.text || "(no output)" : toolDetail(e.name, e.input))}</pre></details>`;
+}
+
+function transcriptHTML(events, { pending = [], agent = "", pinned = false } = {}) {
   const results = {}, decisions = {};
   for (const e of events) {
     if (e.kind === "tool_result") results[e.id] = e;
     if (e.kind === "decision") decisions[e.id] = e;
   }
   const pendingIds = new Set(pending.map((p) => p.id));
-  return events.map((e) => {
+  // fold each run of consecutive tool calls into one line
+  const items = [];
+  for (const e of events) {
+    if (e.kind === "tool_result" || e.kind === "decision") continue;
+    if (e.kind === "tool" && items.at(-1)?.kind === "tool-run") items.at(-1).tools.push(e);
+    else if (e.kind === "tool") items.push({ kind: "tool-run", tools: [e] });
+    else items.push(e);
+  }
+  return items.map((e) => {
+    if (e.kind === "tool-run") {
+      const failed = e.tools.filter((t) => results[t.id]?.is_error).length;
+      const running = e.tools.find((t) => !results[t.id]);
+      const secs = e.tools.length && e.tools[0].ts && results[e.tools.at(-1).id]?.ts
+        ? Math.round((new Date(results[e.tools.at(-1).id].ts) - new Date(e.tools[0].ts)) / 1000) : null;
+      const key = `run-${e.tools[0].id}`;
+      return `<details class="tool-run ${failed ? "failed" : ""}" data-tool="${esc(key)}" ${state.openTools.has(key) ? "open" : ""}>
+        <summary><span>${esc(toolRunSummary(e.tools, results))}${failed ? `, <b>${failed} failed</b>` : ""}${running ? ` · <span class="muted">running ${esc(running.name)}…</span>` : ""}</span>
+          <span class="state">${secs !== null && secs >= 1 ? `${secs} s` : ""}</span></summary>
+        <div class="run-items">${e.tools.map((t) => toolItem(t, results)).join("")}</div></details>`;
+    }
     switch (e.kind) {
       case "user": return `<div class="msg user">${esc(e.text)}</div>`;
       case "text": return `<div class="msg agent prose">${md(e.text)}</div>`;
@@ -623,7 +971,7 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
       case "system": return `<div class="msg system">${esc(e.text.replace(/\.$/, ""))}, ${ago(e.ts)}</div>`;
       case "error": return `<div class="msg error">Something went wrong: ${esc(e.text)}</div>`;
       case "result": return `<div class="msg result">Finished in ${(e.duration_ms / 1000).toFixed(1)} s${e.cost_usd ? `, about $${e.cost_usd.toFixed(3)}` : ""}${e.tokens_in ? `, ${(e.tokens_in + e.tokens_out).toLocaleString()} tokens` : ""}${e.is_error ? ", with an error" : ""}</div>`;
-      case "tool": {
+      case "tool": {   // not reached (tools are folded into runs), kept for safety
         const res = results[e.id];
         const open = state.openTools.has(e.id) ? "open" : "";
         return `<details class="tool ${res?.is_error ? "failed" : ""}" data-tool="${esc(e.id)}" ${open}>
@@ -634,57 +982,62 @@ function transcriptHTML(events, { pending = [], agent = "" } = {}) {
         const d = decisions[e.id];
         if (d) return `<div class="answered">${d.decision === "deny" ? "You denied" : d.decision === "always" ? "You allowed (for the rest of this session)" : "You allowed"} ${esc(e.tool)}${d.message ? `: ${esc(d.message)}` : ""}</div>`;
         if (!pendingIds.has(e.id)) return `<div class="answered">Request for ${esc(e.tool)} expired.</div>`;
-        return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to ${e.tool === "Team action" ? "do this" : `use ${esc(e.tool)}`}</h3>
-          <pre>${esc(toolDetail(e.tool, e.input))}</pre>
-          <input type="text" class="reason" placeholder="Optional: tell the agent why you deny it" aria-label="Reason">
-          <div class="btn-row">
-            <button class="btn role" data-action="allow" data-decision="allow" data-agent="${agent}" data-pid="${esc(e.id)}">Allow once</button>
-            <button class="btn" data-action="allow" data-decision="always" data-agent="${agent}" data-pid="${esc(e.id)}">${e.tool === "Team action" ? "Allow all team actions for this session" : `Allow ${esc(e.tool)} for this session`}</button>
-            <button class="btn danger" data-action="allow" data-decision="deny" data-agent="${agent}" data-pid="${esc(e.id)}">Deny</button>
-          </div></div>`;
+        return pinned ? `<div class="answered">Waiting for your answer below.</div>` : askCard(e, agent);
       }
       default: return "";
     }
   }).join("");
 }
 
-// ---- inbox ------------------------------------------------------------------
-
-async function Inbox(r) {
-  const role = ["lead", "techlead", "dev", "reviewer"].includes(r.id) ? r.id : "lead";
-  const data = await api(`/api/inbox/${role}`);
-  const label = { lead: "You", techlead: "Tech Lead", dev: "Dev", reviewer: "Reviewer" };
-  const notes = data.notifications.map((n) => `<li><span class="what"><a href="#/tasks/${esc(n.id)}">${esc(n.id)}</a> ${esc(n.title)} <span class="muted">(${esc(n.project)})</span><br>${statusPill(n.to)} <span class="muted">from ${esc(stageLabel(n.frm))}${n.by ? `, blocked by ${esc(nameOf(n.by))}` : n.who ? `, ${esc(nameOf(n.who))}` : ""}${n.recipient !== role ? `, for ${esc(nameOf(n.recipient))}` : ""}</span></span><span class="when">${esc(n.ts)}</span></li>`).join("");
-  const waiting = data.waiting.map((t) => `<li><span class="what"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">(${esc(t.project_name)}, ${esc(holderText(t))})</span></span>${statusPill(t.status)}</li>`).join("");
-  const askButtons = role === "lead" ? "" : agentIds().filter((n) => roleOf(n) === role).map((n) =>
-    `<button class="btn small" data-action="check-inbox" data-agent="${n}">Ask ${esc(nameOf(n))} to check its inbox</button>`).join("");
-  return `<div class="page-head"><div><h1>Inbox</h1><p>Hand-offs land here when a task changes stage. Agents read their own inbox when you tell them to check it.</p></div></div>
-    <nav class="tabs">${Object.entries(label).map(([k, v]) => `<a class="${k}" href="#/inbox/${k}" ${k === role ? 'aria-current="page"' : ""}>${v}</a>`).join("")}</nav>
-    <div class="two-col">
-      <section><h2>New notifications</h2>${notes ? `<ul class="list">${notes}</ul>` : `<p class="muted">Nothing new.</p>`}
-        <div class="btn-row" style="margin-top:12px">
-          ${notes ? `<button class="btn small" data-action="clear-inbox" data-role="${role}">Mark all as read</button>` : ""}
-          ${askButtons}
-        </div></section>
-      <section><h2>Waiting on ${label[role] === "You" ? "you" : label[role]}</h2>${waiting ? `<ul class="list">${waiting}</ul>` : `<p class="muted">No tasks are waiting here.</p>`}</section>
-    </div>`;
-}
-
 // ---- history ------------------------------------------------------------------
+
+const activityFilter = { project: "", agent: "", status: "" };
 
 async function History() {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
-  const agent = params.get("role") || "";
-  const sessions = (await api("/api/sessions")).filter((s) => s.title && (!agent || (s.role || roleOf(s.agent)) === agent));
-  return `<div class="page-head"><div><h1>History</h1><p>Every conversation with your agents. Open one to read it, or continue where it left off.</p></div></div>
-    <nav class="tabs"><a href="#/history" ${!agent ? 'aria-current="page"' : ""}>All</a>${Object.entries(ROLES).map(([k, a]) => `<a class="${k}" href="#/history?role=${k}" ${agent === k ? 'aria-current="page"' : ""}>${a.name}</a>`).join("")}</nav>
-    ${sessions.length ? `<div class="table-wrap"><table>
+  const view = params.get("view") || "tasks";
+  const tabs = `<nav class="tabs"><a href="#/history" ${view === "tasks" ? 'aria-current="page"' : ""}>Task updates</a><a href="#/history?view=conversations" ${view === "conversations" ? 'aria-current="page"' : ""}>Conversations</a></nav>`;
+  const head = `<div class="page-head"><div><h1>Activity</h1><p>${view === "tasks" ? "Every time a task moved, and who moved it." : "Every conversation with your agents. Open one to read it, or continue where it left off."}</p></div></div>`;
+  if (view === "conversations") {
+    const agent = params.get("role") || "";
+    const sessions = (await api("/api/sessions")).filter((s) => s.title && (!agent || (s.role || roleOf(s.agent)) === agent));
+    return head + tabs + `<div class="filters">${["", ...Object.keys(ROLES)].map((k) => `<a class="chip-btn ${agent === k ? "on" : ""}" href="#/history?view=conversations${k ? `&role=${k}` : ""}">${k ? ROLES[k].name : "Everyone"}</a>`).join("")}</div>
+      ${sessions.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Agent</th><th>Conversation</th><th>Model</th><th>Started</th><th>Last activity</th><th>Turns</th><th>Usage</th></tr></thead>
       <tbody>${sessions.map((s) => `<tr data-href="#/history/${s.id}"><td><span class="pill ${roleOf(s.agent)}">${esc(nameOf(s.agent))}</span></td>
         <td><a href="#/history/${s.id}">${esc(s.title)}</a></td><td>${esc(providerOf(s.provider || "claude").label)}${s.model ? `<br><small class="muted">${esc(s.model)}</small>` : ""}</td>
         <td class="num">${esc(new Date(s.started).toLocaleString())}</td>
         <td class="num">${ago(s.updated)}</td><td class="num">${s.turns}</td><td class="num">${s.cost_usd ? `$${s.cost_usd.toFixed(2)}` : s.tokens ? `${s.tokens.toLocaleString()} tokens` : ""}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="empty">No conversations yet.</div>`}`;
+  }
+  const [feed, tasks] = await Promise.all([api("/api/activity?limit=600"), api("/api/tasks")]);
+  const byId = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const projectOf = (a) => byId[a.id]?.project_name || a.project?.split("/").pop() || "";
+  const projects = [...new Set(feed.map(projectOf).filter(Boolean))].sort();
+  const option = (value, label, current) => `<option value="${esc(value)}" ${value === current ? "selected" : ""}>${esc(label)}</option>`;
+  const f = activityFilter;
+  const shown = feed.filter((a) => (!f.project || projectOf(a) === f.project) && (!f.status || a.to === f.status)
+    && (!f.agent || [a.by, a.actor].includes(f.agent)));
+  const days = new Map();
+  for (const a of shown) {
+    const d = new Date(a.ts);
+    const key = d.toDateString();
+    if (!days.has(key)) days.set(key, { label: d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" }), items: [] });
+    days.get(key).items.push(a);
+  }
+  const today = new Date().toDateString(), yesterday = new Date(Date.now() - 864e5).toDateString();
+  const groups = [...days].map(([key, g]) => `<section class="day"><h2>${key === today ? "Today" : key === yesterday ? "Yesterday" : esc(g.label)}</h2><ul class="feed">${g.items.map((a) => {
+    const who = a.actor === "lead" ? "You" : a.actor && state.agents[a.actor] ? personOf(a.actor) : a.by && state.agents[a.by] ? personOf(a.by) : "";
+    return `<li><time>${new Date(a.ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</time>
+      ${a.actor === "lead" ? `<span class="avatar you" title="You">You</span>` : a.actor && state.agents[a.actor] ? avatar(a.actor) : a.by && state.agents[a.by] ? avatar(a.by) : `<span class="avatar lead">·</span>`}
+      <span class="what"><a href="#/tasks/${esc(a.id)}"><b>${esc(a.id)}</b> ${esc(byId[a.id]?.title || a.title || "")}</a> <span class="muted">· ${esc(projectOf(a))}</span><br>
+        ${who ? `${esc(who)} moved it ` : "Moved "}${a.from ? `from ${esc(stageLabel(a.from))} ` : ""}to ${statusPill(a.to)}</span></li>`;
+  }).join("")}</ul></section>`).join("");
+  return head + tabs + `<div class="filters">
+      <select id="act-project" aria-label="Project">${option("", "All projects", f.project)}${projects.map((p) => option(p, p, f.project)).join("")}</select>
+      <select id="act-agent" aria-label="Agent">${option("", "Anyone", f.agent)}${option("lead", "You", f.agent)}${agentIds().map((n) => option(n, nameOf(n), f.agent)).join("")}</select>
+      <select id="act-status" aria-label="Moved to">${option("", "Any status", f.status)}${option("blocked", "Blocked", f.status)}${STAGES.map((s) => option(s.status, s.label, f.status)).join("")}</select></div>
+    ${groups || `<div class="empty">${feed.length ? "Nothing matches these filters." : "Status changes will appear here."}</div>`}`;
 }
 
 async function SessionView(r) {
@@ -701,24 +1054,31 @@ async function SessionView(r) {
 
 // ---- settings -----------------------------------------------------------------
 
-async function Settings() {
+const SETTINGS_SECTIONS = [["team", "Team"], ["models", "Models & keys"], ["slack", "Slack"], ["access", "Access & links"],
+  ["workspace", "Workspace"], ["appearance", "Appearance"], ["about", "About"]];
+
+async function Settings(r) {
   await loadState();
+  const section = SETTINGS_SECTIONS.some(([k]) => k === r.id) ? r.id : "team";
+  const live = await api("/api/slack").catch(() => ({}));
+  const keys = state.settings.providers.filter((p) => p.engine !== "claude" && p.has_key).length;
+  const hint = { team: `${agentIds().length} agents`, models: keys ? `${keys} key${keys > 1 ? "s" : ""}` : "",
+    slack: live.connected ? `<span class="ok">● Connected</span>` : live.error ? `<span class="bad">● Error</span>` : "" };
+  const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
+  const body = await { team: teamSection, models: modelsSection, slack: slackSection, access: accessSection, workspace: workspaceSection,
+    appearance: appearanceSection, about: aboutSection }[section](live);
+  return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
+}
+
+const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}</h1>${text ? `<p>${text}</p>` : ""}</div></div>`;
+
+async function modelsSection() {
   const seen = (await api("/api/costs")).models.filter((m) => m.provider !== "claude").map((m) => m.model);
   const configured = Object.values(state.settings.agents).filter((a) => a.provider !== "claude" && a.model).map((a) => a.model);
   const priced = Object.keys(state.settings.prices || {});
   const models = [...new Set([...seen, ...configured, ...priced])].sort();
-  return `<div class="page-head"><div><h1>Settings</h1></div></div>
-    ${teamSection()}
-    <form class="form" id="settings-form">
-      <label for="workspace">Agents' home folder</label>
-      <p class="muted" style="margin:0">Agents start here and can work in any project under it without extra permission prompts. Pick the folder that holds your projects. Takes effect the next time an agent starts.</p>
-      <div class="row"><input type="text" id="workspace" value="${esc(state.settings.workspace)}"><button class="btn primary">Save</button></div>
-    </form>
-    ${await linksSection()}
-    ${await slackSection()}
-    <section class="section"><h2>AI providers</h2>
-      <p class="muted" style="max-width:68ch">Choose the provider and model for each agent in its chat header, while the agent is stopped. Keys are kept on this server in <code>console/data/settings.json</code> and are never shown again in the browser.</p>
-      <div class="providers">${state.settings.providers.map(providerCard).join("")}</div></section>
+  return settingsHead("Models & keys", "API keys for the providers your agents can run on, and model prices for the cost numbers. Keys are kept on this server in <code>console/data/settings.json</code> and never shown again in the browser.")
+    + `<div class="providers">${state.settings.providers.map(providerCard).join("")}</div>
     <section class="section"><h2>Model prices</h2>
       <p class="muted" style="max-width:68ch">OpenAI, DeepSeek, Qwen and Kimi report tokens, not money. Enter each model's price from your provider's pricing page, in US$ per 1 million tokens, to see task costs. Changes apply to past conversations too. Claude Code reports its own cost.</p>
       ${models.length ? `<div class="table-wrap prices"><table><thead><tr><th>Model</th><th>Input, $ per 1M</th><th>Output, $ per 1M</th><th></th></tr></thead><tbody>
@@ -728,8 +1088,48 @@ async function Settings() {
           <td><button class="btn small" data-action="save-price" data-model="${esc(m)}">Save</button></td></tr>`; }).join("")}
       </tbody></table></div>` : `<p class="muted">Models appear here once an agent is set to a non-Claude model.</p>`}</section>
     <section class="section"><h2>How approvals work</h2>
-      <p class="muted" style="max-width:68ch">When an agent wants to edit a file or run a command, it pauses and asks you in its chat. On Claude, anything your Claude Code settings already allow runs without asking. On the other providers, reading and searching inside the agents' home folder and the kit, editing task files and running the kit's own scripts don't ask; everything else does. Choose "Allow automatically" for edits in an agent's chat header to skip edit prompts for that agent.</p></section>
-    <section class="section"><h2>Agent kit</h2><dl class="facts"><dt>Kit folder</dt><dd><code>${esc(state.kit)}</code></dd><dt>Task board</dt><dd><code>${esc(state.kit)}/tasks</code></dd></dl></section>`;
+      <p class="muted" style="max-width:68ch">When an agent wants to edit a file or run a command, it pauses and asks you (in its chat, on Home and in Slack). On Claude, anything your Claude Code settings already allow runs without asking. On the other providers, reading and searching inside the agents' home folder and the kit, editing task files and running the kit's own scripts don't ask; everything else does. Set an agent's Edits to "Allow automatically" in <a href="#/settings/team">Team</a> to skip edit prompts for it.</p></section>`;
+}
+
+async function accessSection() {
+  const a = await api("/api/about");
+  const remote = a.hosts.length;
+  return settingsHead("Access & links", "") + (await linksSection())
+    + `<section class="section"><h2>Who can open the console</h2>
+      <dl class="facts"><dt>Reached at</dt><dd>${remote ? `This machine, and ${a.hosts.map((h) => `<code>${esc(h)}</code>`).join(", ")} with a password` : "This machine only (<code>localhost</code>)"}</dd>
+        <dt>Password</dt><dd>${remote ? (a.password ? "Set: each browser signs in once (30 days)" : "Missing") : "Not needed"}</dd>
+        <dt>Terminal page</dt><dd>${a.terminal ? "On: anyone who can open the console gets a shell on this machine" : "Off"}</dd></dl>
+      <p class="hint">These are server settings: <code>HOST</code>, <code>CONSOLE_HOSTS</code>, <code>CONSOLE_PASSWORD</code> and <code>ENABLE_TERMINAL</code> when you start the console. See <code>console/README.md</code>, "Opening it from other machines".</p></section>`;
+}
+
+function workspaceSection() {
+  return settingsHead("Workspace", "") + `<form class="form" id="settings-form">
+      <label for="workspace">Agents' home folder</label>
+      <p class="muted" style="margin:0">Agents start here and can work in any project under it without extra permission prompts. Pick the folder that holds your projects. Takes effect the next time an agent starts.</p>
+      <div class="row"><input type="text" id="workspace" value="${esc(state.settings.workspace)}"><button class="btn primary">Save</button></div>
+    </form>
+    <section class="section"><h2>Where things live</h2><dl class="facts">
+      <dt>Kit</dt><dd><code>${esc(state.kit)}</code></dd><dt>Tasks</dt><dd><code>${esc(state.kit)}/tasks</code></dd>
+      <dt>Knowledge</dt><dd><code>${esc(state.kit)}/knowledge</code></dd><dt>Coach's proposals</dt><dd><code>${esc(state.kit)}/coach/proposals</code></dd></dl></section>`;
+}
+
+function appearanceSection() {
+  let theme = "system";
+  try { theme = localStorage.getItem("theme") || "system"; } catch { /* default */ }
+  return settingsHead("Appearance", "Saved in this browser.") + `<fieldset class="theme-pick"><legend>Theme</legend>
+      ${[["system", "Follow my system"], ["light", "Light"], ["dark", "Dark"]].map(([v, l]) =>
+        `<label class="${v}"><input type="radio" name="theme" value="${v}" data-theme-pick ${v === theme ? "checked" : ""}><span class="swatch" aria-hidden="true"></span>${l}</label>`).join("")}</fieldset>`;
+}
+
+async function aboutSection() {
+  const a = await api("/api/about");
+  return settingsHead("About", "") + `<div class="about-card"><img src="/static/brand/hive-logo.svg" alt="" width="56" height="56">
+      <div><h2>Hive</h2><p class="muted">Your agent team: a Tech Lead, Devs, Reviewers, a Coach and an Orchestrator, run from this console and Slack.</p></div></div>
+    <dl class="facts">
+      <dt>Version</dt><dd>${a.commit ? `<code>${esc(a.commit)}</code> on <code>${esc(a.branch)}</code>, ${esc(ago(a.date))}: ${esc(a.subject)}` : "Not a git repository"}</dd>
+      ${a.commit ? `<dt>Not pushed</dt><dd>${a.ahead === null ? "No upstream branch" : a.ahead ? `${a.ahead} commit${a.ahead > 1 ? "s" : ""}` : "Nothing: up to date with the remote"}${a.dirty ? ", plus uncommitted changes" : ""}</dd>` : ""}
+      <dt>Kit</dt><dd><code>${esc(a.kit)}</code></dd>
+      <dt>Read more</dt><dd><code>README.md</code> (the kit), <code>console/README.md</code> (this console), <code>TEAM.md</code> and <code>PREFERENCES.md</code> (how the team works)</dd></dl>`;
 }
 
 async function linksSection() {
@@ -743,8 +1143,9 @@ async function linksSection() {
     </form></section>`;
 }
 
-async function slackSection() {
-  const sl = state.settings.slack, live = await api("/api/slack").catch(() => ({}));
+async function slackSection(live) {
+  const sl = state.settings.slack;
+  live = live || await api("/api/slack").catch(() => ({}));
   const token = (k, label, prefix) => {
     const t = sl[k];
     const note = t.from_env ? `Using <code>${k === "bot_token" ? "SLACK_BOT_TOKEN" : "SLACK_APP_TOKEN"}</code> from the server's environment.` : t.set ? `Saved, ends in ${esc(t.hint)}.` : "Not set.";
@@ -755,10 +1156,10 @@ async function slackSection() {
   const state_ = live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>`
     : live.error ? `<span class="slack-status bad"><span class="dot"></span>${esc(live.error)}</span>`
     : `<span class="slack-status"><span class="dot"></span>Not connected</span>`;
-  return `<section class="section"><h2>Slack</h2>
-    <p style="max-width:68ch">${state_}</p>
+  return settingsHead("Slack", "") + `<section>
+    <p style="max-width:68ch">${state_} ${live.connected ? `<button class="btn small" data-action="slack-test">Send a test message</button>` : ""}</p>
     <p class="muted" style="max-width:68ch">Talk to the Orchestrator (or any agent: start with its name, "Nabil: …") by messaging the app, approve agents' requests with buttons, and follow each task in a thread with buttons for what's next. The console connects out to Slack, so it works from your laptop or a server behind a VPN, with nothing exposed. One Slack app per running console.</p>
-    <details><summary>How to set it up (5 minutes)</summary><ol class="setup-steps">
+    <details ${live.connected ? "" : "open"}><summary>How to set it up (5 minutes)</summary><ol class="setup-steps">
       <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> → <b>Create New App</b> → <b>From a manifest</b>, pick the workspace, and paste <code>console/slack-app.yml</code> from the kit. (In a company workspace, an admin may need to approve the app.)</li>
       <li><b>Basic Information</b> → <b>App-Level Tokens</b> → <b>Generate</b>, with the scope <code>connections:write</code>: that's the <code>xapp-…</code> token.</li>
       <li><b>Install App</b> → <b>Install to Workspace</b>: that's the <code>xoxb-…</code> bot token.</li>
@@ -779,25 +1180,37 @@ async function slackSection() {
 }
 
 function teamSection() {
-  const rows = Object.entries(ROLES).map(([role, r]) => {
-    const ids = agentIds().filter((id) => roleOf(id) === role);
-    const single = role === "coach" || role === "orchestrator";
-    return `<div class="team-role ${role}"><h3>${single ? r.name : `${r.name}s`} ${single ? "" : `<small class="muted">${ids.length}</small>`}</h3>
-      <ul>${ids.map((id) => {
-        const ag = state.agents[id];
-        const choice = state.settings.agents[id] || {};
-        return `<li><input type="text" class="agent-name" data-action="name" data-agent="${id}" value="${esc(personOf(id))}" maxlength="30" aria-label="Name of ${esc(id)}">
-          <a href="#/agents/${id}" class="muted">chat</a> <code class="muted">${esc(id)}</code>
-          <span class="muted">${esc(providerOf(choice.provider || "claude").label)}${choice.model ? `, ${esc(choice.model)}` : ""}</span>
-          ${ids.length > 1 ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${ag.status !== "stopped" ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</li>`;
-      }).join("")}</ul>
-      ${role === "coach" ? `<p class="muted">One Coach, outside the task flow. Start a review from Improvements.</p>`
-        : role === "orchestrator" ? `<p class="muted">One Orchestrator: your assistant for running the team, here and in Slack. It acts only after you approve.</p>`
-        : `<button class="btn small" data-action="add-agent" data-role="${role}">Add a ${r.name}</button>`}</div>`;
-  }).join("");
-  return `<section class="section"><h2>Team</h2>
-    <p class="muted" style="max-width:68ch">Run several agents of the same role in parallel. Each claims its own tasks, so two never work on the same one, and each dev works in its own git worktree next to the project (<code>&lt;project&gt;.worktrees/TASK-NNN</code>). Rework goes back to the dev who built it, re-reviews to the same reviewer. Each agent gets a random name; type over it to rename. Choose each agent's provider and model in its chat header.</p>
-    <div class="team">${rows}</div></section>`;
+  const row = (id) => {
+    const ag = state.agents[id];
+    const choice = state.settings.agents[id] || {};
+    const prov = providerOf(choice.provider || "claude");
+    const running = ag.status !== "stopped";
+    const mode = state.settings?.permission_mode?.[id] || "default";
+    const role = roleOf(id);
+    const removable = ["techlead", "dev", "reviewer"].includes(role) && agentIds().filter((x) => roleOf(x) === role).length > 1;
+    return `<div class="agent-row">${avatar(id)}
+      <div class="who"><input type="text" class="agent-name" data-action="name" data-agent="${id}" value="${esc(personOf(id))}" maxlength="30" aria-label="Name of ${esc(id)}">
+        <small>${esc(OWNER_LABEL[role])} · <a href="#/agents/${id}">chat</a> · <code>${esc(id)}</code></small></div>
+      <div class="model-cell"><select data-action="provider" data-agent="${id}" aria-label="Provider for ${esc(personOf(id))}" ${running ? "disabled" : ""}>${(state.settings?.providers || []).map((p) =>
+          `<option value="${p.id}" ${p.id === (choice.provider || "claude") ? "selected" : ""}>${esc(p.label)}</option>`).join("")}</select>
+        <input type="text" list="models-${id}" data-action="model" data-agent="${id}" value="${esc(choice.model || "")}" ${running ? "disabled" : ""}
+          placeholder="${prov.engine === "claude" ? "Default from the agent file" : `For example ${esc(prov.models?.[0] || "")}`}" spellcheck="false" aria-label="Model for ${esc(personOf(id))}">
+        <datalist id="models-${id}">${(prov.models || []).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
+        ${running ? `<small class="muted">Stop ${esc(personOf(id))} to change it.</small>` : prov.engine !== "claude" && !prov.has_key ? `<small class="warn">No ${esc(prov.label)} key yet: <a href="#/settings/models">add it</a></small>` : ""}</div>
+      <select data-action="mode" data-agent="${id}" aria-label="File edit approvals for ${esc(personOf(id))}">
+        <option value="default" ${mode === "default" ? "selected" : ""}>Ask me first</option>
+        <option value="acceptEdits" ${mode === "acceptEdits" ? "selected" : ""}>Allow automatically</option></select>
+      <span>${removable ? `<button class="btn small danger" data-action="remove-agent" data-agent="${id}" ${running ? 'disabled title="Stop it first"' : ""}>Remove</button>` : ""}</span></div>`;
+  };
+  const group = (title, note, roles, extra = "") => `<section class="agent-group"><header><h2>${title}</h2><span class="muted">${note}</span>${extra}</header>
+    ${agentIds().filter((id) => roles.includes(roleOf(id))).map(row).join("")}</section>`;
+  return settingsHead("Team", "Who's on the team, the model each one runs on, and whether it asks before editing files. Model changes apply the next time an agent starts.")
+    + `<div class="agent-cols muted"><span></span><span>Agent</span><span>Model</span><span>Edits</span><span></span></div>`
+    + group("Orchestrator", "your assistant, here and in Slack", ["orchestrator"])
+    + group("Team", "several of each role can work in parallel, each on its own tasks", ["techlead", "dev", "reviewer"],
+      `<span class="add-agent"><select id="add-role" aria-label="Role to add"><option value="dev">Dev</option><option value="reviewer">Reviewer</option><option value="techlead">Tech Lead</option></select>
+        <button class="btn small" data-action="add-agent-picked">Add</button></span>`)
+    + group("Coach", "reviews how tasks went and proposes improvements", ["coach"]);
 }
 
 function providerCard(p) {
@@ -830,7 +1243,7 @@ async function saveConfig(name, provider, model) {
   const saved = await act(() => api(`/api/agents/${name}/config`, { method: "PUT", body: { provider, model } }));
   if (saved) state.settings = saved;
   renderAgentChrome(name);
-  if (route().page === "overview") render(true);
+  if (["overview", "settings"].includes(route().page)) render(true);
 }
 
 // ---- your code review (a pull request inside the console) ------------------------------------
@@ -1391,11 +1804,17 @@ const afterRender = {
       if (!ok) { text.value = value; state.drafts[r.id] = value; resync(); }
     });
   },
+  history() {
+    for (const [id, key] of [["act-project", "project"], ["act-agent", "agent"], ["act-status", "status"]]) {
+      document.getElementById(id)?.addEventListener("change", (e) => { activityFilter[key] = e.target.value; render(true); });
+    }
+  },
   tasks() {
     const rerender = () => render(true);
     document.getElementById("task-q").addEventListener("input", (e) => { taskFilter.q = e.target.value; clearTimeout(afterRender.t); afterRender.t = setTimeout(rerender, 200); });
     document.getElementById("task-project").addEventListener("change", (e) => { taskFilter.project = e.target.value; rerender(); });
-    document.getElementById("task-status").addEventListener("change", (e) => { taskFilter.status = e.target.value; history.replaceState(null, "", "#/tasks"); rerender(); });
+    document.getElementById("task-agent").addEventListener("change", (e) => { taskFilter.agent = e.target.value; rerender(); });
+    document.getElementById("task-status")?.addEventListener("change", (e) => { taskFilter.status = e.target.value; history.replaceState(null, "", "#/tasks"); rerender(); });
   },
   settings() {
     document.querySelectorAll("form.provider").forEach((form) => form.addEventListener("submit", async (e) => {
@@ -1405,12 +1824,12 @@ const afterRender = {
         body: { api_key: key || null, base_url: form.base_url.value.trim() } }), "Provider saved.");
       if (saved) { state.settings = saved; render(true); }
     }));
-    document.getElementById("console-url-form").addEventListener("submit", async (e) => {
+    document.getElementById("console-url-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const saved = await act(() => api("/api/settings/console-url", { method: "PUT", body: { console_url: document.getElementById("console-url").value } }), "Address saved.");
       if (saved) { state.settings = saved; render(true); }
     });
-    document.getElementById("slack-form").addEventListener("submit", async (e) => {
+    document.getElementById("slack-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const value = (id) => document.getElementById(id);
       const body = {};
@@ -1419,7 +1838,7 @@ const afterRender = {
       const saved = await act(() => api("/api/settings/slack", { method: "PUT", body }));
       if (saved) { state.settings = saved; render(true); const s = await api("/api/slack"); toast(s.connected ? "Connected to Slack." : s.error || "Saved. Add both tokens and at least one member ID to connect.", !s.connected && !!s.error); }
     });
-    document.getElementById("settings-form").addEventListener("submit", async (e) => {
+    document.getElementById("settings-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const saved = await act(() => api("/api/settings", { method: "PUT", body: { workspace: document.getElementById("workspace").value } }), "Settings saved.");
       if (saved) state.settings = saved;
@@ -1431,6 +1850,35 @@ const afterRender = {
 
 const actions = {
   ...reviewActions,
+  "add-agent-picked": (el) => actions["add-agent"]({ dataset: { role: document.getElementById("add-role").value } }),
+  "slack-test": () => act(() => api("/api/slack/test", { method: "POST" }), "Sent. Check Slack."),
+
+  "show-inbox": async (el) => {
+    const role = roleOf(el.dataset.agent);
+    const data = await api(`/api/inbox/${role}`);
+    const notes = data.notifications.map((n) => `• ${n.text || n.message || JSON.stringify(n)}`).join("\n");
+    alertBox(`${nameOf(el.dataset.agent)}'s inbox`, notes || "Empty: nothing waiting for this agent.");
+  },
+  "board-view": (el) => { try { localStorage.setItem("boardView", el.dataset.view); } catch { /* this page only */ } render(true); },
+  hand: async (el) => {
+    const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/hand/${el.dataset.agent}`, { method: "POST" }));
+    if (done) { toast(done.message); refreshCounts(); render(true); }
+  },
+  "toggle-section": (el) => {
+    const sec = el.closest(".rail-section").dataset.section;
+    let collapsed = [];
+    try { collapsed = JSON.parse(localStorage.getItem("railCollapsed") || "[]"); } catch { /* not remembered */ }
+    collapsed = collapsed.includes(sec) ? collapsed.filter((x) => x !== sec) : [...collapsed, sec];
+    try { localStorage.setItem("railCollapsed", JSON.stringify(collapsed)); } catch { /* this page only */ }
+    renderRail();
+  },
+  "open-rail": () => openRail(),
+  "close-rail": () => closeRail(),
+  jump: () => openJump(),
+  "jump-go": () => document.getElementById("jump-dialog").close(),
+  "open-drawer": () => openDrawer(),
+  "close-drawer": () => closeDrawer(),
+  "drawer-quick": (el) => sendToOrchestrator(el.textContent),
   start: (el) => act(() => api(`/api/agents/${el.dataset.agent}/start`, { method: "POST", body: {} }), `${nameOf(el.dataset.agent)} started.`),
   stop: (el) => act(() => api(`/api/agents/${el.dataset.agent}/stop`, { method: "POST" }), `${nameOf(el.dataset.agent)} stopped.`),
   interrupt: (el) => act(() => api(`/api/agents/${el.dataset.agent}/interrupt`, { method: "POST" })),
@@ -1567,6 +2015,12 @@ document.addEventListener("input", (e) => {
 });
 
 document.addEventListener("change", async (e) => {
+  if (e.target.matches("[data-theme-pick]")) {
+    const v = e.target.value;
+    try { localStorage.setItem("theme", v); } catch { /* this page only */ }
+    if (v === "system") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
+    return;
+  }
   if (e.target.id === "review-scope") {
     document.getElementById("review-target").hidden = !["tasks", "project"].includes(e.target.value);
     return;
@@ -1611,6 +2065,51 @@ window.addEventListener("hashchange", () => { render(); view.focus({ preventScro
     return;
   }
   connect();
-  refreshBadge();
+  await refreshCounts();
   render();
 })();
+
+// A small read-only box (the agents' inboxes, for debugging).
+function alertBox(title, text) {
+  let d = document.getElementById("info-dialog");
+  if (!d) { d = document.createElement("dialog"); d.id = "info-dialog"; d.className = "info-dialog"; document.body.appendChild(d); }
+  d.innerHTML = `<h2>${esc(title)}</h2><pre>${esc(text)}</pre><form method="dialog"><button class="btn">Close</button></form>`;
+  d.showModal();
+}
+
+// Approvals pinned under a chat: Enter allows the first one, Escape denies it (when you're not typing).
+document.addEventListener("keydown", (e) => {
+  if (route().page !== "agent") return;
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if (typing || e.metaKey || e.ctrlKey || document.querySelector("dialog[open]")) return;
+  const first = document.querySelector("#pinned-asks .ask");
+  if (!first) return;
+  if (e.key === "Enter") { e.preventDefault(); first.querySelector('[data-decision="allow"]').click(); }
+  if (e.key === "Escape" && document.getElementById("drawer").hidden) { e.preventDefault(); first.querySelector('[data-decision="deny"]').click(); }
+});
+
+// "#" in a message suggests task IDs.
+document.addEventListener("input", (e) => {
+  if (e.target.id !== "composer-text") return;
+  const list = document.getElementById("task-suggest");
+  const m = e.target.value.slice(0, e.target.selectionStart).match(/#([\w-]*)$/);
+  if (!m || !list) { if (list) list.hidden = true; return; }
+  const q = m[1].toLowerCase();
+  const hits = (state.tasks || []).filter((t) => `${t.id} ${t.title}`.toLowerCase().includes(q) || t.id.toLowerCase().endsWith(q)).slice(0, 6);
+  list.innerHTML = hits.map((t) => `<li><button type="button" data-action="pick-task" data-id="${esc(t.id)}">${esc(t.id)} <span class="muted">${esc(t.title)}</span></button></li>`).join("");
+  list.hidden = !hits.length;
+});
+actions["pick-task"] = (el) => {
+  const text = document.getElementById("composer-text");
+  const at = text.selectionStart;
+  const before = text.value.slice(0, at).replace(/#[\w-]*$/, el.dataset.id + " ");
+  text.value = before + text.value.slice(at);
+  text.focus();
+  text.selectionStart = text.selectionEnd = before.length;
+  document.getElementById("task-suggest").hidden = true;
+};
+
+// Close an open ⋯ menu when clicking anywhere else.
+document.addEventListener("click", (e) => {
+  document.querySelectorAll("details.menu[open]").forEach((m) => { if (!m.contains(e.target) || e.target.closest(".menu-list")) m.open = false; });
+});

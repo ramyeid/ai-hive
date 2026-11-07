@@ -35,19 +35,23 @@ Requirements:
 
 ## What you can do
 
+The sidebar has **Home**, **Board** and **Activity** at the top, then the agents in three sections you can fold
+away (**Orchestrator**, **Team**, **Coach**), and **Knowledge**. Press **⌘K** (Ctrl+K) to jump to any task, agent or
+page, and **/** to ask the Orchestrator from any page. On a phone the menu becomes a bar at the bottom.
+
 | Page | What it's for |
 |------|---------------|
-| **Overview** | Each agent's status and what it's doing right now; every task placed in the stage it's in, coloured by who has it; what needs you; recent activity. |
+| **Home** | What needs you, each with its action: approvals (Allow / Deny), blocked tasks (Answer), tasks ready for review (Review the diff, Hand to …), tasks waiting for a dev, the Coach's proposals. Then what's in progress and what was just finished. |
+| **Board** | Every task as a card in its column: Blocked, Draft, Ready for dev, In dev (rework tagged), Ready for review, In review, Done (newest first). Filter by project or agent; columns scroll after a few cards. Buttons on the cards hand a task on or open its diff. **List** shows the same tasks as a table, with costs. |
+| **Task** | The spec, the agents' conversations on it, your code reviews, its activity and its cost, in tabs; a progress line from Draft to Done; who wrote, built and reviewed it; the branch; other tasks on the same feature. |
+| **Code review** (a task's **Review the code**) | The branch's diff, like a pull request: the whole feature, this task's commits, or what changed since your last review; unified or side by side. Comment on lines or on the whole change, then request changes (back to the dev who built it, who answers each comment) or approve. |
 | **Orchestrator** | Your assistant for running the team. Ask where things stand ("what's waiting on me?") and get links to the right page; ask it to start or stop agents, hand a task to someone, pass a message on, or start the Coach. Each of those waits for your **Allow** (here or in Slack). |
-| **Agent chats** (Tech Lead, Dev 2, Reviewer…) | Talk to the agent. Start, stop, interrupt, or start a fresh session (like `/clear`). Approve or deny each action it asks to take. |
-| **Tasks** | All tasks across projects, with filters. Open one to read the full spec, dev log and review, see its stage history, and hand it to an agent. Under **Who worked on it**, each agent's conversation on the task (who, when, the hand-off, cost), for debugging. |
-| **Code review** (a task's **Review the code**) | The branch's diff, like a pull request: the whole feature, this task's commits, or what changed since your last review. Comment on lines or on the whole change, then request changes (back to the dev who built it, who answers each comment) or approve. Your earlier rounds show with the dev's replies. |
-| **Inbox** | Notifications for you and for each agent, and what's waiting on whom. Mark as read, or tell an agent to check its inbox. |
+| **Agent chats** | Talk to the agent; long runs of tool calls fold into one line. Approval requests are pinned above the message box (Enter allows, Esc denies). The panel on the right shows the task it's on, this conversation's cost and its earlier tasks. Start, stop, interrupt, or start a new conversation (like `/clear`) from the header and its ⋯ menu; the model is shown there and changed in Settings. |
+| **Activity** | Every time a task moved and who moved it, by day, with filters; and every past conversation (read it, or continue it). |
 | **Knowledge** | The Tech Lead's memory of each repository (`knowledge/<repo>/`): an index, plus one file per service of a monorepo, with purpose, code map, APIs, entities, conventions and task history. Each file shows how many files changed in its own folders since it was written. Read-only. |
-| **History** | Every past conversation. Read it, or continue it where it left off. |
-| **Improvements** | Start a review with the Coach, and approve, edit or reject what it proposes: each proposal shows the exact change, why, and the tasks behind it. |
-| **Team history** | Every change to the team's instructions, newest first: who (the Coach or a person), when, why, and the diff. Read the team as it was at any change, or undo one. |
-| **Settings** | Your team: add, remove and rename Tech Leads, devs and reviewers (e.g. 2 Tech Leads, 3 devs, 2 reviewers). Each gets a random name, shown as "Kareem (Tech Lead)". The folder agents start in (pick the one that holds your projects). The console's address (for links), Slack, provider keys and model prices. |
+| **Improvements** (Coach) | Start a review with the Coach, and approve, edit or reject what it proposes: each proposal shows the exact change, why, and the tasks behind it. |
+| **Team history** (Coach) | Every change to the team's instructions, newest first: who (the Coach or a person), when, why, and the diff. Read the team as it was at any change, or undo one. |
+| **Settings** | **Team** (add, remove and rename agents; each one's model and whether it asks before editing), **Models & keys**, **Slack**, **Access & links**, **Workspace**, **Appearance** (light, dark or your system) and **About** (the kit's version and what isn't pushed). |
 
 ## The Orchestrator and Slack
 
@@ -134,7 +138,7 @@ proxy_set_header Connection "upgrade";
 
 ## Choosing the AI provider
 
-Each agent can run on a different provider and model. Pick them in the agent's chat header while it's stopped.
+Each agent can run on a different provider and model. Pick them in **Settings → Team** while the agent is stopped.
 
 | Provider | How it runs | Key |
 |----------|-------------|-----|
@@ -172,8 +176,8 @@ price under **Settings → Model prices**. Prices apply to past conversations to
   (`dev-2`…), which the kit's scripts use to claim tasks and route rework (see "Several agents per
   role" in the main README).
 - When an agent wants to do something your settings don't already allow, it pauses and the request
-  appears in its chat. Nothing runs until you allow it. You can switch an agent to allow file
-  edits automatically from its chat header.
+  appears in its chat, on Home and in Slack. Nothing runs until you allow it. You can switch an agent to
+  allow file edits automatically in Settings → Team.
 - Tasks, inboxes and activity are read straight from `../tasks/`, so the console, the terminal agents and
   the hook always agree. Conversations are saved in `data/` (not shared, not committed).
 - It only listens on 127.0.0.1, and every request needs a key that only the page it serves knows, so

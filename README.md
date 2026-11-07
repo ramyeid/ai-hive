@@ -101,7 +101,7 @@ AGENT_ID=reviewer-2 claude --agent reviewer
 
 In the console, add and remove agents under **Settings → Team**; each one gets its ID automatically,
 and a random name (Kareem, Aliaa, Hossam…) shown as "Kareem (Tech Lead)". Rename them there or from their
-chat header. Names are only for you: scripts and task files use the IDs.
+chat's ⋯ menu. Names are only for you: scripts and task files use the IDs.
 
 - **No double work.** An agent claims a task before starting it (`scripts/claim.py`). Claims are
   atomic, so if two devs reach for the same task, one gets it and the other picks another.

@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import secrets
+import subprocess
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Form, HTTPException, Request, WebSocket
@@ -409,6 +411,10 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
 
     # ---- board -------------------------------------------------------------------------
 
+    @app.get("/api/activity")
+    async def activity_feed(limit: int = 500):
+        return board.activity(max(1, min(limit, 5000)))
+
     @app.get("/api/dashboard")
     async def dashboard():
         data = board.summary()
@@ -562,6 +568,27 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     @app.get("/api/slack")
     async def slack_status():
         return slack.status()
+
+    @app.post("/api/slack/test")
+    async def slack_test():
+        if not slack.connected or not slack.home:
+            raise HTTPException(409, "Slack isn't connected yet.")
+        await slack.post(slack.home, "👋 Hive is connected. Task updates and approval requests will come here, "
+                                     "and you can message me to talk to the Orchestrator.")
+        return {"ok": True}
+
+    @app.get("/api/about")
+    def about():
+        def git(*args: str) -> str:
+            done = subprocess.run(["git", "-C", str(store.KIT), *args], capture_output=True, text=True)
+            return done.stdout.strip() if done.returncode == 0 else ""
+        ahead = git("rev-list", "--count", "@{upstream}..HEAD")
+        return {"kit": str(store.KIT), "commit": git("rev-parse", "--short", "HEAD"), "date": git("log", "-1", "--format=%cI"),
+                "subject": git("log", "-1", "--format=%s"), "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+                "ahead": int(ahead) if ahead.isdigit() else None, "dirty": bool(git("status", "--porcelain", "--untracked-files=no")),
+                "hosts": sorted(access.extra_hosts()), "password": bool(os.environ.get("CONSOLE_PASSWORD")),
+                "listen": os.environ.get("HOST", "127.0.0.1"), "terminal": terminal.ENABLED, "console_url": ops.console_url(),
+                "workspace": store.load_settings().get("workspace", "")}
 
     @app.post("/api/tasks/{task_id}/hand/{agent}")
     async def hand_task(task_id: str, agent: str):
