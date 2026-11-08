@@ -2504,6 +2504,15 @@ document.addEventListener("toggle", (e) => {
   if (id) e.target.open ? state.openTools.add(id) : state.openTools.delete(id);
 }, true);
 
+// A ⋯ menu opens towards whichever side has room, so it never runs under the sidebar or off the screen.
+document.addEventListener("toggle", (e) => {
+  const menu = e.target;
+  if (!menu.matches?.("details.menu") || !menu.open) return;
+  menu.classList.remove("open-left");
+  const list = menu.querySelector(".menu-list");
+  if (list && list.getBoundingClientRect().right > document.documentElement.clientWidth - 8) menu.classList.add("open-left");
+}, true);
+
 window.addEventListener("hashchange", () => {
   if (route().page !== "review") state.reviewSent = null;   // the banner is for the review you just sent
   render();

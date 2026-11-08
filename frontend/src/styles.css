@@ -395,9 +395,10 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 details.menu { position: relative; }
 details.menu > summary { list-style: none; }
 details.menu > summary::-webkit-details-marker { display: none; }
-.menu-list { position: absolute; right: 0; top: calc(100% + 4px); z-index: 10; min-width: 230px; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / 0.12); }
+.menu-list { position: absolute; left: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px; max-width: calc(100vw - 32px); white-space: nowrap; display: flex; flex-direction: column; padding: 4px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); box-shadow: 0 10px 30px rgb(0 0 0 / 0.12); }
 .menu-list > * { padding: 7px 10px; border: 0; border-radius: 5px; background: none; text-align: left; text-decoration: none; cursor: pointer; font-size: 0.88rem; }
 .menu-list > *:hover { background: var(--sunken); }
+details.menu.open-left .menu-list { left: auto; right: 0; }   /* near the right edge: open towards the left */
 .chat-side { position: sticky; top: 52px; height: calc(100vh - 52px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 24px; border-left: 1px solid var(--rule); background: color-mix(in srgb, var(--panel) 40%, var(--bg)); }
 .side-box { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); font-size: 0.86rem; }
 .side-box h3 { margin-bottom: 8px; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
