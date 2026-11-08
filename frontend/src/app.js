@@ -1555,9 +1555,9 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
   return `<details class="review-file ${f.viewed ? "is-viewed" : ""}" id="file-${index}" data-index="${index}" data-path="${esc(f.path)}" ${changed > 400 || f.viewed ? "" : "open"}>
-    <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
-      <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
+    <summary><code class="path" title="${esc(f.path)}"><bdi>${esc(f.path)}</bdi></code>${label ? ` <span class="muted file-label">${esc(label)}</span>` : ""}
       ${f.changed_since_viewed ? `<span class="pill warn changed-since">Changed since you viewed it</span>` : ""}
+      <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
       <button class="viewed-toggle" data-action="mark-viewed" aria-pressed="${!!f.viewed}" title="Mark as viewed: it folds away until the dev changes it"><span class="box" aria-hidden="true"></span>Viewed</button></summary>
     ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap" style="contain-intrinsic-size: auto ${rows.length * 24}px"><table class="code-diff ${layout}">
       <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>

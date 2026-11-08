@@ -556,7 +556,14 @@ details:not([open]) > .tree-dir::before { transform: rotate(-90deg); }
 .review-file[open] > summary { position: sticky; top: 52px; z-index: 4; border-radius: var(--radius-m) var(--radius-m) 0 0; }
 /* big diffs: the browser skips laying out files that are off screen, so folding one (Viewed) stays instant */
 .review-file > .table-wrap { content-visibility: auto; }   /* sized from its line count; not the header, which must stay sticky */
-.review-file > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 12px; cursor: pointer; background: var(--sunken); border-bottom: 1px solid var(--rule); }
+/* one line, always: the path shortens from the left (the file name stays), so Viewed is in the same place on every file */
+.review-file > summary { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; background: var(--sunken); border-bottom: 1px solid var(--rule); }
+.review-file > summary > * { flex: none; white-space: nowrap; }
+.review-file > summary .path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+.review-file > summary .path bdi { direction: ltr; unicode-bidi: isolate; }
+.review-file > summary .file-label, .review-file > summary .changed-since { min-width: 0; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+.review-file > summary .viewed-toggle { width: 88px; justify-content: center; }
+.review-file > summary .counts { margin-left: auto; }
 .review-file:not([open]) > summary { border-bottom: 0; }
 .review-file .counts { margin-left: auto; font-size: 0.85rem; }
 .review-file .pad { padding: 8px 12px; margin: 0; }
