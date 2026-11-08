@@ -42,6 +42,19 @@ DEFAULT_SETTINGS = {
 
 SLACK_ENV = {"bot_token": "SLACK_BOT_TOKEN", "app_token": "SLACK_APP_TOKEN", "users": "SLACK_USERS", "channel": "SLACK_CHANNEL"}
 
+# What Slack tells the lead, and how: "notify" (with a mention, so it notifies), "quiet" (in the task's thread, no
+# notification) or "off". Settings → Integrations → Slack.
+SLACK_EVENTS = {
+    "waiting": "notify",            # an agent stopped and is waiting for your answer
+    "approval": "notify",           # an agent asks to run something
+    "ready-for-dev": "notify", "ready-for-review": "notify", "changes-requested": "notify",
+    "done": "notify", "blocked": "notify",
+    "draft": "quiet", "in-dev": "quiet", "in-review": "quiet",
+    "proposals": "notify",          # the Coach has new proposals
+}
+SLACK_LEVELS = ("notify", "quiet", "off")
+SLACK_REPLIES = ("thread", "thread_and_dm")   # thread_and_dm: notifications in a thread are also sent outside it
+
 
 def now() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -133,6 +146,18 @@ def save_settings(changes: dict) -> dict:
         if key in ("users", "channel"):
             value = ",".join(u for u in re.split(r"[\s,]+", value) if u)
         settings["slack"][key] = value
+    if "slack_prefs" in changes:
+        prefs = changes["slack_prefs"]
+        current = slack_prefs()
+        for event, level in prefs.get("notify", {}).items():
+            if event not in SLACK_EVENTS or level not in SLACK_LEVELS:
+                raise ValueError(f"Unknown Slack notification: {event} = {level}")
+            current["notify"][event] = level
+        if "replies" in prefs:
+            if prefs["replies"] not in SLACK_REPLIES:
+                raise ValueError(f"Unknown reply style: {prefs['replies']}")
+            current["replies"] = prefs["replies"]
+        settings["slack_prefs"] = current
     for model, price in changes.get("prices", {}).items():
         if price is None:
             settings["prices"].pop(model, None)
@@ -264,6 +289,13 @@ def slack_config() -> dict:
     cfg = {k: os.environ.get(env) or saved.get(k, "") for k, env in SLACK_ENV.items()}
     cfg["users"] = [u for u in re.split(r"[\s,]+", cfg["users"]) if u]
     return cfg
+
+
+def slack_prefs() -> dict:
+    """When Slack notifies the lead and how replies arrive, with the defaults for anything not set."""
+    saved = _read_json(SETTINGS, {}).get("slack_prefs", {})
+    return {"notify": {**SLACK_EVENTS, **{k: v for k, v in saved.get("notify", {}).items() if k in SLACK_EVENTS}},
+            "replies": saved.get("replies") if saved.get("replies") in SLACK_REPLIES else "thread"}
 
 
 def public_slack() -> dict:

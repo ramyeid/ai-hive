@@ -27,7 +27,6 @@ from .agents import TEAM_ACTION
 STATE = store.DATA / "slack.json"
 WAIT_FOR_FREE = 30 * 60      # seconds a message waits for a busy agent
 CHUNK = 3500                 # characters per Slack message
-LOUD = {"ready-for-dev", "ready-for-review", "changes-requested", "done", "blocked"}   # mention the lead so they notify
 
 
 def to_mrkdwn(markdown: str) -> str:
@@ -182,13 +181,31 @@ class SlackBridge:
 
     # ---- sending ------------------------------------------------------------------------
 
-    async def post(self, channel: str, text: str, thread: str = "", buttons: list[dict] | None = None) -> str:
+    async def post(self, channel: str, text: str, thread: str = "", buttons: list[dict] | None = None,
+                   broadcast: bool = False) -> str:
         args = {"channel": channel, "text": text}
         if buttons:
             args["blocks"] = _blocks(text, buttons)
         if thread:
             args["thread_ts"] = thread
+            if broadcast:
+                args["reply_broadcast"] = True   # "Also send as direct message / to the channel"
         return (await self.web.chat_postMessage(**args))["ts"]
+
+    async def notify(self, event: str, channel: str, text: str, thread: str = "", buttons: list[dict] | None = None,
+                     always: bool = False) -> str | None:
+        """Post something the lead may want to know, as they chose in Settings → Integrations → Slack: with a
+        notification (a mention, or the reply also sent outside its thread), quietly in the thread, or not at all.
+        `always`: post even if this kind is turned off (a reply in a conversation the lead started in Slack)."""
+        prefs = store.slack_prefs()
+        level = prefs["notify"].get(event, "notify")
+        if level == "off" and not always:
+            return None
+        loud = level != "quiet"
+        broadcast = loud and bool(thread) and prefs["replies"] == "thread_and_dm"
+        if loud:
+            text = self._ping(text, channel, "" if broadcast else thread)
+        return await self.post(channel, text, thread, buttons, broadcast)
 
     async def _react(self, channel: str, ts: str, emoji: str) -> None:
         try:
@@ -334,14 +351,16 @@ class SlackBridge:
         task = board.get_task(event.get("task", "")) if event.get("task") else None
         said = event.get("text", "").strip() or "It stopped without saying why."
         where = f" on {task['id']}" if task else ""
+        if store.slack_prefs()["notify"]["waiting"] == "off":
+            return
         thread = await self._thread(task) if task else ""
-        text = self._ping(f"*{ops.label(agent)}* stopped{where} and is waiting for you:\n", thread=thread) + to_mrkdwn(said)
         buttons = [_link(f"Open the chat with {ops.label(agent)}", ops.links(agent_id=agent)["chat"])]
         if task:
             buttons.append(_link("Open the task", ops.links(task["id"])["task"]))
-        parts = _chunks(text)
-        for i, part in enumerate(parts):
-            await self.post(self.home, part, thread, buttons if i == len(parts) - 1 else None)
+        parts = _chunks(f"*{ops.label(agent)}* stopped{where} and is waiting for you:\n" + to_mrkdwn(said))
+        await self.notify("waiting", self.home, parts[0], thread, buttons if len(parts) == 1 else None)
+        for i, part in enumerate(parts[1:], 2):
+            await self.post(self.home, part, thread, buttons if i == len(parts) else None)
 
     async def _ask(self, agent: str, event: dict) -> None:
         pid, tool = event["id"], event["tool"]
@@ -356,7 +375,9 @@ class SlackBridge:
                    _button("Allow for this session", f"perm|{agent}|{pid}|always"),
                    _button("Deny", f"perm|{agent}|{pid}|deny", "danger"),
                    _link("Open the chat", ops.links(agent_id=agent)["chat"])]
-        ts = await self.post(channel, self._ping(text, channel, thread), thread, buttons)
+        ts = await self.notify("approval", channel, text, thread, buttons, always=bool(listening))
+        if not ts:
+            return   # approvals in Slack are off: answer it in the console
         self.state["asks"][pid] = {"channel": channel, "ts": ts, "text": text}
         self._save()
 
@@ -452,9 +473,10 @@ class SlackBridge:
         if not message:
             return
         text, buttons = message
+        if store.slack_prefs()["notify"].get(entry.get("to", ""), "quiet") == "off":
+            return
         thread = await self._thread(task)
-        loud = entry.get("to") in LOUD
-        await self.post(self.home, self._ping(text, thread=thread) if loud else text, thread, buttons)
+        await self.notify(entry.get("to", ""), self.home, text, thread, buttons)
 
     def _ping(self, text: str, channel: str = "", thread: str = "") -> str:
         """Mention the lead so the message notifies: in a channel, everyone on the list; in a direct message, the person
@@ -483,7 +505,7 @@ class SlackBridge:
         new = sorted(pending - self.proposals_seen) if self.proposals_seen is not None else []
         self.proposals_seen = pending
         if new and self.home:
-            await self.post(self.home, self._ping(f"🧭 The Coach has {len(new)} new proposal{'s' if len(new) > 1 else ''} "
+            await self.notify("proposals", self.home, (f"🧭 The Coach has {len(new)} new proposal{'s' if len(new) > 1 else ''} "
                                                   f"to improve the team's instructions ({', '.join(new)}). Approve, edit or reject them."),
                             buttons=[_link("See proposals", ops.links()["console"] + "#/improvements")])
 

@@ -1244,6 +1244,34 @@ async function slackSection(live) {
       <p class="hint">For a channel, invite the app to it first (<code>/invite @Team Console</code>).</p>
       <div class="btn-row"><button class="btn primary">Save and connect</button>
         ${sl.bot_token.set && !sl.bot_token.from_env ? `<button type="button" class="btn danger" data-action="slack-disconnect">Disconnect</button>` : ""}</div>
+    </form></section>${slackNotifications()}`;
+}
+
+// When Slack tells you, and how a reply in a task's thread reaches you.
+const SLACK_EVENTS = [
+  ["Waiting on you", [["waiting", "An agent stopped and is waiting for your answer"],
+    ["approval", "An agent asks for approval", "Requests in a conversation you started in Slack always come there."],
+    ["blocked", "A task is blocked"]]],
+  ["Tasks", [["ready-for-dev", "A spec is approved: ready for a dev"], ["ready-for-review", "A dev finished: ready for review"],
+    ["changes-requested", "A task is sent back for changes"], ["done", "A reviewer approved a task: done"],
+    ["draft", "A new task (still a draft)"], ["in-dev", "A dev started building"], ["in-review", "A reviewer started reviewing"]]],
+  ["The Coach", [["proposals", "New proposals to improve the team"]]],
+];
+function slackNotifications() {
+  const prefs = state.settings.slack_prefs || { notify: {}, replies: "thread" };
+  const where = state.settings.slack.channel.value ? "to the channel" : "as a direct message";
+  const level = (event, label, hint) => `<div class="notify-row"><div><span>${esc(label)}</span>${hint ? `<small class="muted">${esc(hint)}</small>` : ""}</div>
+    <select name="${event}" aria-label="${esc(label)}">${[["notify", "Notify me"], ["quiet", "Quietly"], ["off", "Off"]].map(([v, l]) =>
+      `<option value="${v}" ${prefs.notify[event] === v ? "selected" : ""}>${l}</option>`).join("")}</select></div>`;
+  return `<section class="section"><h2>Notifications</h2>
+    <form class="form" id="slack-notify-form">
+      <p class="muted" style="margin:0;max-width:68ch"><b>Notify me</b> posts it with a mention, so Slack notifies you. <b>Quietly</b> posts it in the task's thread without notifying you. <b>Off</b> doesn't post it.</p>
+      ${SLACK_EVENTS.map(([group, rows]) => `<fieldset class="notify-group"><legend>${esc(group)}</legend>${rows.map((r) => level(...r)).join("")}</fieldset>`).join("")}
+      <fieldset class="notify-group"><legend>Replies in a thread</legend>
+        <label class="radio"><input type="radio" name="replies" value="thread" ${prefs.replies !== "thread_and_dm" ? "checked" : ""}> Only in the thread <small class="muted">(you're mentioned, so it still notifies you)</small></label>
+        <label class="radio"><input type="radio" name="replies" value="thread_and_dm" ${prefs.replies === "thread_and_dm" ? "checked" : ""}> In the thread, and also ${where} <small class="muted">(Slack's "Also send ${where}")</small></label>
+      </fieldset>
+      <div class="btn-row"><button class="btn primary">Save notifications</button></div>
     </form></section>`;
 }
 
@@ -2040,6 +2068,14 @@ const afterRender = {
       for (const [k, id] of [["users", "slack-users"], ["channel", "slack-channel"]]) if (!value(id).disabled) body[k] = value(id).value;
       const saved = await act(() => api("/api/settings/slack", { method: "PUT", body }));
       if (saved) { state.settings = saved; render(true); const s = await api("/api/slack"); toast(s.connected ? "Connected to Slack." : s.error || "Saved. Add both tokens and at least one member ID to connect.", !s.connected && !!s.error); }
+    });
+    document.getElementById("slack-notify-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const notify = Object.fromEntries([...form.querySelectorAll("select")].map((s) => [s.name, s.value]));
+      const saved = await act(() => api("/api/settings/slack/notifications", { method: "PUT",
+        body: { notify, replies: form.querySelector("input[name=replies]:checked").value } }), "Notifications saved.");
+      if (saved) state.settings = saved;
     });
     document.getElementById("settings-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();

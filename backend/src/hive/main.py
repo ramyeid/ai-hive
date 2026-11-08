@@ -89,6 +89,11 @@ class SlackBody(BaseModel):
     channel: str | None = None      # "" = direct messages to the first user
 
 
+class SlackPrefsBody(BaseModel):
+    notify: dict[str, str] = {}    # event -> notify | quiet | off
+    replies: str | None = None     # thread | thread_and_dm
+
+
 class ConsoleUrlBody(BaseModel):
     console_url: str
 
@@ -118,6 +123,7 @@ def public_settings() -> dict:
     settings.pop("providers", None)
     settings["providers"] = store.public_providers(PROVIDERS)
     settings["slack"] = store.public_slack()
+    settings["slack_prefs"] = store.slack_prefs()
     settings["console_url_effective"] = ops.console_url()
     return settings
 
@@ -567,6 +573,14 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         await slack.restart()
+        return public_settings()
+
+    @app.put("/api/settings/slack/notifications")
+    async def save_slack_prefs(body: SlackPrefsBody):
+        try:
+            store.save_settings({"slack_prefs": body.model_dump(exclude_none=True)})
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
         return public_settings()
 
     @app.get("/api/slack")

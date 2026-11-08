@@ -96,6 +96,10 @@ proxy_set_header Connection "upgrade";
 5. In the console, **Settings → Integrations → Slack**: paste both tokens and the Slack member IDs of the people
    allowed to use it (profile → ⋮ → **Copy member ID**), then **Save and connect** and **Send a test message**.
 
+Under **Notifications** on the same page, choose what notifies you (an agent waiting for your answer, approvals, each
+task step, the Coach's proposals), what's only posted quietly in the task's thread, and what's not posted; and
+whether replies in a thread are also sent as a direct message (or to the channel).
+
 The console connects out to Slack (Socket Mode), so no public address is needed. Use one Slack app per running
 console. On a server, the settings can come from `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_USERS` and
 `SLACK_CHANNEL` instead.

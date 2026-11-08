@@ -136,6 +136,51 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         self.assertIn(f"<@{LEAD}>", posted["text"])
         self.assertEqual(self._buttons(posted), ["Open the chat with " + bridge_label("dev"), "Open the task"])
 
+    async def test_a_kind_turned_off_in_settings_is_not_posted(self):
+        bridge, web = await self._a_bridge()
+        self._a_task("ready-for-review")
+        store.save_settings({"slack_prefs": {"notify": {"ready-for-review": "off"}}})
+        before = len(web.posted)
+
+        await bridge.on_activity({"id": "TASK-001", "to": "ready-for-review", "actor": "dev"})
+
+        self.assertEqual(len(web.posted), before)
+
+    async def test_a_quiet_kind_is_posted_in_its_thread_without_a_mention(self):
+        bridge, web = await self._a_bridge()
+        self._a_task("ready-for-review")
+        store.save_settings({"slack_prefs": {"notify": {"ready-for-review": "quiet"}}})
+
+        await bridge.on_activity({"id": "TASK-001", "to": "ready-for-review", "actor": "dev"})
+
+        self.assertNotIn("<@", web.posted[-1]["text"])
+        self.assertIn("thread_ts", web.posted[-1])
+
+    async def test_replies_can_also_be_sent_outside_the_thread(self):
+        bridge, web = await self._a_bridge()
+        self._a_task("ready-for-review")
+        store.save_settings({"slack_prefs": {"replies": "thread_and_dm"}})
+
+        await bridge.on_activity({"id": "TASK-001", "to": "ready-for-review", "actor": "dev"})
+
+        self.assertTrue(web.posted[-1]["reply_broadcast"])
+        self.assertNotIn("<@", web.posted[-1]["text"])   # the copy outside the thread notifies by itself
+
+    async def test_approvals_turned_off_still_come_in_a_conversation_started_in_slack(self):
+        bridge, web = await self._a_bridge()
+        store.save_settings({"slack_prefs": {"notify": {"approval": "off"}}})
+
+        await self._the_lead_writes(bridge, "Check the repo")
+
+        ask = await self._wait_for(lambda: next((m for m in web.posted if "wants to" in m["text"]), None))
+        self.assertEqual(ask.get("thread_ts"), "1.0")
+
+    async def test_an_unknown_notification_setting_is_refused(self):
+        await self._a_bridge()
+
+        with self.assertRaises(ValueError):
+            store.save_settings({"slack_prefs": {"notify": {"ready-for-review": "loud"}}})
+
     async def test_new_proposals_from_the_coach_are_announced(self):
         bridge, web = await self._a_bridge()
         await bridge.check_proposals()

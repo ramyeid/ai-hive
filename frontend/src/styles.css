@@ -796,3 +796,13 @@ table.plain .right { text-align: right; white-space: nowrap; }
 /* the words that changed inside a modified line (GitHub-style) */
 .code-diff td.del .chg, .code-diff tr.del .chg { background: color-mix(in srgb, var(--attention) 32%, transparent); border-radius: 3px; }
 .code-diff td.add .chg, .code-diff tr.add .chg { background: color-mix(in srgb, var(--dev) 34%, transparent); border-radius: 3px; }
+
+/* Settings → Slack → Notifications */
+.notify-group { margin: 0; padding: 4px 0 0; border: 0; max-width: 680px; }
+.notify-group legend { padding: 0; margin-bottom: 4px; font-weight: 600; font-size: 0.9rem; }
+.notify-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.notify-row > div { display: flex; flex-direction: column; gap: 2px; }
+.notify-row small { font-size: 0.78rem; }
+.notify-row select { width: auto; min-width: 128px; flex: none; }
+.form .notify-group label.radio { display: flex; align-items: baseline; justify-content: flex-start; gap: 8px; padding: 6px 0; font-weight: 400; text-align: left; }
+.form .notify-group label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
