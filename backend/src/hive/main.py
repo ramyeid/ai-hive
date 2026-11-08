@@ -71,8 +71,8 @@ class ReviewComment(BaseModel):
 
 class ReviewSubmit(BaseModel):
     verdict: str            # changes | approve
-    summary: str = ""
-    mode: str = "feature"   # the view the lead reviewed: feature | task | since
+    comment: str = ""       # a general comment written with the review
+    mode: str = "feature"   # the view the lead reviewed: feature | since
 
 
 class TeamAction(BaseModel):
@@ -500,7 +500,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
 
     @app.post("/api/tasks/{task_id}/review/submit")
     def review_submit(task_id: str, body: ReviewSubmit):
-        done = reviewing(lead_review.submit, task_id, body.verdict, body.summary, body.mode)
+        done = reviewing(lead_review.submit, task_id, body.verdict, body.comment, body.mode)
         manager.bus.publish({"kind": "board"})
         return done
 

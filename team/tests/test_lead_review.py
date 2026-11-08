@@ -183,6 +183,24 @@ class LeadReviewTest(unittest.TestCase):
         file = self._call(kit, f"diff('{self._id(task)}')")["files"][0]
         self.assertEqual((file["viewed"], file["changed_since_viewed"]), (False, False))
 
+    def test_a_general_comment_written_with_the_review_is_sent_numbered_for_the_dev_to_answer(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        self._a_comment(kit, task, "Rename it.", file="app.py", line=1)
+
+        done = self._call(kit, f"submit('{self._id(task)}', 'changes', 'Errors are always code and message.')")
+
+        self.assertEqual([c["body"] for c in done["comments"]], ["Rename it.", "Errors are always code and message."])
+        self.assertIn("Errors are always code and message.", task.read_text().split("## Lead Review")[1])
+
+    def test_request_changes_with_only_a_general_comment_is_enough(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+
+        self._call(kit, f"submit('{self._id(task)}', 'changes', 'Split this into two endpoints.')")
+
+        self.assertEqual(self._field(task, "status"), "changes-requested")
+
     # ---- helpers ----
 
     def _the_dev_edits(self, task: Path, file: str) -> None:

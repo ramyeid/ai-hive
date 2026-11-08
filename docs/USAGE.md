@@ -28,7 +28,8 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
 - Review the **branch**: the whole branch against its base, or what changed since your last review, in unified or
   side-by-side view. Follow-up tasks add commits to the same branch, so **Earlier reviews** lists every round on it,
   and your comments go to the branch's current task (the one its dev is on).
-- Hover a line and press **+** to comment on it, or leave a general comment.
+- Hover a line and press **+** to comment on it. Anything not about one line goes in the **General comment** box,
+  sent with your review.
 - Tick **Viewed** on a file to fold it away (like GitHub); the eye in the file tree hides them. A viewed file
   comes back when the dev changes it.
 - Press **.** (or **Open in VS Code**) to open the branch's worktree in VS Code or Cursor, indexed. It shows once you

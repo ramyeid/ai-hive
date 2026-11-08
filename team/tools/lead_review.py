@@ -351,8 +351,9 @@ def _append_round(path: Path, markdown: str) -> None:
     path.write_text(text + "\n" + markdown, encoding="utf-8")
 
 
-def submit(task_id: str, verdict: str, summary: str = "", mode: str = "feature") -> dict:
-    """Turn the drafts into a round. verdict: 'changes' sends the task back to its dev; 'approve' moves nothing."""
+def submit(task_id: str, verdict: str, comment: str = "", mode: str = "feature") -> dict:
+    """Turn the drafts into a round. verdict: 'changes' sends the task back to its dev; 'approve' moves nothing.
+    comment: a general comment written with the review; it's numbered with the others, so the dev answers it."""
     if verdict not in ("changes", "approve"):
         raise ReviewError("A review is either 'changes' or 'approve'.")
     import claim            # noqa: E402  (imported here: claim imports the hook, which imports this module's neighbours)
@@ -366,19 +367,23 @@ def submit(task_id: str, verdict: str, summary: str = "", mode: str = "feature")
             why_not = can_request_changes(meta)
             if why_not:
                 raise ReviewError(why_not)
-            if not data["pending"] and not summary.strip():
-                raise ReviewError("Add at least one comment, or a summary, so the dev knows what to change.")
+            if not data["pending"] and not comment.strip():
+                raise ReviewError("Add at least one comment so the dev knows what to change.")
             if (other := claim.busy_with(meta)):
                 raise ReviewError(f"{other['id']} is on the same branch and still `{other['status']}`. "
                                   f"Review it there, or wait until it's done.")
         commit = head(meta)
         if not commit:
             raise ReviewError("There's no code to review yet.")
+        if comment.strip():
+            data["pending"].append({"id": f"c{data['next']}", "file": "", "line": None, "side": "new", "code": "",
+                                    "body": comment.strip()})
+            data["next"] += 1
         on_branch_so_far = branch_rounds(meta)
         last = on_branch_so_far[-1]["commit"] if on_branch_so_far else ""
         _, describes = _range(meta, mode if mode in MODES else "feature", last)
         r = {"n": len(data["rounds"]) + 1, "at": dt.datetime.now().isoformat(timespec="seconds"), "verdict": verdict,
-             "commit": commit, "describes": describes, "summary": summary.strip(), "status_before": meta.get("status", ""),
+             "commit": commit, "describes": describes, "status_before": meta.get("status", ""),
              # in reading order: by file and line, general comments last
              "comments": sorted(data["pending"], key=lambda c: (not c.get("file"), c.get("file", ""), c.get("line") or 0))}
         data["rounds"].append(r)

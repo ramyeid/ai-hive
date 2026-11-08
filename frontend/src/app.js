@@ -47,7 +47,7 @@ const state = {
   stream: {},         // name -> {thinking, text, tool}: what the agent is writing right now
   since: {},          // name -> when it started working (ms)
   codeTask: {},       // dev/reviewer name -> the task whose code it's on, for "Review the code"
-  reviewSummary: {},  // task id -> the summary you're writing for your review
+  reviewNote: {},     // task id -> the general comment you're writing for your review
 };
 const emptyStream = () => ({ thinking: "", text: "", tool: "" });
 
@@ -1704,15 +1704,12 @@ async function CodeReview(r) {
     </section>
     ${earlier ? "" : `<section class="section review-submit" id="review-submit"><h2>Your review</h2>
       ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
-      <div class="general"><label for="general-comment">A comment that isn't about one line</label>
-        <textarea id="general-comment" rows="3" placeholder="For example: errors here are always { code, message }."></textarea>
-        <div class="btn-row"><button class="btn small" data-action="add-general">Add comment</button></div></div>
-      <label for="review-summary">Summary <span class="muted">(optional)</span></label>
-      <textarea id="review-summary" rows="2">${esc(state.reviewSummary[t.id] || "")}</textarea>
+      <label for="review-note">General comment <span class="muted">(optional, sent with your review)</span></label>
+      <textarea id="review-note" rows="3" placeholder="Anything that isn't about one line. For example: errors here are always { code, message }.">${esc(state.reviewNote[t.id] || "")}</textarea>
       <div class="btn-row">
         <button class="btn primary" data-action="submit-review" data-verdict="changes" ${d.can_request_changes ? "disabled" : ""}>Request changes</button>
         <button class="btn" data-action="submit-review" data-verdict="approve" ${d.head ? "" : "disabled"}>Approve</button></div>
-      <p class="hint">${d.can_request_changes ? esc(d.can_request_changes) + " " : ""}<b>Request changes</b> sends ${d.pending.length ? plural(d.pending.length, "draft comment") : "your comments"} back to ${esc(dev || "the dev who built it")}, who answers each one, fixes the code on the same branch, then hands it to the reviewer again. <b>Approve</b> only records your approval: the reviewer still has the last word before done.</p>
+      <p class="hint">${d.can_request_changes ? esc(d.can_request_changes) + " " : ""}<b>Request changes</b> sends ${d.pending.length ? plural(d.pending.length, "draft comment") : "your comments"} (and the general comment) back to ${esc(dev || "the dev who built it")}, who answers each one, fixes the code on the same branch, then hands it to the reviewer again. <b>Approve</b> only records your approval: the reviewer still has the last word before done.</p>
     </section>`}`;
 }
 
@@ -1831,11 +1828,6 @@ const reviewActions = {
     });
   },
   "cancel-comment": (el) => el.closest("tr").remove(),
-  "add-general": async () => {
-    const text = document.getElementById("general-comment");
-    if (!text.value.trim()) return text.focus();
-    if (await saveDraft({ body: text.value })) render(true);
-  },
   "edit-comment": (el) => {
     const card = el.closest(".review-comment");
     if (card.querySelector("textarea")) return;
@@ -1868,12 +1860,10 @@ const reviewActions = {
   },
   "submit-review": async (el) => {
     const id = route().id, verdict = el.dataset.verdict;
-    const summary = document.getElementById("review-summary").value;
-    const general = document.getElementById("general-comment").value.trim();
-    if (general && !confirm("Your general comment hasn't been added yet. Submit without it?")) return;
-    const done = await act(() => api(`/api/tasks/${encodeURIComponent(id)}/review/submit`, { method: "POST", body: { verdict, summary, mode: reviewView() } }));
+    const comment = document.getElementById("review-note").value;
+    const done = await act(() => api(`/api/tasks/${encodeURIComponent(id)}/review/submit`, { method: "POST", body: { verdict, comment, mode: reviewView() } }));
     if (!done) return;
-    state.reviewSummary[id] = "";
+    state.reviewNote[id] = "";
     if (verdict === "changes") {
       const told = await pingDev(done.dev, id);
       toast(told ? `Sent back to ${nameOf(done.dev)}, who's on it now.` : `Sent back to ${done.dev ? nameOf(done.dev) : "the dev"}. It's in their inbox.`);
@@ -2380,7 +2370,7 @@ document.addEventListener("click", (e) => {
 });
 
 document.addEventListener("input", (e) => {
-  if (e.target.id === "review-summary") state.reviewSummary[route().id] = e.target.value;
+  if (e.target.id === "review-note") state.reviewNote[route().id] = e.target.value;
 });
 
 document.addEventListener("change", async (e) => {
