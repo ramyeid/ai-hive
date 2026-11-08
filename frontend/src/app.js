@@ -1950,8 +1950,8 @@ async function Reviews() {
 const LAND_ACTIONS = [["pick", "Keep"], ["squash", "Squash into the one above"], ["fixup", "Fold into the one above, drop its message"], ["drop", "Drop"]];
 const withoutAgentLine = (m) => m.split("\n").filter((l) => !/^Agent:\s*\S+/.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 
-async function loadLand(id) {
-  const plan = await api(`/api/tasks/${encodeURIComponent(id)}/land`);
+async function loadLand(id, fresh = true) {
+  const plan = await api(`/api/tasks/${encodeURIComponent(id)}/land?fresh=${fresh}`);
   const old = state.land[id];
   const same = old && old.plan.commits.map((c) => c.sha).sort().join() === plan.commits.map((c) => c.sha).sort().join();
   state.land[id] = same ? { ...old, plan } : {
@@ -1981,7 +1981,12 @@ function landMessage(L, g) {
 }
 
 async function Land(r, quiet) {
-  const L = quiet && state.land[r.id] ? state.land[r.id] : await loadLand(r.id);
+  // At once from what Hive knows, then again once it has asked GitHub (that takes a few seconds).
+  const L = quiet && state.land[r.id] ? state.land[r.id] : await loadLand(r.id, false);
+  if (!quiet) {
+    loadLand(r.id, true).then(() => { if (route().page === "land" && route().id === r.id) render(true); })
+      .catch((err) => { state.land[r.id].error = err.message; if (route().page === "land") render(true); });
+  }
   const p = L.plan;
   const groups = landGroups(L);
   const blocked = p.not_ready || groups.some((g) => g.invalid);
@@ -2005,7 +2010,7 @@ async function Land(r, quiet) {
       ${L.conflicts.length && p.dev ? `<button class="btn small" data-action="land-ask-dev">Ask ${esc(personOf(p.dev))} to rebase it and resolve them</button>` : ""}</div>` : "";
   return `<p><a href="${reviewHref(r.id)}" class="muted">← Back to the review</a></p>
     <div class="page-head"><div><h1>Pull request: ${esc(p.tasks[0]?.title || p.branch)}</h1>
-      <p><code>${esc(p.branch)}</code> onto <code>${esc(p.onto)}</code> · ${esc(p.tasks.map((x) => x.id).join(", "))}</p></div></div>
+      <p><code>${esc(p.branch)}</code> onto <code>${esc(p.onto)}</code> · ${esc(p.tasks.map((x) => x.id).join(", "))}${p.fresh ? "" : ` · <span class="muted"><span class="spinner" aria-hidden="true"></span>checking GitHub…</span>`}</p></div></div>
     ${p.not_ready ? `<p class="notice">${esc(p.not_ready)}</p>` : ""}
     ${p.record.merged_at ? `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span><div><b>Merged on GitHub.</b> <span class="muted">Hive removed ${esc((p.record.removed || []).join(" and ") || "nothing")}.</span></div></section>` : ""}
     ${error}

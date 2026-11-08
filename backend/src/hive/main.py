@@ -11,6 +11,7 @@ import os
 import secrets
 import subprocess
 import threading
+import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -196,6 +197,18 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
 
     app = FastAPI(title="Agent Team Console", lifespan=lifespan)
     app.state.manager = manager
+
+    @app.middleware("http")
+    async def timing(request: Request, call_next):
+        # How long each answer took: in the browser's Network tab (Server-Timing), and in data/hive.log when slow.
+        started = time.perf_counter()
+        response = await call_next(request)
+        took = time.perf_counter() - started
+        if request.url.path.startswith("/api/") and request.url.path != "/api/events":
+            response.headers["Server-Timing"] = f"app;dur={took * 1000:.0f}"
+            if took > SLOW_SECONDS:
+                logging.getLogger("hive.slow").warning("Slow: %s %s took %.1f s", request.method, request.url.path, took)
+        return response
 
     @app.middleware("http")
     async def guard(request: Request, call_next):
@@ -610,8 +623,8 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
             return JSONResponse({"detail": str(exc), "conflicts": exc.conflicts}, status_code=409)
 
     @app.get("/api/tasks/{task_id}/land")
-    def land_plan(task_id: str):
-        return landing(land.plan, task_id)
+    def land_plan(task_id: str, fresh: bool = True):
+        return landing(land.plan, task_id, fresh)
 
     @app.post("/api/tasks/{task_id}/land/cleanup")
     def land_cleanup(task_id: str, body: LandCleanUp):
@@ -804,13 +817,13 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         return [r.session_id for r in manager.agents.values() if r.engine and r.session_id]
 
     @app.get("/api/tasks/{task_id}/chats")
-    async def task_chats(task_id: str):
+    def task_chats(task_id: str):
         if not board.get_task(task_id):
             raise HTTPException(404, "Task not found.")
         return chats.for_task(task_id, live_sessions())
 
     @app.get("/api/tasks/{task_id}/chats/{name}")
-    async def task_chat(task_id: str, name: str):
+    def task_chat(task_id: str, name: str):
         found = chats.get(task_id, name, live_sessions()) if board.get_task(task_id) else None
         if not found:
             raise HTTPException(404, "Conversation not found.")
@@ -844,6 +857,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
 
 
 MERGE_CHECK_SECONDS = 600
+SLOW_SECONDS = 0.5   # answers slower than this are logged in data/hive.log
 
 
 async def _watch_merges(manager: AgentManager) -> None:

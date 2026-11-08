@@ -30,8 +30,24 @@ def handed_off(agent: str, since: str) -> list[dict]:
             if a.get("actor") == agent and a.get("ts", "") >= since and a.get("to") in wanted]
 
 
+_stints: dict[str, tuple[tuple, dict]] = {}   # running conversation -> (its stamp, its stints)
+
+
 def stints(session_id: str) -> dict[str, dict]:
-    """The parts of one conversation that worked on each task: task id -> its turns, times and cost."""
+    """The parts of one conversation that worked on each task: task id -> its turns, times and cost. Worked out
+    again only when the conversation changed (a running agent's can be long). Shared: don't change it."""
+    stamp = store.events_stamp(session_id)
+    cached = _stints.get(session_id)
+    if cached and cached[0] == stamp:
+        return cached[1]
+    found = _stints_of(session_id)
+    _stints[session_id] = (stamp, found)
+    for gone in [s for s in _stints if s != session_id and not store.events_stamp(s)]:
+        _stints.pop(gone, None)
+    return found
+
+
+def _stints_of(session_id: str) -> dict[str, dict]:
     meta = store.get_session(session_id) or {}
     found: dict[str, dict] = {}
     for turn in costs.attributed_turns(store.read_events(session_id), meta.get("model") or ""):
@@ -46,8 +62,9 @@ def stints(session_id: str) -> dict[str, dict]:
             stint["cost_usd"] = round(stint["cost_usd"] + (result.get("cost_usd") or 0), 4)
             stint["tokens"] += (result.get("tokens_in") or 0) + (result.get("tokens_out") or 0)
             stint["turns"] += 1
+    recent = list(reversed(board.activity(1000))) if found else []
     for stint in found.values():
-        moves = [a for a in reversed(board.activity(1000)) if a.get("id") == stint["task"]
+        moves = [a for a in recent if a.get("id") == stint["task"]
                  and a.get("actor") == stint["agent"] and stint["started"] <= a.get("ts", "") <= stint["finished"]]
         stint["outcome"] = moves[-1]["to"] if moves else ""
     return found
@@ -76,16 +93,26 @@ def archive(session_id: str | None) -> list[Path]:
 def for_task(task_id: str, live_sessions: list[str]) -> list[dict]:
     """The task's saved conversations, plus the parts of running conversations that work on it."""
     folder = CHATS / task_id
-    saved = [json.loads(p.read_text(encoding="utf-8")) | {"name": p.stem, "live": False}
-             for p in sorted(folder.glob("*.json"))] if folder.exists() else []
+    saved = [_saved_row(p) for p in sorted(folder.glob("*.json"))] if folder.exists() else []
     saved_sessions = {s["session"] for s in saved}
-    live = [stint | {"name": f"live-{session}", "live": True}
+    live = [{k: v for k, v in stint.items() if k != "events"} | {"name": f"live-{session}", "live": True}
             for session in live_sessions if session not in saved_sessions
             for task, stint in stints(session).items() if task == task_id]
-    rows = saved + live
-    for row in rows:
+    return sorted(saved + live, key=lambda r: r["started"])
+
+
+_saved: dict[Path, tuple[int, dict]] = {}   # a saved conversation's file -> (its mtime, its row without the events)
+
+
+def _saved_row(path: Path) -> dict:
+    """A saved conversation as the list shows it. The file (with every event) is read once: it doesn't change."""
+    mtime = path.stat().st_mtime_ns
+    cached = _saved.get(path)
+    if not cached or cached[0] != mtime:
+        row = json.loads(path.read_text(encoding="utf-8"))
         row.pop("events", None)
-    return sorted(rows, key=lambda r: r["started"])
+        _saved[path] = cached = (mtime, row | {"name": path.stem, "live": False})
+    return dict(cached[1])
 
 
 def get(task_id: str, name: str, live_sessions: list[str]) -> dict | None:

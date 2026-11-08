@@ -32,7 +32,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from tasklib import TASKS, fetch, find_task, lock, merged_into, parse, ref_exists, set_fields
+from tasklib import TASKS, find_task, lock, parse, ref_exists, set_fields
 
 import lead_review
 from claim import checked_out_at, worktree_for
@@ -142,8 +142,7 @@ def update_base(meta: dict) -> dict:
     """Fetch origin/<base> (and the branch); move the local <base> forward too when that's only a fast-forward and
     it isn't checked out anywhere. Returns what happened."""
     project, base, branch = meta["project"], meta.get("base") or "main", meta["branch"]
-    fetch(project, base)
-    on_origin(project, branch)
+    on_origin(project, branch, base)
     if not ref_exists(project, f"origin/{base}"):
         raise LandError(f"There's no origin/{base} to land on. Push {base} first, or set the task's base.")
     local = "not changed"
@@ -158,29 +157,34 @@ def update_base(meta: dict) -> dict:
     return {"onto": f"origin/{base}", "local": local}
 
 
-def on_origin(project: str, branch: str) -> str:
-    """The branch's commit on GitHub ('' when it isn't there), asked from origin itself; origin/<branch> is updated to
-    match, or removed when GitHub no longer has the branch (a stale copy would make a push or a pull request wrong)."""
-    listed = _git(project, "ls-remote", "origin", f"refs/heads/{branch}")
+def on_origin(project: str, branch: str, base: str = "") -> str:
+    """The branch's commit on GitHub ('' when it isn't there), asked from origin itself; origin/<branch> (and
+    origin/<base> when given) are updated to match, or removed when GitHub no longer has the branch (a stale copy
+    would make a push or a pull request wrong). One question to GitHub, plus one fetch only if something changed."""
+    names = [b for b in (branch, base) if b]
+    listed = _git(project, "ls-remote", "origin", *[f"refs/heads/{b}" for b in names])
     if listed.returncode != 0:
         return _git(project, "rev-parse", "--verify", "--quiet", f"origin/{branch}").stdout.strip()   # offline: our copy
-    sha = listed.stdout.split()[0] if listed.stdout.strip() else ""
-    if sha:
-        _git(project, "fetch", "--quiet", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}")
-    else:
+    there = {line.split()[1][len("refs/heads/"):]: line.split()[0] for line in listed.stdout.splitlines() if line.strip()}
+    have = lambda b: _git(project, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{b}").stdout.strip()
+    stale = [b for b in names if b in there and there[b] != have(b)]
+    if stale:
+        _git(project, "fetch", "--quiet", "origin", *[f"+refs/heads/{b}:refs/remotes/origin/{b}" for b in stale])
+    if branch not in there:
         _git(project, "update-ref", "-d", f"refs/remotes/origin/{branch}")
-    return sha
+    return there.get(branch, "")
 
 
 def _commits(project: str, since: str, tip: str) -> list[dict]:
-    log = _git(project, "log", "--reverse", "--no-merges", "--format=%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%B%x1e",
-               f"{since}..{tip}").stdout
+    """The commits since..tip, oldest first, with their size: one git call however many there are."""
+    log = _git(project, "log", "--reverse", "--no-merges", "--shortstat",
+               "--format=%x1e%H%x1f%h%x1f%s%x1f%an%x1f%aI%x1f%B%x1d", f"{since}..{tip}").stdout
     out = []
     for item in log.split("\x1e"):
         if not item.strip():
             continue
-        sha, short, subject, author, at, message = item.strip("\n").split("\x1f", 5)
-        stat = _git(project, "show", "--shortstat", "--format=", sha).stdout
+        head, _, stat = item.partition("\x1d")
+        sha, short, subject, author, at, message = head.strip("\n").split("\x1f", 5)
         numbers = {k: int(n) for n, k in re.findall(r"(\d+) (file|insertion|deletion)", stat)}
         out.append({"sha": sha, "short": short, "subject": subject, "author": author, "at": at,
                     "message": message.strip(), "agent": bool(re.search(r"^Agent:\s*\S+", message, re.M)),
@@ -206,12 +210,15 @@ def draft_message(tasks: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
-def plan(task_id: str) -> dict:
-    """Everything the landing panel shows. Fetches first."""
+def plan(task_id: str, fresh: bool = True) -> dict:
+    """Everything the pull request page shows. fresh: ask GitHub first (what's new on the base, what it has of the
+    branch), a few seconds; without it, from what this machine already knows, at once (the page shows that first)."""
     meta, tasks = _branch(task_id)
     project, branch, base = meta["project"], meta["branch"], meta.get("base") or "main"
-    fetch(project, base)
-    remote = on_origin(project, branch)
+    if fresh:
+        remote = on_origin(project, branch, base)
+    else:
+        remote = _git(project, "rev-parse", "--verify", "--quiet", f"origin/{branch}").stdout.strip()
     onto = f"origin/{base}" if ref_exists(project, f"origin/{base}") else base
     fork = _git(project, "merge-base", onto, branch).stdout.strip()
     head = _git(project, "rev-parse", branch).stdout.strip()
@@ -225,7 +232,7 @@ def plan(task_id: str) -> dict:
         "can_undo": ref_exists(project, pre_land_ref(branch)) and not rec.get("merged_at"),
         "not_ready": _not_done(tasks), "gh": bool(shutil.which("gh")),
         "draft_message": draft_message(tasks), "pr_title": tasks[0].get("title", ""), "pr_body": pr_body(tasks),
-        "record": rec, "merged": merged_into(project, branch, base),
+        "record": rec, "fresh": fresh,
         "dev": meta.get("dev", ""), "folder": str(checked_out_at(project, branch) or worktree_for(meta)),
     }
 
