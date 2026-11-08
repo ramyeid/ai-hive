@@ -60,7 +60,7 @@ agents' home folder. It's on by default; start the console with `ENABLE_TERMINAL
 
 ## VS Code in the browser
 
-**Open in VS Code** (or holding **.** for 2 seconds) in a code review opens the branch's worktree in VS Code in a new tab, like GitHub's
+**Open in editor** (or holding **.** for 2 seconds) in a code review opens the branch's worktree in VS Code in a new tab, like GitHub's
 **.**: [code-server](https://github.com/coder/code-server), run by Hive on the machine the console runs on, served
 at `/editor/` behind the console's own host and sign-in checks. Install it there once, then turn it on in
 **Settings → Integrations → Editor**:

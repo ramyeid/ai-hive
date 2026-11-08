@@ -451,7 +451,7 @@ function releaseHold(early) {
   clearTimeout(hold.timer);
   hold.button.classList.remove("holding");
   hold = null;
-  if (early) toast("Keep holding . to open VS Code.");
+  if (early) toast("Keep holding . to open the editor.");
 }
 
 // ---- ask the Orchestrator from any page -------------------------------------------
@@ -1316,7 +1316,7 @@ async function editorSection() {
         Linux: <code>curl -fsSL https://code-server.dev/install.sh | sh</code> &nbsp; macOS: <code>brew install code-server</code></p>`;
   const browserBlocked = !cs.allowed ? "disabled" : "";
   return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Editor</p>` + settingsHead("Editor", "")
-    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in VS Code: <b>Open in VS Code</b> (or <b>.</b>) in a code review opens the branch's worktree folder, indexed (go to definition, references, search).</p>
+    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in VS Code: <b>Open in editor</b> (or holding <b>.</b>) in a code review opens the branch's worktree folder, indexed (go to definition, references, search).</p>
     <form class="form editor-form" id="editor-form">
       <fieldset><legend>Open code in</legend><div class="radios editor-apps">
         ${radio("app", "browser", "<b>In the browser</b>: VS Code in a new tab, running on the Hive machine (like GitHub's <b>.</b>)", e.app === "browser", browserBlocked)}
@@ -1743,7 +1743,7 @@ async function CodeReview(r) {
     ${sent}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
-        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (or hold .)">Open in ${editorName()} <kbd>.</kbd></button>` : ""}
+        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (or hold .)">Open in editor <kbd>.</kbd></button>` : ""}
         ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
@@ -1878,7 +1878,7 @@ function reviewOpen() {
   if (editorPrefs().app !== "browser") { location.href = editorUrl(r.folder); return; }
   // Open the tab now, while the click still counts (later it would be blocked as a pop-up), then point it at VS Code.
   const tab = window.open("", "_blank");
-  if (!tab) return toast("Your browser blocked the new tab: allow pop-ups for this site, or click Open in VS Code.", true);
+  if (!tab) return toast("Your browser blocked the new tab: allow pop-ups for this site, or click Open in editor.", true);
   tab.document.title = "Opening VS Code…";
   api("/api/editor/open", { method: "POST", body: { folder: r.folder } })
     .then((d) => { tab.location.href = d.url; })
