@@ -1724,8 +1724,8 @@ async function CodeReview(r) {
 // ---- Reviews: every feature branch, like a list of pull requests --------------------------
 
 const REVIEW_TABS = [["open", "Open"], ["draft", "Draft"], ["done", "Done"]];
-const YOUR_REVIEW = { new: ["New commits since your review", "need"], none: ["Not reviewed yet", "need"],
-  approved: ["You approved", "ok"], changes: ["Changes requested", "chg"] };
+const YOUR_REVIEW = { new: ["New commits since your review", "rv-waiting"], none: ["Not reviewed yet", "rv-waiting"],
+  approved: ["You approved", "rv-approved"], changes: ["Changes requested", "rv-changes"] };
 
 async function Reviews() {
   const all = await api("/api/reviews");
@@ -1742,7 +1742,7 @@ async function Reviews() {
     : stageLabel(b.status).toLowerCase();
   const row = (b) => {
     // done branches show no review state: after you merge (and maybe delete) them, there's nothing left to review
-    const [you, cls] = b.state === "done" ? ["", ""] : !b.head ? ["No code yet", "none"] : YOUR_REVIEW[b.your_review];
+    const [you, cls] = b.state === "done" ? ["", ""] : !b.head ? ["No code yet", "rv-quiet"] : YOUR_REVIEW[b.your_review];
     const ids = b.tasks.map((x) => x.id).join(" ");
     return `<a class="rv-row" href="${reviewHref(b.task)}" data-search="${esc(`${b.title} ${b.branch} ${ids} ${b.tasks.map((x) => x.title).join(" ")}`.toLowerCase())}" data-project="${esc(b.project_name)}">
       <span class="rv-ico ${b.state}" aria-label="${b.state}"></span>

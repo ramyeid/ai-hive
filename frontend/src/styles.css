@@ -882,10 +882,10 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .rv-meta { color: var(--muted); font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-meta code { font-size: 0.8rem; }
 .rv-you { padding: 2px 9px; border-radius: 10px; font-size: 0.78rem; white-space: nowrap; }
-.rv-you.need { background: var(--attention); color: var(--panel); }
-.rv-you.ok { background: var(--brand-soft); color: var(--ink); }
-.rv-you.none { background: var(--sunken); color: var(--muted); }
-.rv-you.chg { background: color-mix(in srgb, var(--warn-ink, #8a5a00) 14%, transparent); color: var(--warn-ink, #8a5a00); }
+.rv-you.rv-waiting { background: var(--attention); color: var(--panel); }
+.rv-you.rv-approved { background: var(--brand-soft); color: var(--ink); }
+.rv-you.rv-quiet { background: var(--sunken); color: var(--muted); }
+.rv-you.rv-changes { background: color-mix(in srgb, var(--warn-ink, #8a5a00) 14%, transparent); color: var(--warn-ink, #8a5a00); }
 .rv-size { min-width: 120px; color: var(--muted); font-size: 0.8rem; text-align: right; white-space: nowrap; }
 @media (max-width: 720px) {
   .rv-row { grid-template-columns: 14px minmax(0, 1fr); }
