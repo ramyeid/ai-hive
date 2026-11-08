@@ -29,6 +29,9 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
   side-by-side view. Follow-up tasks add commits to the same branch, so **Earlier reviews** lists every round on it,
   and your comments go to the branch's current task (the one its dev is on).
 - Hover a line and press **+** to comment on it, or leave a general comment.
+- Press **.** (or **Open in VS Code**) to open the branch's worktree in VS Code or Cursor, indexed; **Open** on a file
+  or **↗** on a line jumps into it. Set the editor, and the SSH host if Hive runs on a server, in
+  **Settings → Integrations → Editor**.
 - **Request changes**: your comments are added to the task under **Lead Review** and the task goes back to the
   developer who built it. The developer answers every comment, applies each one wherever it applies, and the
   reviewer checks they were all handled.

@@ -808,3 +808,26 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .form .notify-group label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
 .review-bar .tab .count { margin-left: 4px; padding: 1px 7px; border-radius: 9px; background: var(--sunken); color: var(--muted); font-size: 0.74rem; font-weight: 600; }
 .page-head .notice { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--brand); border-radius: 6px; background: var(--brand-soft); font-size: 0.88rem; }
+
+/* opening the code in your editor */
+.ico-vscode { width: 15px; height: 15px; flex: none; fill: #2f80d1; }
+.open-editor { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 6px auto; }
+.open-editor + .tree-toggle { margin-left: 0; }
+.open-editor kbd { padding: 0 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--sunken); color: var(--muted); font: 600 0.72rem/1.5 var(--mono); }
+.review-file > summary .file-open { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; padding: 1px 8px; color: var(--muted); }
+.review-file > summary .file-open:hover { color: var(--ink); }
+.open-line { position: absolute; right: 6px; top: 1px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-s);
+  background: var(--ink); color: var(--panel); font-size: 0.72rem; line-height: 18px; cursor: pointer; opacity: 0; }
+.code-diff.unified tr:hover .open-line, .code-diff.split td.code:hover .open-line, .open-line:focus-visible { opacity: 1; }
+@media (hover: none) { .open-line { display: none; } }
+.int-icon.editor { background: var(--sunken); }
+.int-icon.editor .ico-vscode { width: 24px; height: 24px; }
+.editor-form fieldset { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 4px; }
+.editor-form legend { margin-bottom: 6px; padding: 0; font-weight: 600; }
+.editor-form .radios { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.form.editor-form label.radio { display: flex; align-items: center; justify-content: flex-start; gap: 8px; font-weight: 400; }
+.form.editor-form label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
+.editor-form .ssh-host { display: none; margin: 4px 0 0 26px; max-width: 420px; }
+.editor-form fieldset:has(input[value="ssh"]:checked) .ssh-host { display: block; }
+.editor-form .ssh-host label { display: block; margin-bottom: 4px; }
+.editor-form .ssh-host input { width: 100%; }

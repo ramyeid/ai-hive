@@ -137,6 +137,23 @@ class LeadReviewTest(unittest.TestCase):
 
         self.assertEqual([c["body"] for c in drafts], ["Draft before the follow-up."])
 
+    def test_the_review_says_where_the_branch_is_checked_out_to_open_it_in_an_editor(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+
+        diff = self._call(kit, f"diff('{self._id(task)}')")
+
+        self.assertEqual((diff["folder"], diff["folder_on_branch"]), (self._field(task, "worktree"), True))
+
+    def test_once_the_worktree_is_removed_the_project_folder_is_offered_instead(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        self._set_field(task, "worktree", "")
+
+        diff = self._call(kit, f"diff('{self._id(task)}')")
+
+        self.assertEqual((diff["folder"], diff["folder_on_branch"]), (str(project), False))
+
     # ---- helpers ----
 
     def _a_follow_up_in_dev(self, kit: Path, project: Path, earlier: Path) -> Path:

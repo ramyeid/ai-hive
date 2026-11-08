@@ -195,7 +195,7 @@ def diff(task_id: str, mode: str = "feature") -> dict:
               "base": meta.get("base", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
               "mode": mode if mode in MODES else "feature", "head": head(meta), "last_reviewed": last, "files": [],
               "range": "", "describes": "", "rounds": all_rounds, "pending": data["pending"],
-              "can_request_changes": can_request_changes(meta)}
+              "can_request_changes": can_request_changes(meta), **code_folder(meta)}
     if not result["head"]:
         result["describes"] = "There's no code yet: the branch is created when a dev claims the task."
         return result
@@ -205,6 +205,15 @@ def diff(task_id: str, mode: str = "feature") -> dict:
         raise ReviewError(f"git diff {rng} failed: {done.stderr.strip()}")
     result["range"], result["files"] = rng, parse_diff(done.stdout)
     return result
+
+
+def code_folder(meta: dict) -> dict:
+    """Where to open the branch's code in an editor: its worktree, or the project folder (which may be on another
+    branch) once the worktree is removed."""
+    worktree = meta.get("worktree", "")
+    if worktree and Path(worktree).is_dir():
+        return {"folder": worktree, "folder_on_branch": True}
+    return {"folder": meta.get("project", ""), "folder_on_branch": False}
 
 
 def can_request_changes(meta: dict) -> str:

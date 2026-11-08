@@ -423,6 +423,7 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/" && !typing && !document.getElementById("ask-pill").hidden) { e.preventDefault(); openDrawer(); }
   else if (e.key === "Escape" && !document.getElementById("drawer").hidden) closeDrawer();
   else if (e.key === "[" && !typing && !e.metaKey && !e.ctrlKey && !document.querySelector("dialog[open]")) toggleRail();
+  else if (e.key === "." && !typing && !e.metaKey && !e.ctrlKey && route().page === "review" && document.querySelector(".open-editor")) reviewOpen();
 });
 
 // ---- ask the Orchestrator from any page -------------------------------------------
@@ -1117,6 +1118,7 @@ async function Settings(r) {
     integrations: live.connected ? `<span class="ok">● Slack</span>` : live.error ? `<span class="bad">● Slack</span>` : "" };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
   const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
+    : section === "integrations" && r.sub === "editor" ? editorSection()
     : await { team: teamSection, models: modelsSection, integrations: integrationsSection, access: accessSection, workspace: workspaceSection,
       appearance: appearanceSection, about: aboutSection }[section](live);
   return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
@@ -1127,17 +1129,19 @@ const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}<
 // The apps Hive connects to. Slack today; each new one gets a card here and its own page.
 const INTEGRATIONS = [
   { id: "slack", name: "Slack", icon: "slack", text: "Talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in a thread." },
+  { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code or Cursor, indexed: press . in a code review, or ↗ on a line." },
 ];
 
 function integrationsSection(live) {
   const status = (id) => id === "slack"
     ? (live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>` : live.error ? `<span class="slack-status bad"><span class="dot"></span>Error</span>` : `<span class="slack-status"><span class="dot"></span>Not connected</span>`)
+    : id === "editor" ? (editorOn() ? `<span class="slack-status on"><span class="dot"></span>${esc(editorName())}${editorPrefs().where === "ssh" ? ` over SSH (${esc(editorPrefs().host)})` : ""}</span>` : `<span class="slack-status"><span class="dot"></span>Off</span>`)
     : "";
   return settingsHead("Integrations", "The apps Hive works with. More will appear here.")
     + `<div class="integrations">${INTEGRATIONS.map((i) => `<a class="integration" href="#/settings/integrations/${i.id}">
-        <span class="int-icon ${i.icon}" aria-hidden="true">${i.name.slice(0, 1)}</span>
+        <span class="int-icon ${i.icon}" aria-hidden="true">${i.id === "editor" ? VSCODE_ICON : i.name.slice(0, 1)}</span>
         <span class="int-body"><b>${esc(i.name)}</b>${status(i.id)}<small>${esc(i.text)}</small></span>
-        <span class="btn small">${i.id === "slack" && live.connected ? "Manage" : "Set up"}</span></a>`).join("")}</div>`;
+        <span class="btn small">${(i.id === "slack" && live.connected) || (i.id === "editor" && editorOn()) ? "Manage" : "Set up"}</span></a>`).join("")}</div>`;
 }
 
 async function modelsSection() {
@@ -1272,6 +1276,25 @@ function slackNotifications() {
         <label class="radio"><input type="radio" name="replies" value="thread_and_dm" ${prefs.replies === "thread_and_dm" ? "checked" : ""}> In the thread, and also ${where} <small class="muted">(Slack's "Also send ${where}")</small></label>
       </fieldset>
       <div class="btn-row"><button class="btn primary">Save notifications</button></div>
+    </form></section>`;
+}
+
+function editorSection() {
+  const e = editorPrefs();
+  const radio = (name, value, label, checked) => `<label class="radio"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""}> ${label}</label>`;
+  return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Editor</p>` + settingsHead("Editor", "")
+    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in your editor, on the branch's worktree. <b>.</b> in a code review opens the branch's folder (that's what your editor indexes: go to definition, references, search); <b>Open</b> on a file and <b>↗</b> on a line jump into it. Saved in this browser, so each computer can have its own.</p>
+    <form class="form editor-form" id="editor-form">
+      <fieldset><legend>Open code in</legend><div class="radios">${radio("app", "vscode", "VS Code", e.app === "vscode")}${radio("app", "cursor", "Cursor", e.app === "cursor")}${radio("app", "off", "Off", !EDITORS[e.app])}</div></fieldset>
+      <fieldset><legend>Where the code is</legend>
+        ${radio("where", "local", "On this computer: Hive runs here", e.where !== "ssh")}
+        ${radio("where", "ssh", "On a server I reach over SSH", e.where === "ssh")}
+        <div class="ssh-host"><label for="editor-host">SSH host</label>
+          <input type="text" id="editor-host" value="${esc(e.host)}" placeholder="hive-ec2" spellcheck="false" autocapitalize="off">
+          <p class="hint">A <code>Host</code> from your <code>~/.ssh/config</code> (or <code>user@address</code>). Needs the <b>Remote - SSH</b> extension; the first time, your editor sets itself up on the server and installs your extensions there.</p></div>
+      </fieldset>
+      <p class="hint">The first time, your browser asks whether to open ${esc(editorName())}: tick <b>Always allow</b>.</p>
+      <div class="btn-row"><button class="btn primary">Save</button></div>
     </form></section>`;
 }
 
@@ -1453,10 +1476,47 @@ function markHunk(lines) {
   }
 }
 
-// One line of code as a cell you can comment on: the anchor holds where it is and its text.
+// ---- opening the code in your editor (Settings → Integrations → Editor, kept in this browser) ----
+
+const EDITORS = { vscode: { name: "VS Code", scheme: "vscode" }, cursor: { name: "Cursor", scheme: "cursor" } };
+const VSCODE_ICON = '<svg class="ico-vscode" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.6 2 8.4 10.4 3.7 6.8 2 7.7v8.6l1.7.9 4.7-3.6 9.2 8.4L22 20.2V3.8zM4 14.4V9.6L6.6 12zm13.6 2.3L12.1 12l5.5-4.7z"/></svg>';
+
+function editorPrefs() {
+  try { return { app: "vscode", where: "local", host: "", ...JSON.parse(localStorage.getItem("editor") || "{}") }; }
+  catch { return { app: "vscode", where: "local", host: "" }; }
+}
+const editorOn = () => { const e = editorPrefs(); return !!EDITORS[e.app] && (e.where !== "ssh" || !!e.host); };
+const editorName = () => (EDITORS[editorPrefs().app] || EDITORS.vscode).name;
+
+// vscode://file/<path>:<line> on this computer; over SSH, vscode://vscode-remote/ssh-remote+<host>/<path>:<line>
+function editorUrl(path, line) {
+  const e = editorPrefs(), scheme = EDITORS[e.app].scheme;
+  const where = e.where === "ssh" ? `vscode-remote/ssh-remote+${encodeURIComponent(e.host)}` : "file";
+  return `${scheme}://${where}${encodeURI(path)}${line ? `:${line}:1` : ""}`;
+}
+
+// Open the branch's folder (that's what VS Code indexes), or a file in it. A file only lands in that indexed window
+// once the folder is open there, so the first time for a folder this opens the folder and asks you to click again.
+function openInEditor(folder, file = "", line = 0) {
+  if (!folder) return toast("This branch isn't checked out anywhere yet.", true);
+  let opened = [];
+  try { opened = JSON.parse(sessionStorage.getItem("editorFolders") || "[]"); } catch { /* first time */ }
+  const folderUrl = editorUrl(folder);   // per editor and machine: a folder open locally isn't open over SSH
+  if (!file || !opened.includes(folderUrl)) {
+    location.href = folderUrl;
+    try { sessionStorage.setItem("editorFolders", JSON.stringify([...new Set([...opened, folderUrl])])); } catch { /* asks again */ }
+    if (file) toast(`Opening the branch's folder in ${editorName()} first, so it's indexed. Click again to jump to ${file.split("/").pop()}.`);
+    return;
+  }
+  location.href = editorUrl(`${folder}/${file}`, line);
+}
+
+// One line of code as a cell you can comment on (and open in your editor): the anchor holds where it is and its text.
 function codeCell(f, l, side, kind) {
   const line = side === "old" ? l.o : l.n;
-  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${inline.get(l) ?? esc(l.s)}</td>`;
+  const open = editorOn() && side !== "old" && f.status !== "deleted"
+    ? `<button class="open-line" data-action="open-line" data-file="${esc(f.path)}" data-line="${line}" aria-label="Open ${esc(f.path)} at line ${line} in ${editorName()}" title="Open at line ${line} in ${editorName()}">↗</button>` : "";
+  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button>${open}<span class="mark">${l.t === " " ? " " : l.t}</span>${inline.get(l) ?? esc(l.s)}</td>`;
 }
 
 // Lines of a hunk side by side: unchanged lines on both sides, removed lines next to the lines that replaced them.
@@ -1513,7 +1573,8 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
   return `<details class="review-file" id="file-${index}" data-path="${esc(f.path)}" ${changed > 400 ? "" : "open"}>
     <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
-      <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></summary>
+      <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
+      ${editorOn() && f.status !== "deleted" ? `<button class="btn small file-open" data-action="open-file" data-file="${esc(f.path)}" title="Open in ${editorName()}">${VSCODE_ICON}Open</button>` : ""}</summary>
     ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
       <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>
       <tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
@@ -1630,12 +1691,14 @@ async function CodeReview(r) {
   const elsewhereTask = d.opened && d.task !== d.opened
     ? `<p class="notice">This branch's current task is <a href="#/tasks/${esc(d.task)}">${esc(d.task)}</a>: your comments and reviews go there, to the dev working on it.</p>` : "";
   const dev = d.dev && nameOf(d.dev);
+  state.reviewFolder = { folder: d.folder, onBranch: d.folder_on_branch, branch: d.branch };
   return `<p><a href="#/tasks/${esc(t.id)}" class="muted">${esc(t.id)}</a></p>
     <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
       <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p>${elsewhereTask}</div>
       ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
+        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (.)">${VSCODE_ICON}Open in ${editorName()} <kbd>.</kbd></button>` : ""}
         ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
@@ -1685,7 +1748,17 @@ async function pingDev(dev, taskId) {
     body: { text: `I reviewed the code of ${taskId} and requested changes. Work on it per your instructions.` } }));
 }
 
+// The review's code folder; once the worktree is gone (a done task), the project folder, which may be on another branch.
+function reviewOpen(file = "", line = 0) {
+  const r = state.reviewFolder || {};
+  if (!r.onBranch && r.folder) toast(`The branch's worktree was removed, so this opens your project folder, which may not be on ${r.branch}.`);
+  openInEditor(r.folder, file, line);
+}
+
 const reviewActions = {
+  "open-folder": () => reviewOpen(),
+  "open-file": (el) => reviewOpen(el.dataset.file),
+  "open-line": (el) => reviewOpen(el.dataset.file, Number(el.dataset.line)),
   "review-tree": () => {
     try { localStorage.setItem("reviewTree", reviewTreeShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     render(true);
@@ -2086,6 +2159,15 @@ const afterRender = {
       for (const [k, id] of [["users", "slack-users"], ["channel", "slack-channel"]]) if (!value(id).disabled) body[k] = value(id).value;
       const saved = await act(() => api("/api/settings/slack", { method: "PUT", body }));
       if (saved) { state.settings = saved; render(true); const s = await api("/api/slack"); toast(s.connected ? "Connected to Slack." : s.error || "Saved. Add both tokens and at least one member ID to connect.", !s.connected && !!s.error); }
+    });
+    document.getElementById("editor-form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const form = e.target, pick = (n) => form.querySelector(`input[name=${n}]:checked`).value;
+      const prefs = { app: pick("app"), where: pick("where"), host: form.querySelector("#editor-host").value.trim() };
+      if (prefs.where === "ssh" && !prefs.host && prefs.app !== "off") return toast("Enter the SSH host you connect to the server with.", true);
+      try { localStorage.setItem("editor", JSON.stringify(prefs)); } catch { return toast("This browser doesn't keep settings (private window?).", true); }
+      toast("Editor saved.");
+      render(true);
     });
     document.getElementById("slack-notify-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
