@@ -94,6 +94,11 @@ class SlackPrefsBody(BaseModel):
     replies: str | None = None     # thread | thread_and_dm
 
 
+class ReviewViewed(BaseModel):
+    path: str
+    viewed: bool = True
+
+
 class ConsoleUrlBody(BaseModel):
     console_url: str
 
@@ -488,6 +493,10 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     def review_comment_delete(task_id: str, cid: str):
         reviewing(lead_review.delete_comment, task_id, cid)
         return {"ok": True}
+
+    @app.post("/api/tasks/{task_id}/review/viewed")
+    def review_viewed(task_id: str, body: ReviewViewed):
+        return reviewing(lead_review.mark_viewed, task_id, body.path, body.viewed)
 
     @app.post("/api/tasks/{task_id}/review/submit")
     def review_submit(task_id: str, body: ReviewSubmit):

@@ -18,6 +18,7 @@ Usage: python3 team/tools/lead_review.py show TASK-012      (the rounds and repl
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
 import re
 import subprocess
@@ -203,8 +204,57 @@ def diff(task_id: str, mode: str = "feature") -> dict:
     done = _git(meta["project"], "diff", "--no-color", "--no-ext-diff", "-M", "-U3", rng)
     if done.returncode != 0:
         raise ReviewError(f"git diff {rng} failed: {done.stderr.strip()}")
-    result["range"], result["files"] = rng, parse_diff(done.stdout)
+    result["range"], result["files"] = rng, _with_viewed(meta, parse_diff(done.stdout))
     return result
+
+
+# ---- files the lead marked as viewed (per branch, like GitHub) ---------------------------
+
+def _viewed_file(meta: dict) -> Path:
+    key = hashlib.sha1(f"{meta.get('project', '')}\0{meta.get('branch', '')}".encode()).hexdigest()[:16]
+    return REVIEWS / "viewed" / f"{key}.json"
+
+
+def _viewed(meta: dict) -> dict[str, str]:
+    """{path: the file's blob when the lead marked it viewed}."""
+    try:
+        return json.loads(_viewed_file(meta).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _blobs(meta: dict, paths: list[str]) -> dict[str, str]:
+    """Each file's blob at the branch's head ('deleted' for a file that's gone): what "viewed" is tied to."""
+    out = {p: "deleted" for p in paths}
+    if paths:
+        listed = _git(meta["project"], "ls-tree", meta["branch"], "--", *paths).stdout
+        for line in listed.splitlines():
+            info, _, path = line.partition("\t")
+            out[path] = info.split()[2]
+    return out
+
+
+def mark_viewed(task_id: str, path: str, viewed: bool = True) -> dict:
+    """Mark a file viewed (or not) as it is now; it shows as not viewed again once the dev changes it."""
+    _, meta = _task(current_task(task_id))
+    with lock():
+        seen = _viewed(meta)
+        if viewed:
+            seen[path] = _blobs(meta, [path])[path]
+        else:
+            seen.pop(path, None)
+        _viewed_file(meta).parent.mkdir(parents=True, exist_ok=True)
+        _viewed_file(meta).write_text(json.dumps(seen, indent=2), encoding="utf-8")
+    return {"path": path, "viewed": viewed}
+
+
+def _with_viewed(meta: dict, files: list[dict]) -> list[dict]:
+    seen, blobs = _viewed(meta), _blobs(meta, [f["path"] for f in files])
+    for f in files:
+        was = seen.get(f["path"])
+        f["viewed"] = bool(was) and was == blobs[f["path"]]
+        f["changed_since_viewed"] = bool(was) and was != blobs[f["path"]]
+    return files
 
 
 def code_folder(meta: dict) -> dict:

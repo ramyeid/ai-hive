@@ -1571,10 +1571,12 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   }
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
-  return `<details class="review-file" id="file-${index}" data-path="${esc(f.path)}" ${changed > 400 ? "" : "open"}>
+  return `<details class="review-file ${f.viewed ? "is-viewed" : ""}" id="file-${index}" data-index="${index}" data-path="${esc(f.path)}" ${changed > 400 || f.viewed ? "" : "open"}>
     <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
-      ${editorOn() && f.status !== "deleted" ? `<button class="btn small file-open" data-action="open-file" data-file="${esc(f.path)}" title="Open in ${editorName()}">${VSCODE_ICON}Open</button>` : ""}</summary>
+      ${f.changed_since_viewed ? `<span class="pill warn changed-since">Changed since you viewed it</span>` : ""}
+      ${editorOn() && f.status !== "deleted" ? `<button class="btn small file-open" data-action="open-file" data-file="${esc(f.path)}" title="Open in ${editorName()}">${VSCODE_ICON}Open</button>` : ""}
+      <button class="viewed-toggle" data-action="mark-viewed" aria-pressed="${!!f.viewed}" title="Mark as viewed: it folds away until the dev changes it"><span class="box" aria-hidden="true"></span>Viewed</button></summary>
     ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
       <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>
       <tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
@@ -1610,10 +1612,10 @@ function fileTree(files, drafts) {
     const items = node.files.sort((a, b) => a.name.localeCompare(b.name)).map(({ f, index, name }) => {
       const [letter, word] = STATUS[f.status] || ["M", "Modified"];
       const n = notes(f.path);
-      return `<li><button class="tree-file" data-action="jump-file" data-index="${index}" title="${esc(f.path)}">
+      return `<li><button class="tree-file ${f.viewed ? "viewed" : ""}" data-action="jump-file" data-index="${index}" title="${esc(f.path)}${f.viewed ? " (viewed)" : ""}">
         <span class="st ${letter}" title="${word}">${letter}</span><span class="name">${esc(name)}</span>
         ${n ? `<span class="notes" title="${plural(n, "draft comment")}">${n}</span>` : ""}
-        <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span></button></li>`;
+        <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span><span class="seen" aria-hidden="true">✓</span></button></li>`;
     });
     return dirs.join("") + items.join("");
   };
@@ -1622,6 +1624,15 @@ function fileTree(files, drafts) {
       <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button>
       <button class="icon-btn tree-hide" data-action="review-tree" aria-label="Hide the files" title="Hide the files, show only the diff"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M10.5 6.2 8.7 8l1.8 1.8"/></svg></button></div>
     <ul class="tree">${render(root, "")}</ul></aside>`;
+}
+
+// Whether files you marked viewed are hidden from the diff and the tree, remembered in this browser.
+function hideViewed() {
+  try { return localStorage.getItem("hideViewed") === "1"; } catch { return false; }
+}
+function viewedCount() {
+  const files = document.querySelectorAll(".review-file"), seen = document.querySelectorAll(".review-file.is-viewed");
+  return `${seen.length} of ${plural(files.length, "file")} viewed`;
 }
 
 // Whether the file tree is shown next to the diff, remembered in this browser.
@@ -1703,7 +1714,9 @@ async function CodeReview(r) {
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
       ${earlier ? `<p class="muted">Every review you've submitted on this branch, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
-      ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
+      ${d.files.length ? `<div class="viewed-bar"><span class="viewed-count">${d.files.filter((f) => f.viewed).length} of ${plural(d.files.length, "file")} viewed</span>
+        <button class="btn small" data-action="hide-viewed" aria-pressed="${hideViewed()}">Hide viewed</button></div>` : ""}
+      ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"} ${hideViewed() ? "hide-viewed" : ""}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
         : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
     </section>
     ${earlier ? "" : `<section class="section review-submit" id="review-submit"><h2>Your review</h2>
@@ -1756,6 +1769,36 @@ function reviewOpen(file = "", line = 0) {
 }
 
 const reviewActions = {
+  // Viewed, like GitHub: the file folds away and is ticked in the tree, until the dev changes it again.
+  "mark-viewed": async (el) => {
+    const file = el.closest(".review-file"), viewed = !file.classList.contains("is-viewed");
+    const show = (on) => {
+      file.classList.toggle("is-viewed", on);
+      el.setAttribute("aria-pressed", String(on));
+      document.querySelector(`.tree-file[data-index="${file.dataset.index}"]`)?.classList.toggle("viewed", on);
+      document.querySelector(".viewed-count").textContent = viewedCount();
+    };
+    show(viewed);
+    if (viewed) {
+      file.open = false;
+      file.querySelector(".changed-since")?.remove();
+      if (file.getBoundingClientRect().top < 64) file.scrollIntoView({ block: "start" });   // keep your place: the next file
+    } else {
+      file.open = true;
+    }
+    try {
+      await api(`/api/tasks/${encodeURIComponent(route().id)}/review/viewed`, { method: "POST", body: { path: file.dataset.path, viewed } });
+    } catch (err) {
+      show(!viewed);
+      toast(err.message, true);
+    }
+  },
+  "hide-viewed": (el) => {
+    const on = !hideViewed();
+    try { localStorage.setItem("hideViewed", on ? "1" : ""); } catch { /* this page only */ }
+    el.setAttribute("aria-pressed", String(on));
+    document.querySelector(".review-body")?.classList.toggle("hide-viewed", on);
+  },
   "open-folder": () => reviewOpen(),
   "open-file": (el) => reviewOpen(el.dataset.file),
   "open-line": (el) => reviewOpen(el.dataset.file, Number(el.dataset.line)),
