@@ -224,7 +224,18 @@ body.drawer-open .ask-pill { display: none; }
 
 main { min-width: 0; padding: 26px 32px 96px; }
 main:focus, main:focus-visible { outline: none; }
-.page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+/* the title on the left, its buttons always at the top right: a long title wraps in its own column, never pushes them down */
+.page-head, .task-head { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: 12px 20px; }
+.page-head { margin-bottom: 22px; }
+.page-head > :first-child, .task-head > :first-child { flex: 1 1 auto; min-width: 0; }
+.page-head h1, .task-head h1 { overflow-wrap: anywhere; }
+.page-head > :not(:first-child), .task-head > :not(:first-child) { flex: none; }
+.task-head > .btn-row { flex-wrap: nowrap; justify-content: flex-end; }
+@media (max-width: 720px) {   /* a phone: the buttons may stack, still on the right, and the title is a bit smaller */
+  .page-head > :not(:first-child), .task-head > :not(:first-child) { flex: 0 1 auto; max-width: 50%; }
+  .task-head > .btn-row { flex-wrap: wrap; }
+  .page-head h1, .task-head h1 { font-size: 1.35rem; }
+}
 .page-head p { margin: 4px 0 0; color: var(--muted); max-width: 68ch; }
 .section { margin-top: 30px; }
 .section > h2 { margin-bottom: 10px; }
@@ -727,7 +738,6 @@ table.plain .right { text-align: right; white-space: nowrap; }
 }
 
 /* ---- task page --------------------------------------------------------- */
-.task-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .task-head .title small { color: var(--muted); }
 .task-head .title p { margin: 4px 0 0; }
 .task-head .btn-row { align-items: center; }
