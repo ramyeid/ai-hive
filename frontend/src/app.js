@@ -2082,6 +2082,8 @@ function sentBanner(s, d) {
   const dev = d.dev ? nameOf(d.dev) : "the dev";
   const reviewer = handCandidates(task)[0];
   let title, next = "", button = "";
+  // whoever has the branch now: the dev it went back to, or the reviewer you handed it to
+  const chat = s.verdict === "changes" ? d.dev : s.handed || (d.status === "in-review" ? d.reviewer : "") || d.dev;
   if (s.verdict === "changes") {
     title = `Sent back to ${dev} with ${plural(s.comments, "comment")}`;
     next = s.told ? `${dev} is on it now.` : `It's in ${dev}'s inbox.`;
@@ -2097,7 +2099,7 @@ function sentBanner(s, d) {
   }
   return `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span>
     <div><b>${esc(title)}.</b> <span class="muted">${esc(next)}</span></div>
-    <div class="btn-row">${button}<a class="btn small" href="#/tasks">Back to Board</a></div></section>`;
+    <div class="btn-row">${button}${chat ? `<a class="btn small ${button ? "" : "primary"}" href="#/agents/${esc(chat)}">Go to ${esc(personOf(chat))}'s chat</a>` : ""}<a class="btn small" href="#/tasks">Back to Board</a></div></section>`;
 }
 
 // Up to three lines ending at this one, on the same side, as the comment's code context.
