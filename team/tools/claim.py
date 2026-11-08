@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import agent_id, knowledge_hint, find_task, lock, parse, set_fields, task_files
+from tasklib import agent_id, fetch, freshest_base, knowledge_hint, find_task, lock, merged_into, parse, set_fields, task_files
 import on_task_change
 
 CLAIMABLE = {"dev": {"ready-for-dev", "changes-requested"}, "reviewer": {"ready-for-review"}}
@@ -54,16 +54,30 @@ def busy_with(meta: dict) -> dict | None:
     return None
 
 
-def start_point(project: str, base: str, exists) -> str:
-    """Where the task branch starts: the base as the lead named it, whatever branch that is.
-    If it only exists on the remote (e.g. `develop` never checked out here), use origin's copy."""
-    if exists(base):
-        return base
-    subprocess.run(["git", "-C", project, "fetch", "--quiet", "origin", base], capture_output=True)
-    if exists(f"origin/{base}"):
-        return f"origin/{base}"
-    sys.exit(f"The base branch `{base}` doesn't exist locally or on origin, so the worktree can't be created.\n"
-             "Ask the lead which branch they meant, set `base:` in the task, and claim again.")
+def start_point(project: str, base: str) -> str:
+    """Where a new task branch starts: the base the lead named, as it is on GitHub (origin) when that's newer than
+    the local copy, since the lead merges there. Fetches first; never changes a local branch."""
+    fetch(project, base)
+    start = freshest_base(project, base)
+    if not start:
+        sys.exit(f"The base branch `{base}` doesn't exist locally or on origin, so the worktree can't be created.\n"
+                 "Ask the lead which branch they meant, set `base:` in the task, and claim again.")
+    return start
+
+
+def fresh_branch_if_merged(path: Path, meta: dict) -> dict:
+    """A follow-up whose branch the lead has already merged (even squashed) gets a new branch from the base: building
+    on the old local branch would bring its pre-squash commits back. Returns the task's fields, updated."""
+    base = meta.get("base") or "main"
+    fetch(meta["project"], base)
+    if not merged_into(meta["project"], meta["branch"], base):
+        return meta
+    from new_task import feature_branch   # noqa: E402  (the same naming as a new task)
+    branch = feature_branch(Path(meta["project"]), meta.get("title", meta["id"]))
+    set_fields(path, branch=branch)
+    print(f"{meta['branch']} is already merged into origin/{base}, so {meta['id']} gets a new branch: {branch} "
+          f"(from origin/{base}).")
+    return {**meta, "branch": branch}
 
 
 def ensure_worktree(meta: dict) -> Path:
@@ -80,7 +94,7 @@ def ensure_worktree(meta: dict) -> Path:
     if exists(branch):
         cmd = ["git", "-C", project, "worktree", "add", str(path), branch]
     else:
-        base = start_point(project, meta.get("base") or "main", exists)
+        base = start_point(project, meta.get("base") or "main")
         cmd = ["git", "-C", project, "worktree", "add", str(path), "-b", branch, base]
     done = subprocess.run(cmd, capture_output=True, text=True)
     if done.returncode != 0:
@@ -114,6 +128,8 @@ def main() -> None:
         else:
             fields = {"status": WORKING[role], role: me}
             if role == "dev":
+                if meta.get("follows") and not meta.get("from_commit"):   # a follow-up's first claim
+                    meta = fresh_branch_if_merged(path, meta)
                 fields["worktree"] = str(ensure_worktree(meta))
                 if not meta.get("from_commit"):   # first claim: where this task's commits start
                     fields["from_commit"] = _git(fields["worktree"], "rev-parse", "--short", "HEAD").stdout.strip()
@@ -123,7 +139,8 @@ def main() -> None:
     meta = parse(path)
     if meta.get("worktree"):
         print(f"Work in: {meta['worktree']}  (branch {meta['branch']}, from {meta.get('base')})")
-        if meta.get("follows"):
+        followed = parse(find_task(meta["follows"])) if meta.get("follows") and find_task(meta["follows"]) else {}
+        if followed.get("branch") == meta["branch"]:
             print(f"Follow-up to {meta['follows']}: add commits on top of what's there. No new branch, no rebase, no force-push.")
         print(f"This task's changes: git diff {meta.get('from_commit')}..HEAD")
         print(f"Start every command with: cd {meta['worktree']} &&")

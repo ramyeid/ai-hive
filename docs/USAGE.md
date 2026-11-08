@@ -16,7 +16,12 @@
 A task is **Blocked** when an agent needs your answer: Home and Slack show who is waiting, with a link to the chat.
 
 **Follow-ups.** For more work on the same feature (a change, a fix, a misunderstanding), ask the Tech Lead for a
-follow-up task. The developer adds commits to the same branch instead of starting a new one.
+follow-up task. The developer adds commits to the same branch instead of starting a new one, unless you've already
+merged that branch: then the follow-up gets a new branch from the base.
+
+**Merging.** Push, open your pull request, rebase, squash and merge as you like: the team never pushes, and
+rewriting a finished branch doesn't bother it. New branches start from the base as it is on GitHub (Hive fetches
+`origin`, and never changes your local branches), so they include what you merged there.
 
 **Routing.** New work goes to any agent of the role. Rework goes back to the developer who built it, and a
 re-review to the same reviewer.

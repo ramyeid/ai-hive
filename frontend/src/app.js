@@ -1741,7 +1741,8 @@ async function Reviews() {
     : b.status === "in-dev" || b.status === "changes-requested" ? `${b.dev ? nameOf(b.dev) : "a dev"} ${b.status === "in-dev" ? "is building" : "has your changes"}`
     : stageLabel(b.status).toLowerCase();
   const row = (b) => {
-    const [you, cls] = !b.head ? ["No code yet", "none"] : b.state === "done" && b.your_review === "none" ? ["", ""] : YOUR_REVIEW[b.your_review];
+    // done branches show no review state: after you merge (and maybe delete) them, there's nothing left to review
+    const [you, cls] = b.state === "done" ? ["", ""] : !b.head ? ["No code yet", "none"] : YOUR_REVIEW[b.your_review];
     const ids = b.tasks.map((x) => x.id).join(" ");
     return `<a class="rv-row" href="${reviewHref(b.task)}" data-search="${esc(`${b.title} ${b.branch} ${ids} ${b.tasks.map((x) => x.title).join(" ")}`.toLowerCase())}" data-project="${esc(b.project_name)}">
       <span class="rv-ico ${b.state}" aria-label="${b.state}"></span>

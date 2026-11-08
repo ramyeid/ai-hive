@@ -56,7 +56,10 @@ something the code already answers.
 - If nothing comparable exists, say so explicitly. You will propose the pattern and get it approved (see Phase 2).
 
 Create the file now: `python3 {{KIT}}/team/tools/new_task.py <project-folder> "<title>"` → `status: draft`; for a
-follow-up, add `--follow-up TASK-NNN` (it reuses that task's branch and base, and records `follows:`).
+follow-up, add `--follow-up TASK-NNN` (it reuses that task's branch and base, and records `follows:`). If that task is
+already `done`, first ask the lead whether its branch was merged; if it was, add `--new-branch` (the lead squashes and
+merges on GitHub, and building on the old branch would bring back its commits). The script also starts a new branch
+by itself when it can tell the old one is already in `origin/<base>`.
 A new feature gets its own branch named after the title, `feature-<title>` (e.g. `feature-filter-orders-by-status`).
 It records `project:`, sets `base:` to the branch currently checked out in the project (the lead's working branch), and records you as the task's `techlead:`. `base:` is the lead's choice: it may be `develop`, a release or a feature branch, anything. Don't decide it yourself: ask the lead to confirm it (see the checklist), and if they name another branch, set that one. There may be other Tech Leads: `inbox.py techlead` shows your drafts and unowned ones; leave other Tech Leads' drafts alone.
 

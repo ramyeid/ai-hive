@@ -6,7 +6,9 @@ Usage:
       a new feature: its own branch, feature-filter-orders-by-status
   python3 team/tools/new_task.py <project-folder> "Show the status filter as a dropdown" --follow-up TASK-012
       more work on TASK-012's feature (an addition, a fix, a misunderstanding cleared up):
-      same branch and base, new commits on top
+      same branch and base, new commits on top; its own branch if that branch is already merged
+  python3 team/tools/new_task.py <project-folder> "Show the status filter as a dropdown" --follow-up TASK-012 --new-branch
+      the lead says TASK-012's branch was merged (e.g. squashed with changes Hive can't detect): its own branch
 """
 import argparse
 import datetime as dt
@@ -14,7 +16,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from tasklib import TASKS, TEMPLATES, agent_id, find_task, knowledge_hint, lock, parse, task_files
+from tasklib import TASKS, TEMPLATES, agent_id, fetch, find_task, knowledge_hint, lock, merged_into, parse, task_files
 
 
 def _git(project: Path, *args: str) -> subprocess.CompletedProcess:
@@ -55,6 +57,8 @@ def main() -> None:
     parser.add_argument("title", nargs="+")
     parser.add_argument("--follow-up", metavar="TASK-NNN",
                         help="more work on that task's feature: same branch and base, new commits on top")
+    parser.add_argument("--new-branch", action="store_true",
+                        help="with --follow-up: the earlier branch is already merged, so start a new one from the base")
     args = parser.parse_args()
     project = Path(args.project).expanduser().resolve()
     if not (project / ".git").exists():
@@ -62,6 +66,7 @@ def main() -> None:
     title = " ".join(args.title).strip()
     slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:40]
 
+    merged = ""   # a follow-up's earlier branch, when it's already merged and the follow-up gets its own
     with lock():   # two Tech Leads creating tasks at once must not get the same number
         if args.follow_up:
             original = find_task(args.follow_up)
@@ -71,6 +76,9 @@ def main() -> None:
             if first.get("project") != str(project):
                 parser.exit(1, f"{args.follow_up} is in {first.get('project')}, not {project}.\n")
             branch, base, follows = first["branch"], first.get("base", ""), args.follow_up
+            fetch(str(project), base or "main")
+            if args.new_branch or merged_into(str(project), branch, base or "main"):
+                merged, branch = branch, feature_branch(project, title)   # building on it would bring back its old commits
         else:
             branch, base, follows = feature_branch(project, title), base_branch(project), ""
         nums = [int(m.group(1)) for p in task_files() if (m := re.match(r"TASK-(\d+)", p.name))]
@@ -87,7 +95,10 @@ def main() -> None:
         path = TASKS / f"{tid}-{slug}.md"
         path.write_text(body, encoding="utf-8")
     print(path)
-    if follows:
+    if follows and merged:
+        print(f"Follow-up to {follows}, whose branch {merged} is already merged into origin/{base}: "
+              f"it gets its own branch {branch}, from {base}.")
+    elif follows:
         print(f"Follow-up to {follows}: same branch {branch} (from {base}); the dev adds commits on top.")
     else:
         print(f"Branch: {branch}, from base {base}  (confirm the base with the lead; change `base:` if they want another)")

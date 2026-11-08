@@ -25,7 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import TASKS, find_task, lock, parse, set_fields, task_files
+from tasklib import TASKS, find_task, freshest_base, lock, parse, set_fields, task_files
 
 REVIEWS = TASKS / "reviews"
 SECTION = "## Lead Review"
@@ -119,9 +119,10 @@ def _exists(project: str, ref: str) -> bool:
 
 
 def base_ref(meta: dict) -> str:
-    """The base branch as the lead named it, or origin's copy if it only exists there."""
-    base, project = meta.get("base") or "main", meta.get("project", "")
-    return base if _exists(project, base) or not _exists(project, f"origin/{base}") else f"origin/{base}"
+    """The base to compare against: the one the branch started from (origin's copy when it's newer than the local
+    one, since the lead merges on GitHub), so the diff shows only the branch's own changes."""
+    base = meta.get("base") or "main"
+    return freshest_base(meta.get("project", ""), base) or base
 
 
 def head(meta: dict) -> str:

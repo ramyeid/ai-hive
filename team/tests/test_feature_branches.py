@@ -2,6 +2,7 @@
 
     python3 -m unittest discover team/tests      (from the Hive folder; works on temporary copies)
 """
+import json
 import os
 import re
 import shutil
@@ -105,7 +106,102 @@ class FeatureBranchTest(unittest.TestCase):
 
         self.assertEqual(Path(self._field(task, "worktree")), old_folder)
 
+    def test_a_new_branch_starts_from_main_as_it_is_on_github_when_the_local_main_is_behind(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        github = self._a_github_copy_of(project)
+        self._someone_merges_on_github(github, "merged_on_github.py")
+        local_main = self._head(project)
+        task = self._a_task_ready_for_dev(kit, project, "Filter orders by status")
+
+        folder = Path(self._claim_and_get_folder(kit, task))
+
+        self.assertTrue((folder / "merged_on_github.py").exists())
+        self.assertEqual(self._head(project), local_main)   # the lead's own main is left alone
+
+    def test_a_follow_up_on_a_branch_already_squashed_into_main_on_github_gets_a_new_branch(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        github = self._a_github_copy_of(project)
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+        self._the_lead_squashes_into_main_on_github(github, project, self._field(first, "branch"))
+
+        follow_up = self._new_task(kit, project, "Show the filter as a dropdown", "--follow-up", self._id(first))
+
+        self.assertEqual(self._field(follow_up, "branch"), "feature-show-the-filter-as-a-dropdown")
+        self.assertEqual(self._field(follow_up, "follows"), self._id(first))
+
+    def test_a_follow_up_claimed_after_its_branch_was_squashed_into_main_moves_to_a_new_branch(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        github = self._a_github_copy_of(project)
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+        follow_up = self._a_follow_up_ready_for_dev(kit, project, first, "Show the filter as a dropdown")
+        self._the_lead_squashes_into_main_on_github(github, project, self._field(first, "branch"))
+
+        out = self._claim(kit, follow_up, "dev")
+
+        self.assertEqual(self._field(follow_up, "branch"), "feature-show-the-filter-as-a-dropdown")
+        self.assertIn("already merged", out)
+        self.assertTrue((Path(self._field(follow_up, "worktree")) / "filter.py").exists())
+
+    def test_the_lead_can_say_a_follow_ups_branch_was_merged(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+
+        follow_up = self._new_task(kit, project, "Show the filter as a dropdown", "--follow-up", self._id(first), "--new-branch")
+
+        self.assertEqual(self._field(follow_up, "branch"), "feature-show-the-filter-as-a-dropdown")
+
+    def test_a_follow_up_on_a_branch_not_merged_yet_keeps_the_branch(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        self._a_github_copy_of(project)
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+
+        follow_up = self._new_task(kit, project, "Show the filter as a dropdown", "--follow-up", self._id(first))
+
+        self.assertEqual(self._field(follow_up, "branch"), "feature-filter-orders-by-status")
+
+    def test_the_review_of_a_branch_started_from_githubs_main_shows_only_its_own_changes(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        github = self._a_github_copy_of(project)
+        self._someone_merges_on_github(github, "merged_on_github.py")
+        task = self._a_task_ready_for_dev(kit, project, "Filter orders by status")
+        self._commit(Path(self._claim_and_get_folder(kit, task)), "filter.py")
+
+        files = self._review_files(kit, task)
+
+        self.assertEqual(files, ["filter.py"])
+
     # ---- helpers ----------------------------------------------------------------------
+
+    def _review_files(self, kit: Path, task: Path) -> list[str]:
+        code = (f"import sys, json; sys.path.insert(0, {str(kit / 'team' / 'tools')!r}); import lead_review; "
+                f"print(json.dumps([f['path'] for f in lead_review.diff({self._id(task)!r})['files']]))")
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
+
+    def _a_github_copy_of(self, project: Path) -> Path:
+        """A bare repository standing in for GitHub, set as the project's origin."""
+        github = project.parent / "github.git"
+        self._git(project.parent, "clone", "-q", "--bare", str(project), str(github))
+        self._git(project, "remote", "add", "origin", str(github))
+        self._git(project, "fetch", "-q", "origin")
+        return github
+
+    def _someone_merges_on_github(self, github: Path, file: str) -> None:
+        elsewhere = github.parent / "elsewhere"
+        if not elsewhere.exists():
+            self._git(github.parent, "clone", "-q", str(github), str(elsewhere))
+        self._commit(elsewhere, file)
+        self._git(elsewhere, "push", "-q", "origin", "main")
+
+    def _the_lead_squashes_into_main_on_github(self, github: Path, project: Path, branch: str) -> None:
+        """One commit on GitHub's main with the branch's changes, as a squash merge leaves it."""
+        elsewhere = github.parent / "elsewhere"
+        self._git(github.parent, "clone", "-q", str(github), str(elsewhere))
+        self._git(elsewhere, "fetch", "-q", str(project), f"{branch}:{branch}")
+        self._git(elsewhere, "merge", "-q", "--squash", branch)
+        self._git(elsewhere, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "Filter orders by status (#12)")
+        self._git(elsewhere, "push", "-q", "origin", "main")
 
     def _a_kit(self) -> Path:
         kit = Path(tempfile.mkdtemp()) / "kit"

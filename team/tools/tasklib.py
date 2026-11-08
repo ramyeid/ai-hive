@@ -5,6 +5,7 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -132,3 +133,46 @@ def set_fields(path: Path, **fields: str) -> None:
         else:
             lines.append(f"{key}: {value}")
     path.write_text(f"---\n" + "\n".join(lines) + "\n---" + text[m.end():], encoding="utf-8")
+
+
+# ---- git: where branches start, and whether one is already merged ---------------------------
+# Hive never changes the lead's local branches: it only fetches, so origin/<base> shows what's on GitHub.
+
+def _git(project: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True)
+
+
+def ref_exists(project: str, ref: str) -> bool:
+    return _git(project, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode == 0
+
+
+def fetch(project: str, ref: str = "") -> None:
+    """Update origin/* (never a local branch); offline or no remote: nothing happens."""
+    _git(project, "fetch", "--quiet", "origin", *([ref] if ref else []))
+
+
+def freshest_base(project: str, base: str) -> str:
+    """The base to start from and compare against: origin's copy when it's ahead of (or replaces) the local one,
+    since the lead merges on GitHub and the local branch falls behind; the local one when it has commits origin
+    doesn't (work the lead hasn't pushed) or origin has no such branch."""
+    local, remote = ref_exists(project, base), ref_exists(project, f"origin/{base}")
+    if not remote:
+        return base if local else ""
+    if not local:
+        return f"origin/{base}"
+    origin_in_local = _git(project, "merge-base", "--is-ancestor", f"origin/{base}", base).returncode == 0
+    return base if origin_in_local else f"origin/{base}"
+
+
+def merged_into(project: str, branch: str, base: str) -> bool:
+    """Whether everything on the branch is already on origin's base: merged, rebased or squashed (merging it
+    again would change nothing). False when unsure: no origin copy, or the lead changed those lines while
+    squashing."""
+    target = f"origin/{base}"
+    if not ref_exists(project, branch) or not ref_exists(project, target):
+        return False
+    if _git(project, "merge-base", "--is-ancestor", branch, target).returncode == 0:
+        return True
+    merged = _git(project, "merge-tree", "--write-tree", target, branch)
+    tree = _git(project, "rev-parse", f"{target}^{{tree}}").stdout.strip()
+    return merged.returncode == 0 and merged.stdout.split("\n", 1)[0].strip() == tree
