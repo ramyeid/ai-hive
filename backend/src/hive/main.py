@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import secrets
 import subprocess
+import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -17,13 +19,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, board, chats, costs, editor, ops, store, team, terminal
+from . import access, backup, board, chats, costs, editor, ops, store, team, terminal
 from .agents import ORCHESTRATOR_KEY, TEAM_ACTION, AgentManager
 from .slack import SlackBridge
 from .engines import PROVIDERS
 from .store import ASSETS, FRONTEND
 
-import lead_review  # noqa: E402  (the team's tools are on sys.path via board)
+import land  # noqa: E402  (the team's tools are on sys.path via board)
+import lead_review  # noqa: E402
 
 TOKEN = secrets.token_urlsafe(24)   # new on every start; only the page we serve knows it
 APPROVAL_WAIT = 100   # seconds an Orchestrator request waits for the lead before answering "still waiting"
@@ -103,6 +106,29 @@ class EditorOpen(BaseModel):
     folder: str
 
 
+class LandStep(BaseModel):
+    sha: str
+    action: str
+
+
+class LandCleanUp(BaseModel):
+    steps: list[LandStep]
+    messages: list[str]
+
+
+class LandPullRequest(BaseModel):
+    title: str
+    body: str = ""
+    draft: bool = False
+
+
+class BackupSettings(BaseModel):
+    destination: str | None = None
+    schedule: str | None = None
+    hour: int | None = None
+    keep: int | None = None
+
+
 class ReviewViewed(BaseModel):
     path: str
     viewed: bool = True
@@ -150,9 +176,13 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         watcher = asyncio.create_task(_watch_board(manager))
+        merges = asyncio.create_task(_watch_merges(manager))
+        nightly = asyncio.create_task(backup.watch())
         await slack.start()
         yield
         watcher.cancel()
+        merges.cancel()
+        nightly.cancel()
         await slack.stop()
         await manager.stop_all()
         editor.stop()
@@ -561,6 +591,71 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         manager.bus.publish({"kind": "board"})
         return done
 
+    # ---- landing a finished branch: clean up its history, push, open the pull request -------
+
+    def landing(fn, *args):
+        try:
+            return fn(*args)
+        except KeyError:
+            raise HTTPException(404, "Not found.")
+        except land.LandError as exc:
+            return JSONResponse({"detail": str(exc), "conflicts": exc.conflicts}, status_code=409)
+
+    @app.get("/api/tasks/{task_id}/land")
+    def land_plan(task_id: str):
+        return landing(land.plan, task_id)
+
+    @app.post("/api/tasks/{task_id}/land/cleanup")
+    def land_cleanup(task_id: str, body: LandCleanUp):
+        done = landing(land.clean_up, task_id, [s.model_dump() for s in body.steps], body.messages)
+        manager.bus.publish({"kind": "board"})
+        return done
+
+    @app.post("/api/tasks/{task_id}/land/undo")
+    def land_undo(task_id: str):
+        return landing(land.undo, task_id)
+
+    @app.post("/api/tasks/{task_id}/land/push")
+    def land_push(task_id: str):
+        return landing(land.push, task_id)
+
+    @app.post("/api/tasks/{task_id}/land/pr")
+    def land_pr(task_id: str, body: LandPullRequest):
+        done = landing(land.open_pr, task_id, body.title, body.body, body.draft)
+        manager.bus.publish({"kind": "board"})
+        return done
+
+    # ---- backups (Settings → Backup) ----------------------------------------------------
+
+    @app.get("/api/backup")
+    def backup_status():
+        return backup.status()
+
+    @app.put("/api/backup")
+    def backup_settings(body: BackupSettings):
+        try:
+            backup.save_config(body.model_dump(exclude_none=True))
+        except backup.BackupError as exc:
+            raise HTTPException(400, str(exc))
+        return backup.status()
+
+    @app.post("/api/backup/run")
+    async def backup_now():
+        """Starts a backup and answers at once; the page follows it with GET /api/backup."""
+        if not backup.config()["destination"]:
+            raise HTTPException(409, "Choose where the backups go first.")
+        if backup.status()["running"]:
+            raise HTTPException(409, "A backup is already running.")
+
+        def go():
+            try:
+                backup.run("manual")
+            except backup.BackupError:
+                pass   # recorded in the history, which the page shows
+        threading.Thread(target=go, daemon=True).start()
+        await asyncio.sleep(0.2)
+        return backup.status()
+
     # ---- the Orchestrator's view of the team and its actions (each one approved by the lead) ----
 
     def _ops(fn, *args):
@@ -722,6 +817,20 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
             raise HTTPException(400, str(exc))
 
     return app
+
+
+MERGE_CHECK_SECONDS = 600
+
+
+async def _watch_merges(manager: AgentManager) -> None:
+    """Every 10 minutes: branches whose pull request the lead merged on GitHub lose their worktree and local branch."""
+    while True:
+        await asyncio.sleep(MERGE_CHECK_SECONDS)
+        try:
+            if await asyncio.to_thread(land.check):
+                manager.bus.publish({"kind": "board"})
+        except Exception:   # noqa: BLE001  (a git or gh hiccup must not stop the loop)
+            logging.getLogger("hive.land").exception("Checking for merged pull requests failed.")
 
 
 async def _watch_board(manager: AgentManager) -> None:

@@ -461,6 +461,8 @@ def branches() -> list[dict]:
     """One row per feature branch: its tasks, who has it, where the lead's review stands and how big it is.
     state: open (ready for review or being reviewed), draft (the dev is still on it) or done (every task done).
     needs_you: open, and new since the lead's last review (or never reviewed). Those come first."""
+    import land   # noqa: E402  (land imports this module)
+    landed = {(r.get("project"), r.get("branch")): r for r in land.records()}
     groups: dict[tuple[str, str], list[dict]] = {}
     for meta in map(parse, task_files()):
         if meta.get("branch") and meta.get("project"):
@@ -487,6 +489,8 @@ def branches() -> list[dict]:
             "state": state, "needs_you": needs_you, "your_review": your_review, "head": commit,
             "updated": dt.datetime.fromtimestamp(updated).isoformat(timespec="seconds") if updated else "",
             "size": _size(current, commit) if commit and state != "done" else None,
+            "pr": landed.get((project, branch), {}).get("pr_url", ""),
+            "merged": bool(landed.get((project, branch), {}).get("merged_at")),
         })
     out.sort(key=lambda b: b["updated"], reverse=True)       # newest first,
     return sorted(out, key=lambda b: not b["needs_you"])     # and what needs the lead before the rest

@@ -47,6 +47,26 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
 
 Reviewing is optional and can happen before or after the reviewer, as often as you like.
 
+## Landing a branch
+
+Once every task on a branch is done, **Land this branch** (in its code review) takes it to a pull request:
+
+1. **Clean up the history**, like `git rebase -i main`: for each commit, **Keep**, **Squash into the one above**
+   (its message is added to that commit's), **Fold into the one above** (its message dropped) or **Drop**; move
+   commits up and down, and write each resulting commit's message. **Squash all into one** is the default, with a
+   message drafted from the spec. Applying also rebases the branch on `origin/main` (fetched first; your local
+   `main` is fast-forwarded too when nothing has it checked out).
+   - On a conflict nothing changes: Hive names the files and offers to ask the dev to rebase and resolve them.
+   - The branch as the team made it is kept (`refs/hive/pre-land/<branch>`): **Undo the clean-up** puts it back,
+     and the Coach still sees the commits you made yourself.
+2. **Push**: `git push --force-with-lease`, after you confirm.
+3. **Pull request**: `gh pr create`, with a title and description written from the spec and the reviews (edit
+   them first). Pressing it again later updates them.
+4. **Merge** stays yours, on GitHub. Hive checks every 10 minutes; once it's merged, it removes the branch's
+   worktree and local branch. The Reviews page's **Done** tab shows where each branch stands.
+
+The work happens in the branch's worktree (recreated if the reviewer removed it), never in your project folder.
+
 ## Teaching the team: the Coach
 
 [`PREFERENCES.md`](../team/PREFERENCES.md) says how you want things built and is binding for every agent;

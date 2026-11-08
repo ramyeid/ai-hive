@@ -119,6 +119,36 @@ Set each header once: nginx sends every `proxy_set_header` line, so a second `Co
 To have the console check the name and ask for its password instead, pass `Host $host` and set `CONSOLE_HOSTS`
 and `CONSOLE_PASSWORD`.
 
+## Backups
+
+**Settings → Backup** makes one archive with everything Hive needs to start again as if nothing happened:
+all of `data/` (tasks, reviews, knowledge, the Coach's work, conversations, settings with their API keys and Slack
+tokens), the branches only this machine has (as git bundles), and Claude Code's conversations and sign-in. Send it
+to S3 or a folder, nightly at an hour you choose, keeping the last N.
+
+For S3, the machine needs the `aws` command (on Amazon Linux already) and access to the bucket, best with the
+instance's role. Keep the bucket private (it holds your keys), with server-side encryption on. A policy for the
+role, with your bucket's name:
+
+```json
+{ "Version": "2012-10-17", "Statement": [
+  { "Effect": "Allow", "Action": ["s3:ListBucket"], "Resource": "arn:aws:s3:::my-bucket" },
+  { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::my-bucket/hive/*" } ] }
+```
+
+To restore, on the same machine or a new one, with Hive stopped:
+
+```bash
+git clone <Hive's repository> && cd hive-ai-squad   # on a new machine
+bash scripts/restore.sh s3://my-bucket/hive         # the newest backup there (or a file, or a folder)
+bash scripts/start.sh --background                  # with the same environment as before
+```
+
+It never deletes anything: the `data/` already there is moved to `data.before-restore-<time>`, missing projects are
+cloned from GitHub and their branches and worktrees come back, and a branch that's newer on the machine is left
+alone. Not in the backup: the environment you start Hive with (`CONSOLE_PASSWORD`, `CONSOLE_HOSTS`, …) and
+code-server, which you install again.
+
 ## Connect Slack
 
 1. At [api.slack.com/apps](https://api.slack.com/apps): **Create New App** → **From a manifest**, pick the

@@ -919,3 +919,54 @@ table.plain .right { text-align: right; white-space: nowrap; }
   .rv-you, .rv-size { grid-column: 2; justify-self: start; text-align: left; min-width: 0; }
   .rv-meta { white-space: normal; }
 }
+
+/* ---- Landing a branch ---------------------------------------------------------------------- */
+.land-steps { list-style: none; margin: 0; padding: 0; counter-reset: land; }
+.land-step { counter-increment: land; }
+.land-step > h2::before { content: counter(land) ". "; color: var(--muted); }
+.land-presets { margin: 4px 0 10px; }
+.land-commits { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); }
+.land-commit { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--rule); font-size: 0.88rem; }
+.land-commit:first-child { border-top: 0; }
+.land-commit .moves { display: flex; gap: 2px; }
+.land-commit .moves .icon-btn { width: 26px; height: 26px; color: var(--muted); }
+.land-commit select { flex: none; font-size: 0.82rem; padding: 3px 6px; max-width: 46%; }
+.land-commit .subject { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.land-commit .counts { flex: none; font-size: 0.8rem; }
+.land-commit.act-squash, .land-commit.act-fixup { padding-left: 34px; }
+.land-commit.act-drop .subject, .land-commit.act-drop code { text-decoration: line-through; color: var(--muted); }
+.land-result { margin: 0 0 12px; }
+.land-result label { display: block; margin-bottom: 4px; font-weight: 500; }
+.land-result textarea { width: 100%; font: 0.86rem/1.45 var(--mono); }
+.land-pr input[type=text], .land-pr textarea { width: 100%; }
+.land-pr textarea { font: 0.86rem/1.45 var(--mono); }
+@media (max-width: 720px) {
+  .land-commit { flex-wrap: wrap; }
+  .land-commit select { max-width: none; }
+  .land-commit.act-squash, .land-commit.act-fixup { padding-left: 10px; }
+}
+.land-yours { flex: none; padding: 1px 7px; border-radius: 10px; background: var(--brand-soft); color: var(--ink); font-size: 0.74rem; }
+.notice { margin: 0 0 14px; padding: 10px 14px; border-left: 3px solid var(--brand); border-radius: 6px; background: var(--brand-soft); font-size: 0.9rem; }
+.notice.warn { color: var(--ink); border-left-color: var(--attention); background: color-mix(in srgb, var(--attention) 10%, var(--panel)); }
+.notice p { margin: 0 0 8px; }
+.notice p:last-child { margin: 0; }
+
+/* ---- Settings → Backup ------------------------------------------------------------------------- */
+.settings-body .ok { color: var(--dev); }
+.settings-body .bad { color: var(--attention); }
+.bk-status { margin: 0 0 10px; }
+.bk-status code { word-break: break-all; }
+.bk-top { margin-bottom: 26px; }
+.radios.bk-when { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.form .bk-when label.radio { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.form .bk-when label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
+.bk-when .radio span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bk-when select { padding: 2px 6px; }
+.bk-keep { align-items: center; gap: 8px; }
+.bk-keep input { width: 90px; flex: none; }
+.bk-list { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+pre.code { margin: 0 0 8px; padding: 10px 12px; overflow-x: auto; border: 1px solid var(--rule); border-radius: var(--radius-s); background: var(--sunken); font: 0.84rem var(--mono); }
+.bk-history td { white-space: nowrap; }
+.bk-history td:last-child { white-space: normal; }
+.spinner { display: inline-block; width: 12px; height: 12px; margin-right: 4px; border: 2px solid var(--rule); border-top-color: var(--brand); border-radius: 50%; vertical-align: -1px; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

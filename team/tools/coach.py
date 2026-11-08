@@ -193,6 +193,9 @@ def _github(meta: dict) -> list[str]:
     data = json.loads(viewed) if viewed else {}
     lead_commits = [c for c in data.get("commits", [])
                     if not _is_agent_commit(c.get("messageHeadline", "") + "\n" + c.get("messageBody", ""))]
+    if (before := _local_commits(meta, pre_landing=True)):   # the lead cleaned up the history before pushing
+        lines += before
+        lead_commits = []
     if lead_commits:
         lines.append("\nCommits without an `Agent:` line (the lead's corrections, or agent commits from before the "
                      "`Agent:` line existed; check the message):")
@@ -217,12 +220,16 @@ def _github(meta: dict) -> list[str]:
     return lines
 
 
-def _local_commits(meta: dict) -> list[str]:
-    """No pull request: the branch's commits without an `Agent:` line, compared with its base."""
+def _local_commits(meta: dict, pre_landing: bool = False) -> list[str]:
+    """No pull request: the branch's commits without an `Agent:` line, compared with its base. pre_landing: the
+    branch as the team made it, kept when the lead cleaned up its history to land it (land.py); [] if there's none."""
     project, branch, base = meta.get("project", ""), meta.get("branch", ""), meta.get("base", "")
     if not (project and branch and base and Path(project).exists()):
         return []
-    log = _run(["git", "log", f"{base}..{branch}", "--format=%H%x1f%s%x1f%B%x1e"], project)
+    tip = f"refs/hive/pre-land/{branch}"
+    if pre_landing and _run(["git", "rev-parse", "--verify", "--quiet", tip], project) is None:
+        return []
+    log = _run(["git", "log", f"{base}..{tip if pre_landing else branch}", "--format=%H%x1f%s%x1f%B%x1e"], project)
     lines = []
     for record in (log or "").split("\x1e"):
         if not record.strip():
@@ -232,7 +239,8 @@ def _local_commits(meta: dict) -> list[str]:
             diff = _run(["git", "show", "--format=", "--patch", sha], project) or ""
             lines += [f"- {sha[:9]} {subject}", "```diff", _clip(diff, LIMIT["diff"]), "```"]
     if lines:
-        lines.insert(0, f"Commits on {branch} without an `Agent:` line (no pull request found):")
+        lines.insert(0, f"Commits on {branch} without an `Agent:` line"
+                        + (" (before the lead cleaned up the history to land it):" if pre_landing else " (no pull request found):"))
     return lines
 
 
@@ -293,7 +301,7 @@ def _task_evidence(path: Path, activity: list[dict], all_tasks: list[dict]) -> s
         content = _section(text, name)
         if content:
             parts.append(f"### {title}\n" + _clip(content, LIMIT["section"]))
-    code = _github(meta) or _local_commits(meta)
+    code = _github(meta) or _local_commits(meta, pre_landing=True) or _local_commits(meta)
     parts.append("### The lead's changes to the agents' code\n" + ("\n".join(code) if code else
                  "None found (no pull request, or only `Agent:` commits)."))
     return "\n\n".join(parts)

@@ -42,6 +42,7 @@ const state = {
   kit: "",
   live: {},           // name -> events of the current session
   drafts: {},         // name -> unsent composer text
+  land: {},           // task -> the landing page's plan and the lead's choices (kept across refreshes)
   openTools: new Set(),
   inboxUnread: 0,
   stream: {},         // name -> {thinking, text, tool}: what the agent is writing right now
@@ -64,7 +65,7 @@ async function api(path, { method = "GET", body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : `Request failed (${res.status}).`);
+  if (!res.ok) throw Object.assign(new Error(typeof data.detail === "string" ? data.detail : `Request failed (${res.status}).`), { data });
   return data;
 }
 
@@ -263,6 +264,7 @@ const refreshBadge = refreshCounts;
 function route() {
   const [, page = "", id = "", sub = "", name = ""] = location.hash.replace(/^#/, "").split("?")[0].split("/");
   if (page === "tasks" && id && sub === "review") return { page: "review", id: decodeURIComponent(id), sub };
+  if (page === "tasks" && id && sub === "land") return { page: "land", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
     "": "overview", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
@@ -273,7 +275,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews, land: Land };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -297,6 +299,7 @@ function renderCrumb(r) {
   const parts = {
     overview: ["Home"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
     task: [link("#/tasks", "Board"), r.id], review: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Code review"], reviews: ["Reviews"],
+    land: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Land"],
     "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
     agent: [state.agents[r.id] ? ({ orchestrator: "Orchestrator", coach: "Coach" }[roleOf(r.id)] || "Team") : "Agents", state.agents[r.id] ? nameOf(r.id) : r.id],
     settings: r.id ? [link("#/settings", "Settings"), ...(r.sub ? [link(`#/settings/${r.id}`, (SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]), r.sub[0].toUpperCase() + r.sub.slice(1)] : [(SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]])] : ["Settings"], terminal: ["Terminal"], improvements: ["Coach", "Improvements"], team: ["Coach", "Team history"],
@@ -309,7 +312,7 @@ function renderCrumb(r) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "orchestrator-tab" && r.page === "agent" && r.id === "orchestrator") || (nav === "tasks" && ["task", "task-chat"].includes(r.page)) || (nav === "reviews" && r.page === "review") || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
+    const on = nav === r.page || (nav === "orchestrator-tab" && r.page === "agent" && r.id === "orchestrator") || (nav === "tasks" && ["task", "task-chat"].includes(r.page)) || (nav === "reviews" && ["review", "land"].includes(r.page)) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -1145,21 +1148,22 @@ async function SessionView(r) {
 // ---- settings -----------------------------------------------------------------
 
 const SETTINGS_SECTIONS = [["team", "Team"], ["models", "Models & keys"], ["integrations", "Integrations"], ["access", "Access & links"],
-  ["workspace", "Workspace"], ["appearance", "Appearance"], ["about", "About"]];
+  ["workspace", "Workspace"], ["backup", "Backup"], ["appearance", "Appearance"], ["about", "About"]];
 
 async function Settings(r) {
   await loadState();
   if (r.id === "slack") { location.replace("#/settings/integrations/slack"); return null; }   // old link
   const section = SETTINGS_SECTIONS.some(([k]) => k === r.id) ? r.id : "team";
-  const live = await api("/api/slack").catch(() => ({}));
+  const [live, bk] = await Promise.all([api("/api/slack").catch(() => ({})), api("/api/backup").catch(() => null)]);
+  state.backup = bk;
   const keys = state.settings.providers.filter((p) => p.engine !== "claude" && p.has_key).length;
   const hint = { team: `${agentIds().length} agents`, models: keys ? `${keys} key${keys > 1 ? "s" : ""}` : "",
-    integrations: integrationsDot(live) };
+    integrations: integrationsDot(live), backup: backupHint(bk) };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
   const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
     : section === "integrations" && r.sub === "editor" ? await editorSection()
     : await { team: teamSection, models: modelsSection, integrations: integrationsSection, access: accessSection, workspace: workspaceSection,
-      appearance: appearanceSection, about: aboutSection }[section](live);
+      backup: backupSection, appearance: appearanceSection, about: aboutSection }[section](live);
   return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
 }
 
@@ -1222,6 +1226,66 @@ function workspaceSection() {
     <section class="section"><h2>Where things live</h2><dl class="facts">
       <dt>Hive</dt><dd><code>${esc(state.kit)}</code></dd><dt>The team</dt><dd><code>${esc(state.kit)}/team</code></dd>
       <dt>Your data</dt><dd><code>${esc(state.kit)}/data</code>: tasks, knowledge, the Coach's proposals, conversations and settings</dd></dl></section>`;
+}
+
+// ---- Backup: everything Hive needs to start again, nightly to S3 or a folder ------------------
+
+function backupHint(b) {
+  const last = b?.history?.[0];
+  if (!last) return b?.destination ? "" : "";
+  return last.ok ? `<span title="Last backup ${esc(ago(last.at))}">${esc(ago(last.at))}</span>` : `<span class="bad" title="The last backup failed">●</span>`;
+}
+
+function backupSection() {
+  const b = state.backup || { history: [], destination: "", schedule: "off", hour: 3, keep: 14 };
+  const last = b.history[0];
+  const size = (n) => n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+  const lastLine = b.running ? `<p class="bk-status"><span class="spinner" aria-hidden="true"></span> Backing up now…</p>`
+    : !last ? `<p class="bk-status muted">No backup yet.</p>`
+    : last.ok ? `<p class="bk-status"><span class="ok">●</span> Last backup ${esc(ago(last.at))}: <code>${esc(last.name)}</code>, ${size(last.size)}, to <code>${esc(last.destination)}</code>.</p>`
+    : `<p class="bk-status"><span class="bad">●</span> The last backup, ${esc(ago(last.at))}, failed: ${esc(last.error)}</p>`;
+  const s3 = b.destination.startsWith("s3://");
+  const hours = Array.from({ length: 24 }, (_, h) => `<option value="${h}" ${h === b.hour ? "selected" : ""}>${String(h).padStart(2, "0")}:00</option>`).join("");
+  const rows = b.history.map((h) => `<tr><td>${esc(new Date(h.at).toLocaleString())}</td><td>${h.trigger === "scheduled" ? "Nightly" : "By you"}</td>
+      <td>${h.ok ? `<span class="ok">●</span> ${size(h.size)}${h.pruned?.length ? `, removed ${plural(h.pruned.length, "old one")}` : ""}` : `<span class="bad">●</span> ${esc(h.error || "failed")}`}</td></tr>`).join("");
+  return settingsHead("Backup", "Everything Hive needs to start again as if nothing happened, as one archive.") + `
+    <section class="section bk-top">${lastLine}
+      <div class="btn-row"><button class="btn" data-action="backup-now" ${b.running || !b.destination ? "disabled" : ""}>Back up now</button></div></section>
+    <form class="form" id="backup-form">
+      <label for="bk-destination">Where</label>
+      <input type="text" id="bk-destination" value="${esc(b.destination)}" placeholder="s3://my-bucket/hive  or  /backups/hive" spellcheck="false" autocapitalize="off">
+      <p class="hint">An S3 address uses this machine's own AWS access (its instance role, through the <code>aws</code> command)${b.aws || (b.destination && !s3) ? "" : `: <span class="warn">the <code>aws</code> command isn't installed here</span>`}. Or a folder's full path on this machine.</p>
+      <fieldset><legend>When</legend><div class="radios bk-when">
+        <label class="radio"><input type="radio" name="schedule" value="daily" ${b.schedule === "daily" ? "checked" : ""}> <span>Every night at <select id="bk-hour" aria-label="Hour">${hours}</select> (this machine's time)</span></label>
+        <label class="radio"><input type="radio" name="schedule" value="off" ${b.schedule !== "daily" ? "checked" : ""}> <span>Only when I press <b>Back up now</b></span></label></div></fieldset>
+      <label for="bk-keep">Keep the last</label>
+      <div class="row bk-keep"><input type="number" id="bk-keep" min="1" max="365" value="${b.keep}"> <span>backups; older ones are deleted${s3 ? " from the bucket" : ""}.</span></div>
+      <div class="btn-row"><button class="btn primary">Save</button></div>
+      ${b.next ? `<p class="hint">Next: ${esc(new Date(b.next).toLocaleString())}. A night the machine was off is made up when Hive starts.</p>` : ""}
+    </form>
+    <section class="section"><h2>What's in a backup</h2><ul class="bk-list">
+      <li><b>All of <code>data/</code></b>: tasks, reviews, knowledge, the Coach's work, conversations, and these settings with their API keys and Slack tokens. Keep the bucket private.</li>
+      <li><b>Branches only this machine has</b>: anything not on GitHub yet (agents' work in progress, and the history kept when you landed a branch), as git bundles.</li>
+      <li><b>Claude Code's conversations and sign-in</b>, so agents can resume and you don't sign in again.</li>
+      <li>Not included: VS Code's extensions and caches (they download again), and the environment you start Hive with (<code>CONSOLE_PASSWORD</code>, <code>CONSOLE_HOSTS</code>, …).</li></ul></section>
+    <section class="section"><h2>Restoring</h2>
+      <p>On this machine or a new one, with Hive stopped, from the Hive folder:</p>
+      <pre class="code">bash scripts/restore.sh ${esc(b.destination || "s3://my-bucket/hive")}</pre>
+      <p class="hint">Takes the newest backup there (or name a file). The data already here is moved aside, never deleted; missing projects are cloned from GitHub and their branches and worktrees come back; a branch that's newer here is left alone. Then start Hive as before.</p></section>
+    ${rows ? `<section class="section"><h2>History</h2><div class="table-wrap"><table class="bk-history"><thead><tr><th>When</th><th>Started</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div></section>` : ""}`;
+}
+
+function followBackup() {
+  clearInterval(followBackup.timer);
+  followBackup.timer = setInterval(async () => {
+    const b = await api("/api/backup").catch(() => null);
+    if (!b || b.running) return;
+    clearInterval(followBackup.timer);
+    state.backup = b;
+    const last = b.history[0];
+    if (last) toast(last.ok ? `Backed up: ${last.name}` : `The backup failed: ${last.error}`, !last.ok);
+    if (route().page === "settings") render(true);
+  }, 2000);
 }
 
 function appearanceSection() {
@@ -1757,7 +1821,8 @@ async function CodeReview(r) {
   return `<p><a href="#/tasks/${esc(t.id)}" class="muted">${esc(t.id)}</a></p>
     <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
       <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p>${elsewhereTask}</div>
-      ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
+      <div class="btn-row">${d.status === "done" && d.head ? `<a class="btn ${d.pending.length ? "" : "primary"} land-link" href="#/tasks/${esc(t.id)}/land">Land this branch</a>` : ""}
+        ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div></div>
     ${sent}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
@@ -1802,7 +1867,8 @@ async function Reviews() {
     : stageLabel(b.status).toLowerCase();
   const row = (b) => {
     // done branches show no review state: after you merge (and maybe delete) them, there's nothing left to review
-    const [you, cls] = b.state === "done" ? ["", ""] : !b.head ? ["No code yet", "rv-quiet"] : YOUR_REVIEW[b.your_review];
+    const [you, cls] = b.state === "done" ? (b.merged ? ["Merged", "rv-approved"] : b.pr ? ["Pull request open", "rv-waiting"] : b.head ? ["Not landed yet", "rv-quiet"] : ["", ""])
+      : !b.head ? ["No code yet", "rv-quiet"] : YOUR_REVIEW[b.your_review];
     const ids = b.tasks.map((x) => x.id).join(" ");
     return `<a class="rv-row" href="${reviewHref(b.task)}" data-search="${esc(`${b.title} ${b.branch} ${ids} ${b.tasks.map((x) => x.title).join(" ")}`.toLowerCase())}" data-project="${esc(b.project_name)}">
       <span class="rv-ico ${b.state}" aria-label="${b.state}"></span>
@@ -1818,7 +1884,114 @@ async function Reviews() {
     <div class="rv-filters"><input type="search" id="rv-search" placeholder="Search by branch, title or task ID…" aria-label="Search reviews" autocomplete="off">
       ${projects.length > 1 ? `<select id="rv-project" aria-label="Project"><option value="">All projects</option>${projects.map((p) => `<option>${esc(p)}</option>`).join("")}</select>` : ""}</div>
     ${rows.length ? `<div class="rv-list">${rows.map(row).join("")}</div><p class="empty rv-none" hidden>No branch matches.</p>` : `<div class="empty">${empty}</div>`}
-    ${tab === "done" ? `<p class="hint">Done means every task on the branch is done. Merging stays yours, outside Hive.</p>` : ""}`;
+    ${tab === "done" ? `<p class="hint">Done means every task on the branch is done. Open one and press <b>Land this branch</b> to clean up its history, push it and open the pull request; merging stays yours, on GitHub.</p>` : ""}`;
+}
+
+// ---- Landing a finished branch: clean up its history (like git rebase -i), push it, open the pull request ----
+
+const LAND_ACTIONS = [["pick", "Keep"], ["squash", "Squash into the one above"], ["fixup", "Fold into the one above, drop its message"], ["drop", "Drop"]];
+const withoutAgentLine = (m) => m.split("\n").filter((l) => !/^Agent:\s*\S+/.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+async function loadLand(id) {
+  const plan = await api(`/api/tasks/${encodeURIComponent(id)}/land`);
+  const old = state.land[id];
+  const same = old && old.plan.commits.map((c) => c.sha).sort().join() === plan.commits.map((c) => c.sha).sort().join();
+  state.land[id] = same ? { ...old, plan } : {
+    plan, edited: {}, error: "", conflicts: [],
+    steps: plan.commits.map((c, i) => ({ sha: c.sha, action: i === 0 ? "pick" : "fixup" })),   // one commit, by default
+    title: old?.title ?? plan.pr_title, body: old?.body ?? plan.pr_body, draft: old?.draft ?? false,
+  };
+  return state.land[id];
+}
+
+// The commits the lead's choices make: each pick starts one, squash and fixup join the one before.
+function landGroups(L) {
+  const bySha = Object.fromEntries(L.plan.commits.map((c) => [c.sha, c]));
+  const groups = [];
+  for (const s of L.steps) {
+    if (s.action === "drop") continue;
+    if (s.action === "pick" || !groups.length) groups.push({ key: s.sha, commits: [], invalid: s.action !== "pick" });
+    groups[groups.length - 1].commits.push({ ...bySha[s.sha], action: s.action });
+  }
+  return groups;
+}
+
+function landMessage(L, g) {
+  if (g.key in L.edited) return L.edited[g.key];
+  if (g.commits.length === L.plan.commits.length && g.commits.length > 1) return L.plan.draft_message;
+  return g.commits.filter((c, i) => i === 0 || c.action === "squash").map((c) => withoutAgentLine(c.message)).join("\n\n");
+}
+
+async function Land(r, quiet) {
+  const L = quiet && state.land[r.id] ? state.land[r.id] : await loadLand(r.id);
+  const p = L.plan;
+  const groups = landGroups(L);
+  const blocked = p.not_ready || groups.some((g) => g.invalid);
+  const short = (sha) => sha.slice(0, 7);
+  const rows = L.steps.map((s, i) => {
+    const c = p.commits.find((x) => x.sha === s.sha);
+    return `<li class="land-commit act-${s.action}">
+      <span class="moves"><button class="icon-btn" data-action="land-move" data-i="${i}" data-dir="-1" aria-label="Move up" ${i === 0 ? "disabled" : ""}>↑</button><button class="icon-btn" data-action="land-move" data-i="${i}" data-dir="1" aria-label="Move down" ${i === L.steps.length - 1 ? "disabled" : ""}>↓</button></span>
+      <select data-land-step="${i}" aria-label="What to do with ${esc(c.short)}">${LAND_ACTIONS.map(([v, label]) => `<option value="${v}" ${v === s.action ? "selected" : ""}>${label}</option>`).join("")}</select>
+      <code>${esc(c.short)}</code><span class="subject" title="${esc(c.message)}">${esc(c.subject)}</span>
+      ${c.agent || p.can_undo ? "" : `<span class="land-yours" title="No Agent: line, so not made by an agent">yours</span>`}
+      <span class="counts"><span class="plus">+${c.additions}</span> <span class="minus">−${c.deletions}</span></span></li>`;
+  }).join("");
+  const results = groups.map((g, i) => `<div class="land-result">
+      <label for="land-msg-${i}">Commit ${i + 1} <span class="muted">from ${g.commits.map((c) => `<code>${esc(c.short)}</code>`).join(" ")}</span></label>
+      ${g.invalid ? `<p class="warn">The first commit you keep has nothing above it to join: set it to <b>Keep</b>.</p>` : ""}
+      <textarea id="land-msg-${i}" data-land-msg="${esc(g.key)}" rows="${Math.min(10, Math.max(3, landMessage(L, g).split("\n").length + 1))}">${esc(landMessage(L, g))}</textarea></div>`).join("");
+  const pr = p.record.pr_url;
+  const error = L.error ? `<div class="notice warn" role="alert"><p>${esc(L.error)}</p>
+      ${L.conflicts.length && p.dev ? `<button class="btn small" data-action="land-ask-dev">Ask ${esc(personOf(p.dev))} to rebase it and resolve them</button>` : ""}</div>` : "";
+  return `<p><a href="${reviewHref(r.id)}" class="muted">← Back to the review</a></p>
+    <div class="page-head"><div><h1>Land: ${esc(p.tasks[0]?.title || p.branch)}</h1>
+      <p><code>${esc(p.branch)}</code> onto <code>${esc(p.onto)}</code> · ${esc(p.tasks.map((x) => x.id).join(", "))}</p></div></div>
+    ${p.not_ready ? `<p class="notice">${esc(p.not_ready)}</p>` : ""}
+    ${p.record.merged_at ? `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span><div><b>Merged on GitHub.</b> <span class="muted">Hive removed ${esc((p.record.removed || []).join(" and ") || "nothing")}.</span></div></section>` : ""}
+    ${error}
+    ${p.record.merged_at ? `<p>Pull request: <a href="${esc(pr)}" target="_blank" rel="noopener">${esc(pr)}</a></p>` : `<ol class="land-steps">
+    <li class="section land-step"><h2>Clean up the history</h2>
+      <p class="muted">Like <code>git rebase -i ${esc(p.onto)}</code>: choose, commit by commit, what to keep, squash or drop, and in which order. ${p.behind ? `<b>${esc(p.onto)} has ${plural(p.behind, "new commit")}</b>: applying also puts the branch on top of them.` : `The branch is already on top of ${esc(p.onto)}.`}</p>
+      <div class="btn-row land-presets"><button class="btn small" data-action="land-preset" data-preset="one">Squash all into one</button><button class="btn small" data-action="land-preset" data-preset="keep">Keep every commit</button></div>
+      <ol class="land-commits">${rows || `<li class="muted">No commits on the branch.</li>`}</ol>
+      <h3>Result: ${plural(groups.length, "commit")} on ${esc(p.onto)}</h3>
+      ${results}
+      <div class="btn-row"><button class="btn primary" data-action="land-apply" ${blocked || !rows ? "disabled" : ""}>Apply${p.behind ? ` and rebase on ${esc(p.onto)}` : ""}</button>
+        ${p.can_undo ? `<button class="btn" data-action="land-undo" title="Put back the commits as the team made them">Undo the clean-up</button>` : ""}</div>
+      <p class="hint">Nothing is lost: the branch as the team made it is kept${p.can_undo ? "" : " when you apply"}, for <b>Undo</b> and for the Coach. A conflict with ${esc(p.onto)} changes nothing.</p></li>
+    <li class="section land-step"><h2>Push</h2>
+      <p>${p.pushed ? "GitHub has this exact version of the branch." : p.on_origin ? "GitHub has an older version of the branch: pushing replaces it (safely: <code>--force-with-lease</code> stops if someone else pushed to it)." : "The branch isn't on GitHub yet."}</p>
+      <div class="btn-row"><button class="btn ${p.pushed ? "" : "primary"}" data-action="land-push" ${p.pushed || p.not_ready ? "disabled" : ""}>Push to origin</button></div></li>
+    <li class="section land-step"><h2>Pull request</h2>
+      ${pr ? `<p>${p.record.pr_state === "closed" ? "Closed without merging: " : p.record.merged_at ? "Merged: " : "Open: "}<a href="${esc(pr)}" target="_blank" rel="noopener">${esc(pr)}</a></p>` : ""}
+      ${p.gh ? `<form class="form land-pr" id="land-pr">
+        <label for="land-title">Title</label><input type="text" id="land-title" value="${esc(L.title)}">
+        <label for="land-body">Description <span class="muted">(written from the spec and the reviews)</span></label><textarea id="land-body" rows="10">${esc(L.body)}</textarea>
+        ${pr ? "" : `<label class="check"><input type="checkbox" id="land-draft" ${L.draft ? "checked" : ""}> Open it as a draft</label>`}
+        <div class="btn-row"><button class="btn ${p.pushed && !pr ? "primary" : ""}" ${p.on_origin && !p.record.merged_at ? "" : "disabled"}>${pr ? "Update the title and description" : "Open the pull request"}</button></div>
+        ${p.on_origin ? "" : `<p class="hint">Push first.</p>`}</form>`
+        : `<p class="muted">The GitHub CLI (<code>gh</code>) isn't installed on the Hive machine: open the pull request on GitHub.</p>`}</li>
+    <li class="section land-step"><h2>Merge</h2>
+      <p class="muted">Yours, on GitHub. Hive checks every 10 minutes; once it's merged, it removes the branch's worktree and local branch.</p></li>
+    </ol>`}`;
+}
+
+async function landAct(fn) {
+  const id = route().id, L = state.land[id];
+  L.error = "";
+  L.conflicts = [];
+  try {
+    const out = await fn(id, L);
+    await loadLand(id);
+    return out ?? true;
+  } catch (err) {
+    L.error = err.message;
+    L.conflicts = err.data?.conflicts || [];
+    return null;
+  } finally {
+    render(true);
+  }
 }
 
 // Search and project filter on the Reviews page, in the page (no reload).
@@ -1938,6 +2111,47 @@ const reviewActions = {
     el.innerHTML = eyeIcon(on);
   },
   "open-folder": () => reviewOpen(),
+  "land-move": (el) => {
+    const L = state.land[route().id], i = +el.dataset.i, j = i + +el.dataset.dir;
+    if (j < 0 || j >= L.steps.length) return;
+    [L.steps[i], L.steps[j]] = [L.steps[j], L.steps[i]];
+    render(true);
+  },
+  "land-preset": (el) => {
+    const L = state.land[route().id];
+    L.steps = L.plan.commits.map((c, i) => ({ sha: c.sha, action: el.dataset.preset === "keep" || i === 0 ? "pick" : "fixup" }));
+    L.edited = {};
+    render(true);
+  },
+  "land-apply": () => {
+    const L = state.land[route().id];
+    const messages = landGroups(L).map((g) => landMessage(L, g));
+    landAct((id) => api(`/api/tasks/${encodeURIComponent(id)}/land/cleanup`, { method: "POST", body: { steps: L.steps, messages } }))
+      .then((out) => { if (out) { state.land[route().id].edited = {}; toast(`Done: ${plural(out.commits, "commit")} on ${out.onto}.`); } });
+  },
+  "land-undo": () => {
+    if (!confirm("Put the branch back as the team made it? Your clean-up is undone (you can do it again).")) return;
+    landAct((id) => api(`/api/tasks/${encodeURIComponent(id)}/land/undo`, { method: "POST" })).then((out) => out && toast("The branch is back as the team made it."));
+  },
+  "land-push": () => {
+    const p = state.land[route().id].plan;
+    if (!confirm(`Push ${p.branch} to origin${p.on_origin ? ", replacing the version there" : ""}?`)) return;
+    landAct((id) => api(`/api/tasks/${encodeURIComponent(id)}/land/push`, { method: "POST" })).then((out) => out && toast("Pushed."));
+  },
+  "land-ask-dev": () => {
+    const L = state.land[route().id], p = L.plan;
+    const text = `Please rebase ${p.branch} on ${p.onto} in ${p.folder} and resolve the conflicts in ${L.conflicts.join(", ")}. `
+      + "Keep every commit as it is (no squashing: I'll clean up the history when I land it), run the tests, then tell me it's done.";
+    act(() => api(`/api/agents/${p.dev}/message`, { method: "POST", body: { text } }))
+      .then((ok) => ok && toast(`Sent to ${personOf(p.dev)}. Land again once it's done.`));
+  },
+  "backup-now": async () => {
+    const b = await act(() => api("/api/backup/run", { method: "POST" }));
+    if (!b) return;
+    state.backup = b;
+    render(true);
+    followBackup();
+  },
   "chat-side": () => {
     try { localStorage.setItem("chatSide", chatSideShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     renderChatSide(route().id);
@@ -2545,7 +2759,38 @@ document.addEventListener("input", (e) => {
   if (e.target.id === "review-note") state.reviewNote[route().id] = e.target.value;
 });
 
+// The landing page keeps what you type and choose in state, so a refresh of the page doesn't lose it.
+document.addEventListener("input", (e) => {
+  const L = route().page === "land" && state.land[route().id];
+  if (!L) return;
+  if (e.target.dataset.landMsg) L.edited[e.target.dataset.landMsg] = e.target.value;
+  else if (e.target.id === "land-title") L.title = e.target.value;
+  else if (e.target.id === "land-body") L.body = e.target.value;
+  else if (e.target.id === "land-draft") L.draft = e.target.checked;
+});
+document.addEventListener("submit", async (e) => {
+  if (e.target.id === "backup-form") {
+    e.preventDefault();
+    const f = e.target;
+    const body = { destination: f.querySelector("#bk-destination").value, schedule: f.querySelector("input[name=schedule]:checked").value,
+      hour: +f.querySelector("#bk-hour").value, keep: +f.querySelector("#bk-keep").value };
+    const b = await act(() => api("/api/backup", { method: "PUT", body }));
+    if (b) { state.backup = b; toast("Backup settings saved."); render(true); }
+    return;
+  }
+  if (e.target.id !== "land-pr") return;
+  e.preventDefault();
+  const L = state.land[route().id];
+  landAct((id) => api(`/api/tasks/${encodeURIComponent(id)}/land/pr`, { method: "POST", body: { title: L.title, body: L.body, draft: L.draft } }))
+    .then((out) => out && toast(`Pull request ${out.number ? `#${out.number} ` : ""}ready: ${out.url}`));
+});
+
 document.addEventListener("change", async (e) => {
+  if (e.target.dataset.landStep !== undefined && state.land[route().id]) {
+    state.land[route().id].steps[+e.target.dataset.landStep].action = e.target.value;
+    render(true);
+    return;
+  }
   if (e.target.matches("[data-theme-pick]")) {
     const v = e.target.value;
     try { localStorage.setItem("theme", v); } catch { /* this page only */ }
