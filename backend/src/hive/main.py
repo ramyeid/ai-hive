@@ -184,6 +184,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         watcher = asyncio.create_task(_watch_board(manager))
         merges = asyncio.create_task(_watch_merges(manager))
         nightly = asyncio.create_task(backup.watch())
+        warm = asyncio.create_task(asyncio.to_thread(costs.summary))   # noqa: F841  read the conversations once now, not on the first page
         await slack.start()
         yield
         watcher.cancel()
@@ -526,18 +527,19 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         data["sessions"] = sessions[:8]
         return data
 
+    # costs read the agents' conversations: plain `def`, so it runs beside the event loop, never blocking it
     @app.get("/api/tasks")
-    async def tasks():
+    def tasks():
         spent = costs.summary()["tasks"]
         empty = {"cost_usd": 0, "unpriced_tokens": 0, "tokens": 0, "rows": []}
         return [{**t, "cost": spent.get(t["id"], empty)} for t in board.list_tasks()]
 
     @app.get("/api/costs")
-    async def cost_summary():
+    def cost_summary():
         return costs.summary()
 
     @app.put("/api/prices")
-    async def price(body: PriceBody):
+    def price(body: PriceBody):
         if body.input is None and body.output is None:
             store.save_settings({"prices": {body.model: None}})
         elif body.input is None or body.output is None or body.input < 0 or body.output < 0:
@@ -547,7 +549,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         return costs.summary()
 
     @app.get("/api/tasks/{task_id}")
-    async def task(task_id: str):
+    def task(task_id: str):
         found = board.get_task(task_id)
         if not found:
             raise HTTPException(404, "Task not found.")

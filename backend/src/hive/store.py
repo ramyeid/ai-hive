@@ -269,6 +269,15 @@ def append_event(session_id: str, event: dict) -> None:
     _update_index(session_id, changes)
 
 
+def events_stamp(session_id: str) -> tuple:
+    """Changes whenever the conversation does (for caches built on its events)."""
+    try:
+        st = (SESSIONS / f"{session_id}.jsonl").stat()
+        return (st.st_ino, st.st_size, st.st_mtime_ns)
+    except FileNotFoundError:
+        return ()
+
+
 def read_events(session_id: str) -> list[dict]:
     path = SESSIONS / f"{session_id}.jsonl"
     if not path.exists():

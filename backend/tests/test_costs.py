@@ -95,6 +95,21 @@ def main():
     check({m["model"]: m["priced"] for m in s["models"]} ==
           {"claude-opus-5-5": True, "deepseek-v4-pro": True, "kimi-k2-thinking": False},
           "Settings can list which models still need a price")
+
+    # Costs are cached (most pages show them); a new turn, or a new price, still shows at once.
+    check(costs.summary() is s, "asking again without a change reuses the last result")
+    t7_before = s["tasks"]["TASK-007"]["cost_usd"]
+    techlead = next(x["id"] for x in store.list_sessions() if x["agent"] == "techlead")
+    store.append_event(techlead, {"ts": store.now(), "agent": "techlead", "session": techlead, "kind": "user",
+                                  "text": "One more thing on TASK-007"})
+    store.append_event(techlead, {"ts": store.now(), "agent": "techlead", "session": techlead, "kind": "tool",
+                                  "name": "Edit", "input": {"file_path": f"{kit}/data/tasks/TASK-007-x.md"}})
+    store.append_event(techlead, {"ts": store.now(), "agent": "techlead", "session": techlead, "kind": "result",
+                                  "cost_usd": 0.5, "tokens_in": 1, "tokens_out": 1, "turns": 1, "duration_ms": 1})
+    after = costs.summary()["tasks"]["TASK-007"]["cost_usd"]
+    check(abs(after - (t7_before + 0.5)) < 1e-9, f"a new turn in a conversation is counted at once: {after}")
+    store.save_settings({"prices": {"kimi-k2-thinking": {"input": 1, "output": 1}}})
+    check(costs.summary()["tasks"]["TASK-008"]["unpriced_tokens"] == 0, "a new price is used at once")
     print(f"\nAll {checks} checks passed.")
 
 

@@ -18,6 +18,7 @@ Settings (US$ per 1M input / output tokens).
 """
 from __future__ import annotations
 
+import json
 import re
 from collections import defaultdict
 
@@ -65,8 +66,16 @@ def attributed_turns(events: list[dict], model: str = "") -> list[dict]:
     return turns
 
 
+_rows: dict[str, tuple[tuple, list[dict]]] = {}   # session -> (what it was worked out from, its rows)
+
+
 def session_turns(session_id: str, meta: dict) -> list[dict]:
-    """One row per finished turn: who, which model, tokens, cost and the tasks it's charged to."""
+    """One row per finished turn: who, which model, tokens, cost and the tasks it's charged to. A conversation is
+    read again only when it changed: most pages show costs, and conversations get long."""
+    key = (store.events_stamp(session_id), meta.get("agent"), meta.get("provider"), meta.get("model"))
+    cached = _rows.get(session_id)
+    if cached and cached[0] == key:
+        return cached[1]
     rows = []
     for turn in attributed_turns(store.read_events(session_id), meta.get("model") or ""):
         result = turn["result"]
@@ -76,6 +85,7 @@ def session_turns(session_id: str, meta: dict) -> list[dict]:
                      "provider": meta.get("provider", "claude"), "model": turn["model"] or "unknown",
                      "tokens_in": result.get("tokens_in") or 0, "tokens_out": result.get("tokens_out") or 0,
                      "cost_usd": result.get("cost_usd"), "tasks": turn["tasks"], "ts": result["ts"]})
+    _rows[session_id] = (key, rows)
     return rows
 
 
@@ -88,13 +98,28 @@ def _priced(row: dict, prices: dict) -> float | None:
     return row["tokens_in"] / 1e6 * price.get("input", 0) + row["tokens_out"] / 1e6 * price.get("output", 0)
 
 
+_summary: tuple[tuple, dict] | None = None
+
+
 def summary() -> dict:
-    """{"tasks": {TASK-ID: breakdown}, "unlinked": breakdown, "models": [models seen]}."""
+    """{"tasks": {TASK-ID: breakdown}, "unlinked": breakdown, "models": [models seen]}. Worked out again only when a
+    conversation or a price changed (most pages ask for it)."""
+    global _summary
     prices = store.load_settings().get("prices", {})
+    sessions = store.list_sessions()
+    key = (json.dumps(prices, sort_keys=True),
+           tuple((s["id"], s.get("agent"), s.get("provider"), s.get("model"), store.events_stamp(s["id"])) for s in sessions))
+    if _summary and _summary[0] == key:
+        return _summary[1]
+    _summary = (key, _summary_of(sessions, prices))
+    return _summary[1]
+
+
+def _summary_of(sessions: list[dict], prices: dict) -> dict:
     buckets: dict[str, dict] = defaultdict(lambda: defaultdict(lambda: {
         "turns": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "unpriced_tokens": 0}))
     models: dict[str, str] = {}
-    for session in store.list_sessions():
+    for session in sessions:
         for row in session_turns(session["id"], session):
             models[row["model"]] = row["provider"]
             cost = _priced(row, prices)
