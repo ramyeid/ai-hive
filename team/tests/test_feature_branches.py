@@ -170,7 +170,33 @@ class FeatureBranchTest(unittest.TestCase):
 
         self.assertEqual(files, ["filter.py"])
 
+    def test_a_squashed_branch_is_recognised_as_merged_even_with_git_older_than_2_38(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        github = self._a_github_copy_of(project)
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+        self._the_lead_squashes_into_main_on_github(github, project, self._field(first, "branch"))
+        self._git(project, "fetch", "-q", "origin")
+
+        merged = self._tasklib(kit, f"_changes_already_in({str(project)!r}, {self._field(first, 'branch')!r}, 'origin/main')")
+
+        self.assertTrue(merged)
+
+    def test_with_git_older_than_2_38_an_unmerged_branch_is_not_taken_for_merged(self):
+        kit, project = self._a_kit(), self._a_project("shop")
+        self._a_github_copy_of(project)
+        first = self._a_finished_task_with_a_commit(kit, project, "Filter orders by status")
+
+        merged = self._tasklib(kit, f"_changes_already_in({str(project)!r}, {self._field(first, 'branch')!r}, 'origin/main')")
+
+        self.assertFalse(merged)
+
     # ---- helpers ----------------------------------------------------------------------
+
+    def _tasklib(self, kit: Path, expression: str):
+        code = f"import sys, json; sys.path.insert(0, {str(kit / 'team' / 'tools')!r}); import tasklib; print(json.dumps(tasklib.{expression}))"
+        done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return json.loads(done.stdout)
 
     def _review_files(self, kit: Path, task: Path) -> list[str]:
         code = (f"import sys, json; sys.path.insert(0, {str(kit / 'team' / 'tools')!r}); import lead_review; "

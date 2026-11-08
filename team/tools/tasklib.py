@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -174,5 +175,20 @@ def merged_into(project: str, branch: str, base: str) -> bool:
     if _git(project, "merge-base", "--is-ancestor", branch, target).returncode == 0:
         return True
     merged = _git(project, "merge-tree", "--write-tree", target, branch)
-    tree = _git(project, "rev-parse", f"{target}^{{tree}}").stdout.strip()
-    return merged.returncode == 0 and merged.stdout.split("\n", 1)[0].strip() == tree
+    if merged.returncode in (0, 1):   # git 2.38+: the tree a merge would make (1 means conflicts)
+        tree = _git(project, "rev-parse", f"{target}^{{tree}}").stdout.strip()
+        return merged.returncode == 0 and merged.stdout.split("\n", 1)[0].strip() == tree
+    return _changes_already_in(project, branch, target)
+
+
+def _changes_already_in(project: str, branch: str, target: str) -> bool:
+    """For older git: the branch's whole change can be taken back out of the target cleanly, so it's in there."""
+    fork = _git(project, "merge-base", target, branch).stdout.strip()
+    patch = _git(project, "diff", "--binary", fork, branch).stdout
+    if not fork or not patch:
+        return bool(fork)
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        run = lambda *args, **kw: subprocess.run(["git", "-C", str(project), *args], capture_output=True, text=True, env=env, **kw)
+        return (run("read-tree", target).returncode == 0
+                and run("apply", "--cached", "--check", "--reverse", "-", input=patch).returncode == 0)
