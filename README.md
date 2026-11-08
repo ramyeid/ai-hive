@@ -51,7 +51,7 @@ next. Nothing is pushed to your remote.
 - **Your preferences, enforced**: [`PREFERENCES.md`](team/PREFERENCES.md) (code style, reuse, simplicity, test structure) is binding for every agent.
 
 **Your review**
-- **Pull-request view** of any task's diff: the whole feature, this task's commits, or what changed since your last review; unified or side by side.
+- **Pull-request view** of a feature branch: the whole branch, or what changed since your last review (follow-up tasks included); unified or side by side, with a file tree.
 - **Line and general comments**: request changes and the task goes back to the developer who built it, who answers every comment.
 - **Team history**: every change to the team's instructions is a commit you can diff, inspect or undo.
 

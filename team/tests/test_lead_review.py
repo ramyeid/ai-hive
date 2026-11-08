@@ -97,7 +97,56 @@ class LeadReviewTest(unittest.TestCase):
 
         self.assertEqual([f["path"] for f in diff["files"]], ["total.py"])
 
+    def test_a_follow_up_on_the_same_branch_shows_every_earlier_round_of_the_branch(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        follow_up = self._a_follow_up_in_dev(kit, project, first)
+
+        diff = self._call(kit, f"diff('{self._id(follow_up)}')")
+
+        self.assertEqual([(r["task"], r["comments"][0]["body"]) for r in diff["rounds"]], [(self._id(first), "Name it total.")])
+        self.assertEqual(diff["task"], self._id(follow_up))
+
+    def test_since_your_last_review_counts_reviews_made_on_an_earlier_task_of_the_branch(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        follow_up = self._a_follow_up_in_dev(kit, project, first)
+        self._the_dev_commits(follow_up, "total.py")
+
+        diff = self._call(kit, f"diff('{self._id(follow_up)}', 'since')")
+
+        self.assertEqual([f["path"] for f in diff["files"]], ["total.py"])
+
+    def test_a_review_opened_from_an_earlier_task_goes_to_the_branchs_current_task(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        follow_up = self._a_follow_up_in_dev(kit, project, first)
+
+        self._a_comment(kit, first, "Also handle zero.")
+
+        drafts = self._call(kit, f"diff('{self._id(follow_up)}')")["pending"]
+        self.assertEqual([c["body"] for c in drafts], ["Also handle zero."])
+
+    def test_drafts_left_on_an_earlier_task_of_the_branch_move_to_the_current_one(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        self._a_comment(kit, first, "Draft before the follow-up.")
+        follow_up = self._a_follow_up_in_dev(kit, project, first)
+
+        drafts = self._call(kit, f"diff('{self._id(follow_up)}')")["pending"]
+
+        self.assertEqual([c["body"] for c in drafts], ["Draft before the follow-up."])
+
     # ---- helpers ----
+
+    def _a_follow_up_in_dev(self, kit: Path, project: Path, earlier: Path) -> Path:
+        """The earlier task done, and a follow-up on its branch claimed by the same dev."""
+        self._set_field(earlier, "status", "done")
+        task = Path(self._script(kit, "new_task.py", str(project), "Handle zero", agent="techlead").splitlines()[0])
+        self._set_field(task, "branch", self._field(earlier, "branch"))
+        self._set_field(task, "status", "ready-for-dev")
+        self._script(kit, "claim.py", self._id(task), "dev", agent="dev-2")
+        return task
 
     def _a_kit(self) -> Path:
         kit = Path(tempfile.mkdtemp()) / "kit"

@@ -1344,8 +1344,11 @@ async function saveConfig(name, provider, model) {
 
 // ---- your code review (a pull request inside the console) ------------------------------------
 
-const REVIEW_VIEWS = [["feature", "Whole feature"], ["task", "This task's commits"], ["since", "Since your last review"]];
-const reviewView = () => new URLSearchParams(location.hash.split("?")[1] || "").get("view") || "feature";
+const REVIEW_VIEWS = [["feature", "Whole branch"], ["since", "Since your last review"]];
+const reviewView = () => {
+  const view = new URLSearchParams(location.hash.split("?")[1] || "").get("view");
+  return ["since", "earlier"].includes(view) ? view : "feature";
+};
 const reviewHref = (id, view) => `#/tasks/${encodeURIComponent(id)}/review${view && view !== "feature" ? `?view=${view}` : ""}`;
 const lineKey = (file, side, line) => `${file}\u0000${side}\u0000${line}`;
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -1585,7 +1588,7 @@ function roundCard(r, dev) {
       ${c.code ? `<pre class="snippet">${esc(c.code)}</pre>` : ""}<div class="prose">${md(c.body)}</div>
       ${asked ? `<div class="reply ${c.reply ? "" : "none"}"><span class="pill dev">${esc(dev ? nameOf(dev) : "Dev")}</span> ${c.reply ? esc(c.reply) : "No reply yet."}</div>` : ""}</li>`).join("");
   return `<article class="review-round ${asked ? "changes" : "approved"}">
-    <header><strong>Round ${r.n}</strong> <span class="pill ${asked ? "lead" : "dev"}">${asked ? "Changes requested" : "Approved"}</span>
+    <header><strong>Round ${r.shown || r.n}</strong>${r.onTask ? ` <a class="muted" href="#/tasks/${esc(r.onTask)}">${esc(r.onTask)}</a>` : ""} <span class="pill ${asked ? "lead" : "dev"}">${asked ? "Changes requested" : "Approved"}</span>
       <span class="muted">${esc(ago(r.at))}, at <code>${esc(r.commit.slice(0, 7))}</code>, ${esc(r.describes.replace(/`/g, ""))}</span></header>
     ${r.summary ? `<div class="prose">${md(r.summary)}</div>` : ""}
     ${items ? `<ol class="round-comments">${items}</ol>` : ""}</article>`;
@@ -1619,23 +1622,28 @@ async function CodeReview(r) {
   }).join("") + (d.rounds.length
     ? `<a class="tab" href="${reviewHref(t.id, "earlier")}" ${earlier ? 'aria-current="page"' : ""}>Earlier reviews <span class="count">${d.rounds.length}</span></a>`
     : `<span class="tab off" title="After your first review">Earlier reviews</span>`);
-  const rounds = d.rounds.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
-    : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("");
+  // rounds are numbered along the branch; each names its task when the branch has had several
+  const severalTasks = new Set(d.rounds.map((x) => x.task)).size > 1;
+  const numbered = d.rounds.map((x, i) => ({ ...x, shown: i + 1, onTask: severalTasks ? x.task : "" }));
+  const rounds = numbered.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
+    : `<details class="older-round"><summary>Round ${x.shown}${x.onTask ? ` (${esc(x.onTask)})` : ""}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("");
+  const elsewhereTask = d.opened && d.task !== d.opened
+    ? `<p class="notice">This branch's current task is <a href="#/tasks/${esc(d.task)}">${esc(d.task)}</a>: your comments and reviews go there, to the dev working on it.</p>` : "";
   const dev = d.dev && nameOf(d.dev);
   return `<p><a href="#/tasks/${esc(t.id)}" class="muted">${esc(t.id)}</a></p>
     <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
-      <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p></div>
+      <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p>${elsewhereTask}</div>
       ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
         ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
-      ${earlier ? `<p class="muted">Every review you've submitted on this feature, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
+      ${earlier ? `<p class="muted">Every review you've submitted on this branch, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
       ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
         : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
     </section>
-    <section class="section review-submit" id="review-submit"><h2>Your review</h2>
+    ${earlier ? "" : `<section class="section review-submit" id="review-submit"><h2>Your review</h2>
       ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
       <div class="general"><label for="general-comment">A comment that isn't about one line</label>
         <textarea id="general-comment" rows="3" placeholder="For example: errors here are always { code, message }."></textarea>
@@ -1646,7 +1654,7 @@ async function CodeReview(r) {
         <button class="btn primary" data-action="submit-review" data-verdict="changes" ${d.can_request_changes ? "disabled" : ""}>Request changes</button>
         <button class="btn" data-action="submit-review" data-verdict="approve" ${d.head ? "" : "disabled"}>Approve</button></div>
       <p class="hint">${d.can_request_changes ? esc(d.can_request_changes) + " " : ""}<b>Request changes</b> sends ${d.pending.length ? plural(d.pending.length, "draft comment") : "your comments"} back to ${esc(dev || "the dev who built it")}, who answers each one, fixes the code on the same branch, then hands it to the reviewer again. <b>Approve</b> only records your approval: the reviewer still has the last word before done.</p>
-    </section>`;
+    </section>`}`;
 }
 
 // Up to three lines ending at this one, on the same side, as the comment's code context.
@@ -1749,7 +1757,13 @@ const reviewActions = {
     const ok = await act(() => api(`/api/tasks/${encodeURIComponent(route().id)}/review/comments/${el.dataset.id}`, { method: "DELETE" }));
     if (ok) render(true);
   },
-  "finish-review": () => document.getElementById("review-submit").scrollIntoView({ behavior: "smooth" }),
+  "finish-review": () => {
+    const box = () => document.getElementById("review-submit");
+    if (box()) return box().scrollIntoView({ behavior: "smooth" });
+    location.hash = reviewHref(route().id);   // from Earlier reviews: your review is with the diff
+    const wait = setInterval(() => { if (box()) { clearInterval(wait); box().scrollIntoView({ behavior: "smooth" }); } }, 100);
+    setTimeout(() => clearInterval(wait), 5000);
+  },
   "submit-review": async (el) => {
     const id = route().id, verdict = el.dataset.verdict;
     const summary = document.getElementById("review-summary").value;

@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""The lead's own code reviews: the diff of a task's branch, line comments, and review rounds.
+"""The lead's own code reviews: the diff of a feature branch, line comments, and review rounds.
 
-The lead reviews in the console, like a pull request: comments on lines of the diff, then submits
+The lead reviews a branch in the console, like a pull request: comments on lines of the diff, then submits
 "Request changes" (the task goes back to the dev who built it) or "Approve" (nothing moves; the
 reviewer stays the last step before done). The lead can review at any point and as often as needed.
+
+Reviews are per branch: follow-up tasks add commits to the same branch, one at a time. Opening the review
+from any of its tasks shows the whole branch and every round on it; drafts and new rounds go to the branch's
+current task (the one its dev is on, or the newest), which is the file that dev reads.
 
 - Comments and rounds are kept in data/tasks/reviews/TASK-NNN.json (drafts too, so nothing is lost).
 - Each submitted round is appended to the task file under "## Lead Review", which is what the agents
@@ -20,7 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tasklib import TASKS, find_task, lock, parse, set_fields
+from tasklib import TASKS, find_task, lock, parse, set_fields, task_files
 
 REVIEWS = TASKS / "reviews"
 SECTION = "## Lead Review"
@@ -28,7 +32,8 @@ SECTION_NOTE = ("<!-- The lead's code reviews, added by the console. Never edit 
                 "     of the newest round on its \"- Reply:\" line: `Fixed in <commit>: what changed`, or `Not changed: why`. -->")
 CHANGES_FROM = {"ready-for-review", "changes-requested", "done"}   # where "Request changes" can send a task back from
 BUSY = {"in-dev": "the dev is working on it", "in-review": "the reviewer is reviewing it"}
-MODES = ("feature", "task", "since")
+MODES = ("feature", "since")   # the whole branch against its base, or what changed since your last review
+ACTIVE = ("in-dev", "changes-requested", "ready-for-review", "in-review", "blocked")
 
 
 class ReviewError(Exception):
@@ -63,6 +68,47 @@ def _task(task_id: str) -> tuple[Path, dict]:
 
 # ---- git --------------------------------------------------------------------------------
 
+def on_branch(meta: dict) -> list[dict]:
+    """Every task on the same project and branch, oldest first."""
+    if not meta.get("branch"):
+        return [meta]
+    same = [m for m in map(parse, task_files())
+            if m.get("project") == meta.get("project") and m.get("branch") == meta.get("branch")]
+    return sorted(same, key=lambda m: int(re.sub(r"\D", "", m.get("id", "0")) or 0)) or [meta]
+
+
+def current_task(task_id: str) -> str:
+    """The task a review of this branch goes to: the one on the branch that's in progress, else the newest one a
+    dev has built (rework goes back to its dev), else the task itself."""
+    _, meta = _task(task_id)
+    tasks = on_branch(meta)
+    active = [m for m in tasks if m.get("status") in ACTIVE]
+    built = [m for m in tasks if m.get("dev")]
+    return (active or built or [meta])[-1].get("id") or task_id
+
+
+def _adopt_drafts(task_id: str, meta: dict) -> None:
+    """Drafts left on an earlier task of the branch (written before a follow-up took it over) move to the current
+    task, so they're not lost."""
+    for other in on_branch(meta):
+        if other.get("id") in (task_id, None) or not load(other["id"])["pending"]:
+            continue
+        with lock():
+            theirs, ours = load(other["id"]), load(task_id)
+            for c in theirs["pending"]:
+                ours["pending"].append({**c, "id": f"c{ours['next']}"})
+                ours["next"] += 1
+            theirs["pending"] = []
+            _save(task_id, ours)
+            _save(other["id"], theirs)
+
+
+def branch_rounds(meta: dict) -> list[dict]:
+    """Every round on the branch, whichever task it was submitted on, oldest first; each says its task."""
+    found = [{**r, "task": m["id"]} for m in on_branch(meta) for r in rounds(m["id"])]
+    return sorted(found, key=lambda r: r["at"])
+
+
 def _git(project: str, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", project, *args], capture_output=True, text=True)
 
@@ -90,10 +136,8 @@ def _range(meta: dict, mode: str, last: str) -> tuple[str, str]:
     branch = meta["branch"]
     if mode == "since" and last and _git(meta["project"], "merge-base", "--is-ancestor", last, branch).returncode == 0:
         return f"{last}..{branch}", f"what changed since your last review (`{last[:7]}`)"
-    if mode == "task" and meta.get("from_commit"):
-        return f"{meta['from_commit']}..{branch}", f"this task's commits (from `{meta['from_commit']}`)"
     base = base_ref(meta)
-    return f"{base}...{branch}", f"the whole feature against `{base}`"
+    return f"{base}...{branch}", f"the whole branch against `{base}`"
 
 
 _HUNK = re.compile(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$")
@@ -139,14 +183,19 @@ def parse_diff(patch: str) -> list[dict]:
 
 
 def diff(task_id: str, mode: str = "feature") -> dict:
-    """What the lead looks at: the branch's diff, the rounds so far and the drafts."""
+    """What the lead looks at: the branch's diff, every round on the branch and the drafts. `task` is the task the
+    review goes to (the branch's current one), `opened` the one the lead opened it from."""
+    opened, task_id = task_id, current_task(task_id)
     _, meta = _task(task_id)
+    _adopt_drafts(task_id, meta)
     data = load(task_id)
-    last = data["rounds"][-1]["commit"] if data["rounds"] else ""
-    result = {"task": task_id, "status": meta.get("status", ""), "branch": meta.get("branch", ""),
+    all_rounds = branch_rounds(meta)
+    last = all_rounds[-1]["commit"] if all_rounds else ""
+    result = {"task": task_id, "opened": opened, "status": meta.get("status", ""), "branch": meta.get("branch", ""),
               "base": meta.get("base", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
-              "mode": mode, "head": head(meta), "last_reviewed": last, "files": [], "range": "", "describes": "",
-              "rounds": rounds(task_id), "pending": data["pending"], "can_request_changes": can_request_changes(meta)}
+              "mode": mode if mode in MODES else "feature", "head": head(meta), "last_reviewed": last, "files": [],
+              "range": "", "describes": "", "rounds": all_rounds, "pending": data["pending"],
+              "can_request_changes": can_request_changes(meta)}
     if not result["head"]:
         result["describes"] = "There's no code yet: the branch is created when a dev claims the task."
         return result
@@ -173,7 +222,7 @@ def can_request_changes(meta: dict) -> str:
 # ---- comments and rounds ----------------------------------------------------------------
 
 def add_comment(task_id: str, body: str, file: str = "", line: int | None = None, side: str = "new", code: str = "") -> dict:
-    _task(task_id)
+    task_id = current_task(task_id)
     if not body.strip():
         raise ReviewError("The comment is empty.")
     with lock():
@@ -190,6 +239,7 @@ def add_comment(task_id: str, body: str, file: str = "", line: int | None = None
 
 
 def edit_comment(task_id: str, comment_id: str, body: str) -> None:
+    task_id = current_task(task_id)
     with lock():
         data = load(task_id)
         found = next((c for c in data["pending"] if c["id"] == comment_id), None)
@@ -200,6 +250,7 @@ def edit_comment(task_id: str, comment_id: str, body: str) -> None:
 
 
 def delete_comment(task_id: str, comment_id: str) -> None:
+    task_id = current_task(task_id)
     with lock():
         data = load(task_id)
         data["pending"] = [c for c in data["pending"] if c["id"] != comment_id]
@@ -247,6 +298,7 @@ def submit(task_id: str, verdict: str, summary: str = "", mode: str = "feature")
         raise ReviewError("A review is either 'changes' or 'approve'.")
     import claim            # noqa: E402  (imported here: claim imports the hook, which imports this module's neighbours)
     import on_task_change   # noqa: E402
+    task_id = current_task(task_id)
     path, meta = _task(task_id)
     with lock():
         meta = parse(path)
@@ -263,8 +315,9 @@ def submit(task_id: str, verdict: str, summary: str = "", mode: str = "feature")
         commit = head(meta)
         if not commit:
             raise ReviewError("There's no code to review yet.")
-        last = data["rounds"][-1]["commit"] if data["rounds"] else ""
-        _, describes = _range(meta, mode, last)
+        on_branch_so_far = branch_rounds(meta)
+        last = on_branch_so_far[-1]["commit"] if on_branch_so_far else ""
+        _, describes = _range(meta, mode if mode in MODES else "feature", last)
         r = {"n": len(data["rounds"]) + 1, "at": dt.datetime.now().isoformat(timespec="seconds"), "verdict": verdict,
              "commit": commit, "describes": describes, "summary": summary.strip(), "status_before": meta.get("status", ""),
              # in reading order: by file and line, general comments last

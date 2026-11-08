@@ -25,8 +25,9 @@ re-review to the same reviewer.
 
 Open a task and press **Review the code** (also in the Dev's and Reviewer's chats).
 
-- Compare the whole feature against its base, only this task's commits, or what changed since your last review,
-  in unified or side-by-side view.
+- Review the **branch**: the whole branch against its base, or what changed since your last review, in unified or
+  side-by-side view. Follow-up tasks add commits to the same branch, so **Earlier reviews** lists every round on it,
+  and your comments go to the branch's current task (the one its dev is on).
 - Hover a line and press **+** to comment on it, or leave a general comment.
 - **Request changes**: your comments are added to the task under **Lead Review** and the task goes back to the
   developer who built it. The developer answers every comment, applies each one wherever it applies, and the

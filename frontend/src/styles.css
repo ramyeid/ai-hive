@@ -807,3 +807,4 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .form .notify-group label.radio { display: flex; align-items: baseline; justify-content: flex-start; gap: 8px; padding: 6px 0; font-weight: 400; text-align: left; }
 .form .notify-group label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
 .review-bar .tab .count { margin-left: 4px; padding: 1px 7px; border-radius: 9px; background: var(--sunken); color: var(--muted); font-size: 0.74rem; font-weight: 600; }
+.page-head .notice { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--brand); border-radius: 6px; background: var(--brand-soft); font-size: 0.88rem; }
