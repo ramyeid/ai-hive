@@ -84,20 +84,40 @@ To open code reviews in VS Code in the browser, install [code-server](https://gi
 server (`curl -fsSL https://code-server.dev/install.sh | sh`), then turn it on in **Settings → Integrations →
 Editor**. See [CONSOLE.md](CONSOLE.md#vs-code-in-the-browser).
 
-Use HTTPS in front of the console if the network isn't trusted. Behind nginx, let the terminal's and the editor's
-WebSockets through:
+Use HTTPS in front of the console if the network isn't trusted. Behind nginx (for instance with its own IP
+allowlist, passing requests to the console as local), let the Terminal's and the editor's WebSockets through:
 
 ```nginx
-location / {
-    proxy_pass http://127.0.0.1:8420;
-    proxy_set_header Host $host;                 # the console checks it against CONSOLE_HOSTS
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;      # the Terminal's and the editor's WebSockets
-    proxy_set_header Connection "upgrade";
-    proxy_read_timeout 1d;                       # keep them open while idle
-    proxy_buffering off;                         # live updates (the event stream)
+# WebSocket requests get "upgrade"; everything else (pages, the event stream) a normal connection
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+server {
+    listen 80;
+    server_name hive.internal.example.com;
+
+    location / {
+        allow 203.0.113.10;                          # your VPN's address
+        deny  all;
+
+        proxy_pass http://127.0.0.1:8420;
+        proxy_http_version 1.1;
+        proxy_set_header Host 127.0.0.1:8420;        # nginx checked who you are: the console sees a local request
+        proxy_set_header X-Forwarded-Host $host;     # the editor checks its page is on this name
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_buffering off;                         # live updates (the event stream)
+        proxy_cache off;
+        proxy_read_timeout 1d;                       # idle WebSockets stay open
+    }
 }
 ```
+
+Set each header once: nginx sends every `proxy_set_header` line, so a second `Connection` line breaks WebSockets.
+To have the console check the name and ask for its password instead, pass `Host $host` and set `CONSOLE_HOSTS`
+and `CONSOLE_PASSWORD`.
 
 ## Connect Slack
 

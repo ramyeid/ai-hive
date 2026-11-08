@@ -1743,7 +1743,7 @@ async function CodeReview(r) {
     ${sent}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
-        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (or hold .)">${VSCODE_ICON}Open in ${editorName()} <kbd>.</kbd></button>` : ""}
+        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (or hold .)">Open in ${editorName()} <kbd>.</kbd></button>` : ""}
         ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
