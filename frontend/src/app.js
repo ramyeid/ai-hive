@@ -1129,7 +1129,7 @@ const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}<
 // The apps Hive connects to. Slack today; each new one gets a card here and its own page.
 const INTEGRATIONS = [
   { id: "slack", name: "Slack", icon: "slack", text: "Talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in a thread." },
-  { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code or Cursor, indexed: press . in a code review, or ↗ on a line." },
+  { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code or Cursor, indexed: press . in a code review." },
 ];
 
 function integrationsSection(live) {
@@ -1283,7 +1283,7 @@ function editorSection() {
   const e = editorPrefs();
   const radio = (name, value, label, checked) => `<label class="radio"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""}> ${label}</label>`;
   return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Editor</p>` + settingsHead("Editor", "")
-    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in your editor, on the branch's worktree. <b>.</b> in a code review opens the branch's folder (that's what your editor indexes: go to definition, references, search); <b>Open</b> on a file and <b>↗</b> on a line jump into it. Saved in this browser, so each computer can have its own.</p>
+    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in your editor: <b>Open in VS Code</b> (or <b>.</b>) in a code review opens the branch's worktree folder, which your editor indexes (go to definition, references, search). Saved in this browser, so each computer can have its own.</p>
     <form class="form editor-form" id="editor-form">
       <fieldset><legend>Open code in</legend><div class="radios">${radio("app", "vscode", "VS Code", e.app === "vscode")}${radio("app", "cursor", "Cursor", e.app === "cursor")}${radio("app", "off", "Off", !EDITORS[e.app])}</div></fieldset>
       <fieldset><legend>Where the code is</legend>
@@ -1481,42 +1481,25 @@ function markHunk(lines) {
 const EDITORS = { vscode: { name: "VS Code", scheme: "vscode" }, cursor: { name: "Cursor", scheme: "cursor" } };
 const VSCODE_ICON = '<svg class="ico-vscode" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.6 2 8.4 10.4 3.7 6.8 2 7.7v8.6l1.7.9 4.7-3.6 9.2 8.4L22 20.2V3.8zM4 14.4V9.6L6.6 12zm13.6 2.3L12.1 12l5.5-4.7z"/></svg>';
 
+// Off until you set it up in Settings → Integrations → Editor.
 function editorPrefs() {
-  try { return { app: "vscode", where: "local", host: "", ...JSON.parse(localStorage.getItem("editor") || "{}") }; }
-  catch { return { app: "vscode", where: "local", host: "" }; }
+  try { return { app: "off", where: "local", host: "", ...JSON.parse(localStorage.getItem("editor") || "{}") }; }
+  catch { return { app: "off", where: "local", host: "" }; }
 }
 const editorOn = () => { const e = editorPrefs(); return !!EDITORS[e.app] && (e.where !== "ssh" || !!e.host); };
 const editorName = () => (EDITORS[editorPrefs().app] || EDITORS.vscode).name;
 
-// vscode://file/<path>:<line> on this computer; over SSH, vscode://vscode-remote/ssh-remote+<host>/<path>:<line>
-function editorUrl(path, line) {
+// vscode://file/<folder> on this computer; over SSH, vscode://vscode-remote/ssh-remote+<host>/<folder>
+function editorUrl(path) {
   const e = editorPrefs(), scheme = EDITORS[e.app].scheme;
   const where = e.where === "ssh" ? `vscode-remote/ssh-remote+${encodeURIComponent(e.host)}` : "file";
-  return `${scheme}://${where}${encodeURI(path)}${line ? `:${line}:1` : ""}`;
+  return `${scheme}://${where}${encodeURI(path)}`;
 }
 
-// Open the branch's folder (that's what VS Code indexes), or a file in it. A file only lands in that indexed window
-// once the folder is open there, so the first time for a folder this opens the folder and asks you to click again.
-function openInEditor(folder, file = "", line = 0) {
-  if (!folder) return toast("This branch isn't checked out anywhere yet.", true);
-  let opened = [];
-  try { opened = JSON.parse(sessionStorage.getItem("editorFolders") || "[]"); } catch { /* first time */ }
-  const folderUrl = editorUrl(folder);   // per editor and machine: a folder open locally isn't open over SSH
-  if (!file || !opened.includes(folderUrl)) {
-    location.href = folderUrl;
-    try { sessionStorage.setItem("editorFolders", JSON.stringify([...new Set([...opened, folderUrl])])); } catch { /* asks again */ }
-    if (file) toast(`Opening the branch's folder in ${editorName()} first, so it's indexed. Click again to jump to ${file.split("/").pop()}.`);
-    return;
-  }
-  location.href = editorUrl(`${folder}/${file}`, line);
-}
-
-// One line of code as a cell you can comment on (and open in your editor): the anchor holds where it is and its text.
+// One line of code as a cell you can comment on: the anchor holds where it is and its text.
 function codeCell(f, l, side, kind) {
   const line = side === "old" ? l.o : l.n;
-  const open = editorOn() && side !== "old" && f.status !== "deleted"
-    ? `<button class="open-line" data-action="open-line" data-file="${esc(f.path)}" data-line="${line}" aria-label="Open ${esc(f.path)} at line ${line} in ${editorName()}" title="Open at line ${line} in ${editorName()}">↗</button>` : "";
-  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button>${open}<span class="mark">${l.t === " " ? " " : l.t}</span>${inline.get(l) ?? esc(l.s)}</td>`;
+  return `<td class="code ${kind}" data-file="${esc(f.path)}" data-side="${side}" data-line="${line}" data-s="${esc(l.s)}"><button class="add-comment" data-action="comment-line" aria-label="Comment on line ${line} of ${esc(f.path)}" title="Comment on this line">+</button><span class="mark">${l.t === " " ? " " : l.t}</span>${inline.get(l) ?? esc(l.s)}</td>`;
 }
 
 // Lines of a hunk side by side: unchanged lines on both sides, removed lines next to the lines that replaced them.
@@ -1575,7 +1558,6 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
     <summary><code>${esc(f.path)}</code>${label ? ` <span class="muted">${esc(label)}</span>` : ""}
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
       ${f.changed_since_viewed ? `<span class="pill warn changed-since">Changed since you viewed it</span>` : ""}
-      ${editorOn() && f.status !== "deleted" ? `<button class="btn small file-open" data-action="open-file" data-file="${esc(f.path)}" title="Open in ${editorName()}">${VSCODE_ICON}Open</button>` : ""}
       <button class="viewed-toggle" data-action="mark-viewed" aria-pressed="${!!f.viewed}" title="Mark as viewed: it folds away until the dev changes it"><span class="box" aria-hidden="true"></span>Viewed</button></summary>
     ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
       <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>
@@ -1619,9 +1601,11 @@ function fileTree(files, drafts) {
     });
     return dirs.join("") + items.join("");
   };
+  const eye = (hidden) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>${hidden ? '<path d="M2.5 13.5l11-11"/>' : ""}</svg>`;
   return `<aside class="review-tree" aria-label="Changed files">
-    <div class="tree-head"><b>Files</b> <span class="muted">${files.length}</span>
+    <div class="tree-head"><b>Files</b> <span class="muted viewed-count" title="Files you marked viewed">${files.filter((f) => f.viewed).length}/${files.length} viewed</span>
       <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button>
+      <button class="icon-btn hide-viewed" data-action="hide-viewed" aria-pressed="${hideViewed()}" aria-label="Hide viewed files" title="${hideViewed() ? "Show" : "Hide"} the files you marked viewed">${eye(hideViewed())}</button>
       <button class="icon-btn tree-hide" data-action="review-tree" aria-label="Hide the files" title="Hide the files, show only the diff"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M10.5 6.2 8.7 8l1.8 1.8"/></svg></button></div>
     <ul class="tree">${render(root, "")}</ul></aside>`;
 }
@@ -1631,8 +1615,7 @@ function hideViewed() {
   try { return localStorage.getItem("hideViewed") === "1"; } catch { return false; }
 }
 function viewedCount() {
-  const files = document.querySelectorAll(".review-file"), seen = document.querySelectorAll(".review-file.is-viewed");
-  return `${seen.length} of ${plural(files.length, "file")} viewed`;
+  return `${document.querySelectorAll(".review-file.is-viewed").length}/${document.querySelectorAll(".review-file").length} viewed`;
 }
 
 // Whether the file tree is shown next to the diff, remembered in this browser.
@@ -1714,8 +1697,7 @@ async function CodeReview(r) {
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
       ${earlier ? `<p class="muted">Every review you've submitted on this branch, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
-      ${d.files.length ? `<div class="viewed-bar"><span class="viewed-count">${d.files.filter((f) => f.viewed).length} of ${plural(d.files.length, "file")} viewed</span>
-        <button class="btn small" data-action="hide-viewed" aria-pressed="${hideViewed()}">Hide viewed</button></div>` : ""}
+
       ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"} ${hideViewed() ? "hide-viewed" : ""}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
         : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
     </section>
@@ -1761,11 +1743,13 @@ async function pingDev(dev, taskId) {
     body: { text: `I reviewed the code of ${taskId} and requested changes. Work on it per your instructions.` } }));
 }
 
-// The review's code folder; once the worktree is gone (a done task), the project folder, which may be on another branch.
-function reviewOpen(file = "", line = 0) {
+// Open the branch's folder in your editor (that's what it indexes); once the worktree is gone (a done task), the
+// project folder, which may be on another branch.
+function reviewOpen() {
   const r = state.reviewFolder || {};
-  if (!r.onBranch && r.folder) toast(`The branch's worktree was removed, so this opens your project folder, which may not be on ${r.branch}.`);
-  openInEditor(r.folder, file, line);
+  if (!r.folder) return toast("This branch isn't checked out anywhere yet.", true);
+  if (!r.onBranch) toast(`The branch's worktree was removed, so this opens your project folder, which may not be on ${r.branch}.`);
+  location.href = editorUrl(r.folder);
 }
 
 const reviewActions = {
@@ -1776,7 +1760,8 @@ const reviewActions = {
       file.classList.toggle("is-viewed", on);
       el.setAttribute("aria-pressed", String(on));
       document.querySelector(`.tree-file[data-index="${file.dataset.index}"]`)?.classList.toggle("viewed", on);
-      document.querySelector(".viewed-count").textContent = viewedCount();
+      const count = document.querySelector(".viewed-count");
+      if (count) count.textContent = viewedCount();
     };
     show(viewed);
     if (viewed) {
@@ -1793,15 +1778,11 @@ const reviewActions = {
       toast(err.message, true);
     }
   },
-  "hide-viewed": (el) => {
-    const on = !hideViewed();
-    try { localStorage.setItem("hideViewed", on ? "1" : ""); } catch { /* this page only */ }
-    el.setAttribute("aria-pressed", String(on));
-    document.querySelector(".review-body")?.classList.toggle("hide-viewed", on);
+  "hide-viewed": () => {
+    try { localStorage.setItem("hideViewed", hideViewed() ? "" : "1"); } catch { /* this page only */ }
+    render(true);
   },
   "open-folder": () => reviewOpen(),
-  "open-file": (el) => reviewOpen(el.dataset.file),
-  "open-line": (el) => reviewOpen(el.dataset.file, Number(el.dataset.line)),
   "review-tree": () => {
     try { localStorage.setItem("reviewTree", reviewTreeShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     render(true);
