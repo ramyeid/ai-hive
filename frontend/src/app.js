@@ -1789,12 +1789,14 @@ function fileTree(files, drafts) {
   };
   return `<aside class="review-tree" aria-label="Changed files">
     <div class="tree-head"><b>Files</b> <span class="muted viewed-count" title="Files you marked viewed">${files.filter((f) => f.viewed).length}/${files.length} viewed</span>
-      <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button>
+      <button class="icon-btn tree-fold" data-action="tree-fold" data-open="false" aria-label="Collapse all folders" title="Collapse all folders">${FOLD_ICON(false)}</button>
       <button class="icon-btn hide-viewed" data-action="hide-viewed" aria-pressed="${hideViewed()}" aria-label="Hide viewed files" title="${hideViewed() ? "Show" : "Hide"} the files you marked viewed">${eyeIcon(hideViewed())}</button>
       <button class="icon-btn tree-hide" data-action="review-tree" aria-label="Hide the files" title="Hide the files, show only the diff"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M10.5 6.2 8.7 8l1.8 1.8"/></svg></button></div>
     <ul class="tree">${render(root, "")}</ul></aside>`;
 }
 
+const FOLD_ICON = (open) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true">${open
+  ? '<path d="M5 6.5 8 3.5l3 3M5 9.5l3 3 3-3"/>' : '<path d="M5 3.5 8 6.5l3-3M5 12.5l3-3 3 3"/>'}</svg>`;
 const eyeIcon = (hidden) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>${hidden ? '<path d="M2.5 13.5l11-11"/>' : ""}</svg>`;
 
 // Whether files you marked viewed are hidden from the diff and the tree, remembered in this browser.
@@ -1888,7 +1890,7 @@ async function CodeReview(r) {
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
       ${earlier ? `<p class="muted">Every review you've submitted on this branch, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
 
-      ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"} ${hideViewed() ? "hide-viewed" : ""}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
+      ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"} ${hideViewed() ? "hide-viewed" : ""}">${fileTree(d.files, drafts)}${treeStrip}<div class="review-diffs">${files}</div></div>`
         : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
     </section>
     ${earlier ? "" : `<section class="section review-submit" id="review-submit"><h2>Your review</h2>
@@ -2239,8 +2241,12 @@ const reviewActions = {
     renderChatSide(route().id);
   },
   "review-tree": () => {
-    try { localStorage.setItem("reviewTree", reviewTreeShown() ? "hidden" : "shown"); } catch { /* this page only */ }
-    render(true);
+    // Both the tree and its folded strip are on the page: only switch which one shows (no redraw of the diff).
+    const show = !reviewTreeShown();
+    try { localStorage.setItem("reviewTree", show ? "shown" : "hidden"); } catch { /* this page only */ }
+    document.querySelector(".review-body")?.classList.toggle("with-tree", show);
+    document.querySelector(".review-body")?.classList.toggle("tree-folded", !show);
+    document.querySelector(".tree-toggle")?.setAttribute("aria-pressed", String(show));
   },
   "jump-file": (el) => {
     const file = document.getElementById(`file-${el.dataset.index}`);
@@ -2250,11 +2256,13 @@ const reviewActions = {
     file.scrollIntoView({ block: "start", behavior: "smooth" });
   },
   "tree-fold": (el) => {
+    // Only the top folders change; the ones inside keep their state but are hidden with them (one change, not hundreds).
     const open = el.dataset.open === "true";
-    document.querySelectorAll(".review-tree details").forEach((d) => { d.open = open; });
+    document.querySelectorAll(".review-tree .tree > li > details").forEach((d) => { d.open = open; });
+    if (open) document.querySelectorAll(".review-tree details:not([open])").forEach((d) => { d.open = true; });
     el.dataset.open = String(!open);
-    el.textContent = open ? "Collapse all" : "Expand all";
-    el.title = open ? "Fold every folder" : "Unfold every folder";
+    el.innerHTML = FOLD_ICON(!open);
+    el.title = el.ariaLabel = open ? "Collapse all folders" : "Expand all folders";
   },
   "review-layout": (el) => {
     try { localStorage.setItem("reviewLayout", el.dataset.layout); } catch { /* remembered for this page only */ }
