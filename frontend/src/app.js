@@ -819,9 +819,20 @@ async function AgentChat(r) {
 
 // The panel next to a chat: the task it's on, this conversation, what it did before (or, for the Orchestrator
 // and the Coach, what's waiting on you).
+// It can be folded away to a thin strip (remembered in this browser, for every agent).
+const PANEL_ICON = (arrow) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M10 2.8v10.4M${arrow}"/></svg>`;
+const SIDE_HEAD = `<div class="side-head"><button class="icon-btn" data-action="chat-side" aria-label="Hide the details" title="Hide the details">${PANEL_ICON("5.5 6.2 7.3 8 5.5 9.8")}</button></div>`;
+function chatSideShown() {
+  try { return localStorage.getItem("chatSide") !== "hidden"; } catch { return true; }
+}
 function renderChatSide(name) {
   const side = document.getElementById("chat-side");
   if (!side) return;
+  side.closest(".chat-layout")?.classList.toggle("side-closed", !chatSideShown());
+  if (!chatSideShown()) {
+    side.innerHTML = `<button class="tree-strip side-strip" data-action="chat-side" aria-label="Show the details" title="Show the details">${PANEL_ICON("7.3 6.2 5.5 8 7.3 9.8")}<span>Details</span></button>`;
+    return;
+  }
   const role = roleOf(name);
   const events = state.live[name] || [];
   const cost = events.filter((e) => e.kind === "result").reduce((n, e) => n + (e.cost_usd || 0), 0);
@@ -837,13 +848,13 @@ function renderChatSide(name) {
       : `<section class="side-box"><h3>Waiting for you</h3>${asks.length ? `<ul class="side-list">${asks.map(({ n, p }) =>
           `<li><a href="#/agents/${n}">${esc(personOf(n))}</a>: ${esc(toolArg(p.tool, p.input).slice(0, 70))}</li>`).join("")}</ul>` : `<p class="muted">No approvals waiting.</p>`}
           <p class="muted">${needsCount()} thing${needsCount() === 1 ? "" : "s"} on <a href="#/">Home</a>.</p></section>`;
-    side.innerHTML = extra + convo;
+    side.innerHTML = SIDE_HEAD + extra + convo;
     return;
   }
   const t = busyWith(name) || state.codeTask[name];
   const field = role === "techlead" ? "techlead" : role;
   const earlier = (state.tasks || []).filter((x) => x[field] === name && x.id !== t?.id).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 5);
-  side.innerHTML = `${t ? `<section class="side-box"><h3>Task</h3><a class="side-title" href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a>
+  side.innerHTML = SIDE_HEAD + `${t ? `<section class="side-box"><h3>Task</h3><a class="side-title" href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a>
       <dl class="kv"><dt>Status</dt><dd>${statusPill(t.status)}</dd>${t.branch ? `<dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>` : ""}${t.base ? `<dt>Base</dt><dd><code>${esc(t.base)}</code></dd>` : ""}</dl>
       <div class="btn-row"><a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>${t.from_commit ? `<a class="btn small" href="${reviewHref(t.id)}">Diff</a>` : ""}</div></section>`
       : `<section class="side-box"><h3>Task</h3><p class="muted">Not on a task right now.</p></section>`}
@@ -1927,6 +1938,10 @@ const reviewActions = {
     el.innerHTML = eyeIcon(on);
   },
   "open-folder": () => reviewOpen(),
+  "chat-side": () => {
+    try { localStorage.setItem("chatSide", chatSideShown() ? "hidden" : "shown"); } catch { /* this page only */ }
+    renderChatSide(route().id);
+  },
   "review-tree": () => {
     try { localStorage.setItem("reviewTree", reviewTreeShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     render(true);

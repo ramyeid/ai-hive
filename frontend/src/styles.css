@@ -411,6 +411,13 @@ details.menu > summary::-webkit-details-marker { display: none; }
 .menu-list > *:hover { background: var(--sunken); }
 details.menu.open-left .menu-list { left: auto; right: 0; }   /* near the right edge: open towards the left */
 .chat-side { position: sticky; top: 52px; height: calc(100vh - 52px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 16px 16px 24px; border-left: 1px solid var(--rule); background: color-mix(in srgb, var(--panel) 40%, var(--bg)); }
+.chat-layout.side-closed { grid-template-columns: minmax(0, 1fr) 46px; gap: 12px; }
+.chat-layout.side-closed .chat-side { padding: 16px 10px 0 0; border-left: 0; background: none; overflow: visible; }
+.side-head { display: flex; justify-content: flex-end; margin: -8px -6px -6px 0; }
+.side-head .icon-btn { width: 28px; height: 28px; color: var(--muted); }
+.side-head .icon-btn:hover { color: var(--ink); }
+.side-head .ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.side-strip { position: static; }
 .side-box { padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); font-size: 0.86rem; }
 .side-box h3 { margin-bottom: 8px; font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .side-box p { margin: 0 0 8px; }
