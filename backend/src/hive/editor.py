@@ -241,17 +241,19 @@ async def socket(ws: WebSocket, path: str) -> None:
             await upstream.close()
 
         async def to_browser():
+            # Either side can go at any moment (a closed or reloaded tab, code-server restarting): end quietly.
             try:
                 async for message in upstream:
                     if isinstance(message, bytes):
                         await ws.send_bytes(message)
                     else:
                         await ws.send_text(message)
-            except (websockets.ConnectionClosed, RuntimeError):
+            except (WebSocketDisconnect, websockets.ConnectionClosed, RuntimeError):
                 pass
+            await upstream.close()
             try:
                 await ws.close()
-            except RuntimeError:
+            except (WebSocketDisconnect, RuntimeError):
                 pass
 
         await asyncio.gather(to_editor(), to_browser())

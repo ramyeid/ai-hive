@@ -4,14 +4,19 @@ its live connection only from the console's own page. A stand-in code-server (te
     uv run python -m unittest tests/test_editor.py
 """
 import shutil
+import socket
 import stat
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
+import uvicorn
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
+from websockets.sync.client import connect
 
 from hive import editor, store
 from hive.agents import AgentManager
@@ -104,6 +109,18 @@ class EditorTest(unittest.TestCase):
             ws.send_text("hello")
             self.assertEqual(ws.receive_text(), "echo hello (host hive.example.com)")
 
+    def test_closing_the_tab_while_code_server_is_sending_ends_quietly(self):
+        self.turn_on()
+        self.console.post("/api/editor/open", headers=KEY, json={"folder": str(self.folder)})
+        port = self.a_real_server()   # how a tab goes away shows only with uvicorn itself, not the test client
+
+        with self.assertNoLogs("uvicorn.error", level="ERROR"):
+            ws = connect(f"ws://127.0.0.1:{port}/editor/chatter", additional_headers={
+                "origin": f"http://127.0.0.1:{port}", "cookie": f"{editor.COOKIE}={self.console.cookies[editor.COOKIE]}"})
+            ws.recv()
+            ws.socket.close()   # the tab is gone, without a goodbye; code-server keeps sending
+            time.sleep(0.5)
+
     def test_the_live_connection_from_another_website_is_refused(self):
         self.turn_on()
         self.console.post("/api/editor/open", headers=KEY, json={"folder": str(self.folder)})
@@ -128,6 +145,19 @@ class EditorTest(unittest.TestCase):
         self.assertEqual(self.console.put("/api/editor", headers=KEY, json={"enabled": True}).status_code, 409)
 
     # ---- helpers ----------------------------------------------------------------------
+
+    def a_real_server(self) -> int:
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        server = uvicorn.Server(uvicorn.Config(self.console.app, host="127.0.0.1", port=port, lifespan="off", log_level="warning"))
+        thread = threading.Thread(target=server.run, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(setattr, server, "should_exit", True)
+        while not server.started:
+            time.sleep(0.05)
+        return port
 
     def turn_on(self):
         self.assertTrue(self.console.put("/api/editor", headers=KEY, json={"enabled": True}).json()["enabled"])

@@ -25,8 +25,17 @@ async def echo(ws):
         await ws.send_text(f"echo {text} (host {ws.headers.get('host')})")
 
 
+async def chatter(ws):
+    """Keeps sending, like VS Code's server does, whether or not the tab is still there."""
+    import asyncio
+    await ws.accept()
+    while True:
+        await ws.send_bytes(b"x" * 1024)
+        await asyncio.sleep(0.01)
+
+
 if "--version" in sys.argv:
     print("4.0.0-fake abc with Code 1.0.0")
     sys.exit(0)
-app = Starlette(routes=[Route("/", page), Route("/healthz", healthz), WebSocketRoute("/socket", echo)])
+app = Starlette(routes=[Route("/", page), Route("/healthz", healthz), WebSocketRoute("/socket", echo), WebSocketRoute("/chatter", chatter)])
 uvicorn.run(app, uds=sys.argv[sys.argv.index("--socket") + 1], log_level="warning")
