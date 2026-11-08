@@ -120,6 +120,19 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         ask = await self._wait_for(lambda: next((m for m in web.posted if "wants to" in m["text"]), None))
         self.assertEqual((ask.get("thread_ts"), ask.get("reply_broadcast")), ("1.0", True))
 
+    async def test_an_agent_that_stopped_and_waits_for_the_lead_is_posted_in_its_task_thread(self):
+        bridge, web = await self._a_bridge()
+        self._a_task("changes-requested")
+
+        await bridge.on_bus({"kind": "waiting_for_lead", "agent": "dev", "task": "TASK-001",
+                             "text": "Please switch your project folder to main."})
+
+        posted = web.posted[-1]
+        self.assertIn("stopped on TASK-001 and is waiting for you", posted["text"])
+        self.assertIn("switch your project folder", posted["text"])
+        self.assertTrue(posted["reply_broadcast"])
+        self.assertEqual(self._buttons(posted), ["Open the chat with " + bridge_label("dev"), "Open the task"])
+
     async def test_new_proposals_from_the_coach_are_announced(self):
         bridge, web = await self._a_bridge()
         await bridge.check_proposals()

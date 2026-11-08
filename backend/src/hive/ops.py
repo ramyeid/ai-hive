@@ -75,9 +75,15 @@ def _busy_with(agent_id: str, tasks: list[dict]) -> str:
 
 
 def agents(manager) -> list[dict]:
+    """The team. `stopped_for_you`: the agent stopped on a task without moving it and is waiting for the lead
+    (its last words say why); `approvals_waiting`: requests it's paused on."""
     tasks = board.list_tasks()
     return [{"id": aid, "name": label(aid), "role": r.role, "status": r.status, "task": _busy_with(aid, tasks),
-             "waiting_for_you": len(r.pending)} for aid, r in manager.agents.items()]
+             "approvals_waiting": len(r.pending),
+             "stopped_for_you": ({"task": r.waiting_for_lead["task"], "since": r.waiting_for_lead["since"],
+                                  "said": r.waiting_for_lead["text"][:600], "chat": links(agent_id=aid)["chat"]}
+                                 if r.waiting_for_lead else None)}
+            for aid, r in manager.agents.items()]
 
 
 def status(manager) -> dict:
@@ -93,7 +99,10 @@ def status(manager) -> dict:
     approvals = [{"agent": label(aid), "tool": p["tool"], "link": links(agent_id=aid)["chat"]}
                  for aid, r in manager.agents.items() for p in r.pending.values()]
     recent = [t for t in tasks if t["status"] == "done"][:5]
+    stopped = [{"agent": label(aid), "task": r.waiting_for_lead["task"], "said": r.waiting_for_lead["text"][:600],
+                "chat": links(agent_id=aid)["chat"]} for aid, r in manager.agents.items() if r.waiting_for_lead]
     return {"tasks": rows, "waiting_on_a_hand_off": waiting, "approvals_waiting": approvals,
+            "agents_stopped_for_you": stopped,
             "recently_done": [{"id": t["id"], "title": t["title"], "review": links(t["id"])["review"]} for t in recent],
             "team": agents(manager), "console": links()["console"]}
 
@@ -146,14 +155,15 @@ async def stop(manager, agent_id: str) -> str:
     return f"Stopped {label(agent_id)}."
 
 
-async def tell(manager, agent_id: str, text: str) -> str:
-    """Send an agent a message (starting it if needed). Refused while it's in the middle of something."""
+async def tell(manager, agent_id: str, text: str, source: str = "team") -> str:
+    """Send an agent a message (starting it if needed). Refused while it's in the middle of something.
+    source: "team" (a hand-off, the Orchestrator) or "slack" (the answer goes back to the Slack thread)."""
     runner = _runner(manager, agent_id)
     if not text.strip():
         raise OpsError("The message is empty.")
     if runner.status in ("working", "waiting", "starting"):
         raise OpsError(f"{label(agent_id)} is busy ({runner.status}). Wait for it to finish, or interrupt it in the console.")
-    await runner.send(text.strip())
+    await runner.send(text.strip(), source)
     return f"Sent to {label(agent_id)}."
 
 

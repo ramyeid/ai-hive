@@ -264,7 +264,7 @@ class SlackBridge:
     async def _send(self, agent: str, text: str, channel: str, thread: str) -> None:
         self.listening[agent] = {"channel": channel, "thread": thread, "texts": [], "started": False}
         try:
-            await ops.tell(self.manager, agent, text)
+            await ops.tell(self.manager, agent, text, source="slack")
         except Exception as exc:
             self.listening.pop(agent, None)
             await self.post(channel, f"Couldn't reach {ops.label(agent)}: {exc}", thread)
@@ -309,6 +309,8 @@ class SlackBridge:
             listening["texts"].append(f"Something went wrong: {event.get('text', '')}")
         elif kind == "result" and listening and listening["started"]:
             await self._answer(agent)
+        elif kind == "waiting_for_lead":
+            await self._stopped(agent, event)
         elif kind == "permission":
             await self._ask(agent, event)
         elif kind == "decision":
@@ -323,6 +325,23 @@ class SlackBridge:
         prefix = "" if agent == self.orchestrator() else f"*{ops.label(agent)}*\n"
         for part in _chunks(prefix + to_mrkdwn(answer)):
             await self.post(listening["channel"], part, listening["thread"])
+
+    async def _stopped(self, agent: str, event: dict) -> None:
+        """An agent stopped on work handed to it without moving the task: it's waiting for the lead. Its last words go
+        in the task's thread (or the channel), with a mention so it notifies."""
+        if not self.home:
+            return
+        task = board.get_task(event.get("task", "")) if event.get("task") else None
+        said = event.get("text", "").strip() or "It stopped without saying why."
+        where = f" on {task['id']}" if task else ""
+        text = self._ping(f"*{ops.label(agent)}* stopped{where} and is waiting for you:\n") + to_mrkdwn(said)
+        buttons = [_link(f"Open the chat with {ops.label(agent)}", ops.links(agent_id=agent)["chat"])]
+        if task:
+            buttons.append(_link("Open the task", ops.links(task["id"])["task"]))
+        thread = await self._thread(task) if task else ""
+        parts = _chunks(text)
+        for i, part in enumerate(parts):
+            await self.post(self.home, part, thread, buttons if i == len(parts) - 1 else None, broadcast=bool(thread) and i == 0)
 
     async def _ask(self, agent: str, event: dict) -> None:
         pid, tool = event["id"], event["tool"]

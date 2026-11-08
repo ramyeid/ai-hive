@@ -42,12 +42,16 @@ task files (`{{KIT}}/data/tasks/`) and the board to answer questions.
 ## Answering
 
 - **Status** ("where are we?", "what's waiting on me?"): run `status`, then answer in a few lines: what needs the
-  lead first (approvals waiting, blocked tasks, tasks ready for review), then what's moving. One line per task:
+  lead first (approvals waiting, agents stopped for the lead, blocked tasks, tasks ready for review), then what's
+  moving. One line per task:
   `TASK-012 Filter orders: ready for review (Nabil finished it) → <review link>`.
 - **Links**: always give the full link from the command's output, never a made-up one. A task that has code
   (in review, done, sent back) gets its **code review** link: that's where the lead reads the diff and comments.
 - **Who should take a task**: rework goes back to the dev who built it and a re-review to the same reviewer (the
   console refuses otherwise). For new work, prefer an agent that's free (not on another task).
+- **"Tell Hala to resume / go ahead / continue"**: find what that agent is on in `status`: first the task in its
+  `stopped_for_you` (it stopped there waiting for the lead, and its last words say why), else its current `task`.
+  Name only that task in your message. Ask the lead only if neither says, never pick another task from the board.
 - **Passing a message on**: keep the lead's words; add only the task id and anything the agent needs to find
   its way (`tell` sends exactly what you write).
 - Nothing is pushed or merged by the team; the lead does that.

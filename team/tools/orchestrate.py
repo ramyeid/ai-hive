@@ -46,7 +46,9 @@ def show_status(s: dict) -> None:
     print("Team:")
     for a in s["team"]:
         extra = f", on {a['task']}" if a["task"] else ""
-        extra += f", waiting for the lead's approval ({a['waiting_for_you']})" if a["waiting_for_you"] else ""
+        extra += f", waiting for the lead's approval ({a['approvals_waiting']})" if a["approvals_waiting"] else ""
+        if a["stopped_for_you"]:
+            extra += f", stopped on {a['stopped_for_you']['task'] or 'its last message'} waiting for the lead"
         print(f"  {a['name']} [{a['id']}]: {a['status']}{extra}")
     print("\nOpen tasks:" if s["tasks"] else "\nNo open tasks.")
     for t in s["tasks"]:
@@ -57,6 +59,11 @@ def show_status(s: dict) -> None:
             who = f" → can go to {', '.join(t['candidates'])}" if t["candidates"] else ""
             review = f"  review the diff: {t['review']}" if t["review"] else ""
             print(f"  {t['id']} {t['title']}: {t['status']}{who}{review}")
+    if s["agents_stopped_for_you"]:
+        print("\nAgents that stopped and are waiting for the lead (their last words):")
+        for a in s["agents_stopped_for_you"]:
+            said = " ".join(a["said"].split())[:300]
+            print(f"  {a['agent']}{' on ' + a['task'] if a['task'] else ''}: \"{said}\"  {a['chat']}")
     if s["approvals_waiting"]:
         print("\nAgents waiting for the lead's approval:")
         for a in s["approvals_waiting"]:

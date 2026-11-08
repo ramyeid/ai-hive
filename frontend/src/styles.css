@@ -623,6 +623,7 @@ details:not([open]) > .tree-dir::before { transform: rotate(-90deg); }
 .need .t { font-weight: 600; line-height: 1.35; }
 .need .t a { text-decoration: none; }
 .need .t code { font-weight: 500; overflow-wrap: anywhere; }
+.need .said { color: var(--ink-2, var(--muted)); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
 .need .btn-row { margin-top: auto; }
 .need.approval, .need.blocked { border-left-color: var(--attention); }
 .need.rework, .need.dev { border-left-color: var(--honey); }

@@ -14,7 +14,7 @@ import secrets
 import uuid
 from pathlib import Path
 
-from . import chats, store
+from . import board, chats, store
 from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT, TEAM
@@ -73,6 +73,11 @@ class AgentRunner:
         self.always_allow: set[str] = set()
         self.turn: asyncio.Task | None = None
         self.turn_started = ""
+        self.turn_task = ""              # the task this turn was about, when its message named one
+        self.turn_source = ""            # who started this turn: console (you, in its chat), team or slack
+        self.turn_text = ""              # the agent's last words this turn
+        self.interrupted = False
+        self.waiting_for_lead: dict | None = None   # stopped on work you didn't start in its chat; see _after_turn
         self.error = ""
 
     # ---- state ---------------------------------------------------------------------
@@ -80,6 +85,7 @@ class AgentRunner:
     def info(self) -> dict:
         return {"name": self.name, "role": self.role, "status": self.status, "session_id": self.session_id,
                 "error": self.error, "provider": self.provider, "model": self.model,
+                "waiting_for_lead": self.waiting_for_lead,
                 "pending": [{"id": pid, **{k: v for k, v in p.items() if k != "future"}}
                             for pid, p in self.pending.items()]}
 
@@ -99,6 +105,8 @@ class AgentRunner:
                  "kind": kind, **data}
         if self.session_id:
             store.append_event(self.session_id, event)
+        if kind == "text" and data.get("text", "").strip():
+            self.turn_text = data["text"]
         self.bus.publish(event)
 
     async def ask(self, tool: str, tool_input: dict) -> tuple[bool, str]:
@@ -220,6 +228,7 @@ class AgentRunner:
         if self.engine and self.status in ("working", "waiting"):
             for pid in list(self.pending):
                 self.decide(pid, "deny", "Interrupted by the lead.")
+            self.interrupted = True
             await self.engine.interrupt()
             self.emit("system", text="Interrupted.")
 
@@ -229,12 +238,17 @@ class AgentRunner:
 
     # ---- conversation ----------------------------------------------------------------------
 
-    async def send(self, text: str) -> None:
+    async def send(self, text: str, source: str = "console") -> None:
+        """source: "console" when you typed it in the agent's chat (you're watching), "team" for hand-offs and the
+        Orchestrator's messages, "slack" for messages from Slack (the answer goes back to the Slack thread)."""
         if not self.engine:
             await self.start()
         if self.status != "idle":
             raise RuntimeError(f"{self.name} is busy. Wait for it to finish, or interrupt it.")
         self.turn_started = store.now()
+        self.turn_source, self.turn_text, self.interrupted = source, "", False
+        self.turn_task = (re.findall(r"TASK-\d+", text) or [""])[0]
+        self.waiting_for_lead = None
         self.emit("user", text=text)
         self._set_status("working")
         self.turn = asyncio.create_task(self._run_turn(text))
@@ -257,6 +271,7 @@ class AgentRunner:
         fresh one, so the next task doesn't carry this one's context (what /clear does in a terminal)."""
         if self.turn and not self.turn.done():
             await asyncio.wait([self.turn])
+        self._check_waiting(started)
         handoffs = chats.handed_off(self.name, started)
         if not handoffs or not self.engine or self.status != "idle":
             return
@@ -269,6 +284,20 @@ class AgentRunner:
             self._set_status("stopped")
             return
         self.emit("system", text=f"Fresh conversation after handing off {done}. The previous one is saved with the task.")
+
+
+    def _check_waiting(self, started: str) -> None:
+        """An agent that stops without moving any task, on work you didn't start in its chat, is waiting for you:
+        a question, or something only you can fix (like a branch checked out in your project folder). Agents don't
+        always mark the task Blocked, so Home, the sidebar and Slack show it from this instead."""
+        if self.turn_source != "team" or self.interrupted or self.role == "orchestrator" or self.status != "idle":
+            return
+        if any(a.get("actor") == self.name and a.get("ts", "") >= started for a in board.activity(500)):
+            return   # it moved a task: the board and its notifications already say what's next
+        self.waiting_for_lead = {"since": store.now(), "task": self.turn_task,
+                                 "text": (self.error if not self.turn_text else self.turn_text).strip()[:2000]}
+        self.bus.publish({"kind": "agent", "agent": self.info()})
+        self.bus.publish({"ts": store.now(), "agent": self.name, "kind": "waiting_for_lead", **self.waiting_for_lead})
 
 
 class AgentManager:

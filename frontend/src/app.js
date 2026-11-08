@@ -218,12 +218,20 @@ function refreshIf(pages) {
   if (pages.includes(route().page)) render(true);
 }
 
-// What needs you (Home's badge): approvals, blocked tasks, tasks waiting for a hand-off, the Coach's proposals.
+// The first line of an agent's message, without Markdown marks, for a one-line preview.
+const plainLine = (text) => (text.split("\n").find((l) => l.trim()) || "").replace(/[*_`#>]+/g, "").trim();
+
+// Agents that stopped on work handed to them without moving the task: they're waiting for your answer.
+const stoppedForYou = () => Object.entries(state.agents).filter(([, a]) => a.waiting_for_lead && a.status === "idle");
+const stoppedOn = (taskId) => stoppedForYou().some(([, a]) => a.waiting_for_lead.task === taskId);
+
+// What needs you (Home's badge): approvals, agents waiting for you, blocked tasks, tasks waiting for a hand-off,
+// the Coach's proposals.
 function needsCount() {
   const approvals = Object.values(state.agents).reduce((n, a) => n + (a.pending?.length || 0), 0);
-  const tasks = (state.tasks || []).filter((t) => ["blocked", "ready-for-review", "ready-for-dev"].includes(t.status)
-    || (t.status === "changes-requested" && !["working", "waiting"].includes(state.agents[t.dev]?.status))).length;
-  return approvals + tasks + (state.improvements ? 1 : 0);
+  const tasks = (state.tasks || []).filter((t) => !stoppedOn(t.id) && (["blocked", "ready-for-review", "ready-for-dev"].includes(t.status)
+    || (t.status === "changes-requested" && !["working", "waiting"].includes(state.agents[t.dev]?.status)))).length;
+  return approvals + stoppedForYou().length + tasks + (state.improvements ? 1 : 0);
 }
 
 function showCounts() {
@@ -315,7 +323,10 @@ function railAgent(name) {
   const st = state.agents[name]?.status || "stopped";
   const task = busyWith(name);
   const sub = (roleOf(name) === "orchestrator" ? "Your assistant, also in Slack" : OWNER_LABEL[roleOf(name)]) + (task ? ` · ${task.id}` : "");
-  const marker = st === "waiting" ? `<span class="pill attention">Approve</span>` : `<span class="dot ${st}" title="${STATUS_TEXT[st]}"></span>`;
+  const stopped = st === "idle" && state.agents[name]?.waiting_for_lead;
+  const marker = st === "waiting" ? `<span class="pill attention">Approve</span>`
+    : stopped ? `<span class="pill attention" title="Stopped and waiting for your answer">Needs you</span>`
+    : `<span class="dot ${st}" title="${STATUS_TEXT[st]}"></span>`;
   return `<a class="rail-agent ${roleOf(name)}" data-agent="${name}" href="#/agents/${name}" title="${esc(nameOf(name))}: ${STATUS_TEXT[st]}">
     ${avatar(name)}<span class="who">${esc(personOf(name))}<small>${esc(sub)}</small></span>${marker}</a>`;
 }
@@ -508,11 +519,21 @@ async function Overview() {
           <a class="btn small" href="#/agents/${name}">Open chat</a></div></article>`);
     }
   }
+  const tasksById = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  for (const [name, ag] of stoppedForYou()) {
+    const w = ag.waiting_for_lead, t = tasksById[w.task];
+    cards.push(`<article class="need blocked">
+      <div class="k">${avatar(name)} Waiting for you · ${esc(nameOf(name))} stopped ${ago(w.since)}</div>
+      <div class="t">${t ? `<a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">· ${esc(t.project_name)}</span>` : ""}</div>
+      <div class="said">${esc(plainLine(w.text) || "It stopped without saying why.").slice(0, 280)}</div>
+      <div class="btn-row"><a class="btn small primary" href="#/agents/${name}">Answer</a>
+        ${t ? `<a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>` : ""}</div></article>`);
+  }
   const card = (t, kind, label, who, buttons) => `<article class="need ${kind}">
       <div class="k">${who ? avatar(who) : ""} ${esc(label)}</div>
       <div class="t"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">· ${esc(t.project_name)}</span></div>
       <div class="btn-row">${buttons}</div></article>`;
-  for (const t of tasks.filter((x) => x.status === "blocked")) {
+  for (const t of tasks.filter((x) => x.status === "blocked" && !stoppedOn(x.id))) {
     const who = t.blocked_by || t.assignee;
     cards.push(card(t, "blocked", `Blocked · ${who ? nameOf(who) : "needs you"}`, who,
       `${who ? `<a class="btn small primary" href="#/agents/${who}">Answer</a>` : ""}<a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>`));
@@ -520,7 +541,7 @@ async function Overview() {
   for (const t of tasks.filter((x) => x.status === "ready-for-review")) {
     cards.push(card(t, "review", `Ready for review${t.dev ? ` · ${nameOf(t.dev)} finished it` : ""}`, t.dev, reviewLink(t, true) + handButtons(t, 2, false)));
   }
-  for (const t of tasks.filter((x) => x.status === "changes-requested" && !state.agents[x.dev]?.status?.match(/working|waiting/))) {
+  for (const t of tasks.filter((x) => x.status === "changes-requested" && !stoppedOn(x.id) && !state.agents[x.dev]?.status?.match(/working|waiting/))) {
     cards.push(card(t, "rework", "Sent back for changes", t.dev, handButtons(t, 1) + reviewLink(t)));
   }
   for (const t of tasks.filter((x) => x.status === "ready-for-dev")) {
