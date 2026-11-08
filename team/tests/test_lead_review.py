@@ -243,6 +243,44 @@ class LeadReviewTest(unittest.TestCase):
 
     # ---- helpers ----
 
+    def test_claiming_rework_prints_every_round_of_the_lead_not_only_the_newest(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        self._the_dev_replies(task, "Fixed in abc1234.")
+        self._set_field(task, "status", "ready-for-review")
+        self._a_comment(kit, task, "Return an int.", file="app.py", line=2)
+        self._call(kit, f"submit('{self._id(task)}', 'changes')")
+
+        said = self._script(kit, "claim.py", self._id(task), "dev", agent="dev-2")
+
+        self.assertIn("2 rounds, 2 comments", said)
+        self.assertIn("1.1 `app.py:2`: Name it total.", said)
+        self.assertIn("reply: Fixed in abc1234.", said)
+        self.assertIn("2.1 `app.py:2`: Return an int.", said)
+
+    def test_a_follow_up_is_claimed_with_the_leads_comments_from_the_earlier_task_of_the_branch(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        self._set_field(first, "status", "done")
+        task = Path(self._script(kit, "new_task.py", str(project), "Handle zero", agent="techlead").splitlines()[0])
+        self._set_field(task, "branch", self._field(first, "branch"))
+        self._set_field(task, "status", "ready-for-dev")
+
+        said = self._script(kit, "claim.py", self._id(task), "dev", agent="dev-2")
+
+        self.assertIn(f"Round 1, ", said)
+        self.assertIn("Name it total.", said)
+        self.assertIn("Every one still holds", said)
+
+    def test_a_branch_the_lead_has_not_reviewed_is_claimed_without_a_checklist(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = Path(self._script(kit, "new_task.py", str(project), "Compute the total", agent="techlead").splitlines()[0])
+        self._set_field(task, "status", "ready-for-dev")
+
+        said = self._script(kit, "claim.py", self._id(task), "dev", agent="dev-2")
+
+        self.assertNotIn("The lead's comments", said)
+
     def _the_dev_edits(self, task: Path, file: str) -> None:
         folder = Path(self._field(task, "worktree"))
         (folder / file).write_text("def total():\n    return 3\n")

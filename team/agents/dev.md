@@ -90,19 +90,26 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Does it look like the reference code: names, structure, error handling? No → make it match.
    - Every test: exactly three blocks separated by empty lines (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
    - Is any logic duplicated from elsewhere? → reuse it.
+   - Does it break any of the lead's comments on this branch? `claim.py` prints them all, every round on every task
+     of the branch (again: `python3 {{KIT}}/team/tools/lead_review.py checklist TASK-NNN`). Check the whole feature's
+     diff against each one, not only the newest round: a comment answered in round 1 still holds in round 4, and
+     in a follow-up task. Yes → fix it.
    - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
 8. **Hand off.** Append to the Dev Log:
    - **Changed:** files, with one line each on why. Include this task's diff size (`git diff --stat <from_commit>..HEAD`).
    - **Criteria → code:** each AC number → where it's implemented and tested.
    - **Run locally:** exact commands, test data, env vars the reviewer needs to verify it.
-   - **Self-review:** done; anything you simplified or removed.
+   - **Self-review:** done; anything you simplified or removed; "checked against all N of the lead's comments on the
+     branch" when there are any.
    - **Notes for the lead:** suggestions, inconsistencies found, out-of-scope ideas (not implemented).
 
    Then set `status: ready-for-review`, **as the very last thing you do**. That notifies the reviewer and ends your part: in the console you then start on a fresh conversation, so everything the reviewer needs must already be in the task file.
 
 ## On changes-requested
 The task came back from the reviewer (the newest **Review Report** entry) or from the lead (the newest round under
-**Lead Review**), or both: handle everything not yet answered in either.
+**Lead Review**), or both: handle everything not yet answered in either. The lead's **earlier** rounds still hold
+too, including those on earlier tasks of the branch: `claim.py` prints them all. A fix for this round must not undo
+one of them; check the whole diff against every one before handing off (step 7).
 
 **The lead's comments** (Lead Review) are the lead's own code review, made on the diff in the console:
 - Each comment points at a line (`file:line`, with the code it was about) or is general. It's binding, like

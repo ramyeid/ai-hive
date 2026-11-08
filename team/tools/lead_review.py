@@ -508,9 +508,43 @@ def all_reviewed() -> dict[str, dict]:
     return out
 
 
+def checklist(meta: dict) -> str:
+    """Every comment the lead has made on the branch, in every round and on every task of it, oldest first, with the
+    dev's reply. They all still hold: printed for the dev and the reviewer each time they take a task on the branch
+    ('' when the lead hasn't reviewed the branch)."""
+    found = [r for r in branch_rounds(meta) if r["verdict"] == "changes" or r["comments"]]
+    if not found:
+        return ""
+    total = sum(len(r["comments"]) for r in found)
+    several = len({r["task"] for r in found}) > 1
+    lines = [f"The lead's comments on this branch: {plural(len(found), 'round')}, {plural(total, 'comment')}. "
+             "Every one still holds, not only the newest round: whatever you change, the feature's whole diff "
+             f"(git diff {meta.get('base') or 'main'}...HEAD) must follow them all, and none may come back."]
+    for n, r in enumerate(found, 1):
+        lines.append(f"Round {n}{' (on ' + r['task'] + ')' if several else ''}, "
+                     f"{r['at'][:10]}, {'changes requested' if r['verdict'] == 'changes' else 'approved'}:")
+        if r.get("summary"):
+            lines.append(f"  {r['summary'].strip()}")
+        for c in r["comments"]:
+            body = " ".join(c["body"].split())
+            lines.append(f"  {n}.{c['number']} {_where(c)}: {body}")
+            lines.append(f"       reply: {' '.join(c['reply'].split()) or '(none yet)'}")
+    return "\n".join(lines)
+
+
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
 def main() -> None:
+    if len(sys.argv) == 3 and sys.argv[1] == "checklist":
+        path = find_task(sys.argv[2])
+        if not path:
+            sys.exit(f"No task {sys.argv[2]} on the board.")
+        print(checklist(parse(path)) or "The lead hasn't reviewed this branch.")
+        return
     if len(sys.argv) != 3 or sys.argv[1] != "show":
-        sys.exit("usage: lead_review.py show TASK-NNN")
+        sys.exit("usage: lead_review.py show TASK-NNN | lead_review.py checklist TASK-NNN")
     for r in rounds(sys.argv[2]):
         print(f"Round {r['n']} ({r['verdict']}) at {r['commit'][:7]}:")
         for c in r["comments"]:

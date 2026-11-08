@@ -144,6 +144,11 @@ def main() -> None:
             print(f"Follow-up to {meta['follows']}: add commits on top of what's there. No new branch, no rebase, no force-push.")
         print(f"This task's changes: git diff {meta.get('from_commit')}..HEAD")
         print(f"Start every command with: cd {meta['worktree']} &&")
+    import lead_review   # noqa: E402  (imported here: it imports claim)
+    if (comments := lead_review.checklist(meta)):
+        print()
+        print(comments)
+        print()
     print(knowledge_hint(meta["project"]))
 
 
