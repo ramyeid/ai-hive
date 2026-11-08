@@ -48,6 +48,7 @@ const state = {
   since: {},          // name -> when it started working (ms)
   codeTask: {},       // dev/reviewer name -> the task whose code it's on, for "Review the code"
   reviewNote: {},     // task id -> the general comment you're writing for your review
+  reviewSent: null,   // the review you just submitted, for the banner on top of the review page
 };
 const emptyStream = () => ({ thinking: "", text: "", tool: "" });
 
@@ -1683,6 +1684,7 @@ async function CodeReview(r) {
   const numbered = d.rounds.map((x, i) => ({ ...x, shown: i + 1, onTask: severalTasks ? x.task : "" }));
   const rounds = numbered.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
     : `<details class="older-round"><summary>Round ${x.shown}${x.onTask ? ` (${esc(x.onTask)})` : ""}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("");
+  const sent = state.reviewSent?.task === d.task ? sentBanner(state.reviewSent, d) : "";
   const elsewhereTask = d.opened && d.task !== d.opened
     ? `<p class="notice">This branch's current task is <a href="#/tasks/${esc(d.task)}">${esc(d.task)}</a>: your comments and reviews go there, to the dev working on it.</p>` : "";
   const dev = d.dev && nameOf(d.dev);
@@ -1691,6 +1693,7 @@ async function CodeReview(r) {
     <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
       <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p>${elsewhereTask}</div>
       ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
+    ${sent}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
         ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (.)">${VSCODE_ICON}Open in ${editorName()} <kbd>.</kbd></button>` : ""}
@@ -1711,6 +1714,30 @@ async function CodeReview(r) {
         <button class="btn" data-action="submit-review" data-verdict="approve" ${d.head ? "" : "disabled"}>Approve</button></div>
       <p class="hint">${d.can_request_changes ? esc(d.can_request_changes) + " " : ""}<b>Request changes</b> sends ${d.pending.length ? plural(d.pending.length, "draft comment") : "your comments"} (and the general comment) back to ${esc(dev || "the dev who built it")}, who answers each one, fixes the code on the same branch, then hands it to the reviewer again. <b>Approve</b> only records your approval: the reviewer still has the last word before done.</p>
     </section>`}`;
+}
+
+// The banner after you submit a review: what happened, and the next step (the reviewer, or back to the board).
+function sentBanner(s, d) {
+  const task = { id: d.task, status: d.status, reviewer: d.reviewer, dev: d.dev };
+  const dev = d.dev ? nameOf(d.dev) : "the dev";
+  const reviewer = handCandidates(task)[0];
+  let title, next = "", button = "";
+  if (s.verdict === "changes") {
+    title = `Sent back to ${dev} with ${plural(s.comments, "comment")}`;
+    next = s.told ? `${dev} is on it now.` : `It's in ${dev}'s inbox.`;
+  } else {
+    title = "You approved this branch";
+    if (s.handed) next = `${nameOf(s.handed)} is on it now, for the final look.`;
+    else if (d.status === "ready-for-review" && reviewer) {
+      next = "The reviewer has the last word before it's done.";
+      button = `<button class="btn small primary" data-action="hand" data-task="${esc(d.task)}" data-agent="${reviewer}">Let ${esc(personOf(reviewer))} take it</button>`;
+    } else if (d.status === "in-review") next = `${d.reviewer ? nameOf(d.reviewer) : "The reviewer"} is reviewing it now.`;
+    else if (d.status === "done") next = "It's done.";
+    else next = `${dev} is still on it; it goes to the reviewer when ${dev} hands it on.`;
+  }
+  return `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span>
+    <div><b>${esc(title)}.</b> <span class="muted">${esc(next)}</span></div>
+    <div class="btn-row">${button}<a class="btn small" href="#/tasks">Back to Board</a></div></section>`;
 }
 
 // Up to three lines ending at this one, on the same side, as the comment's code context.
@@ -1864,12 +1891,11 @@ const reviewActions = {
     const done = await act(() => api(`/api/tasks/${encodeURIComponent(id)}/review/submit`, { method: "POST", body: { verdict, comment, mode: reviewView() } }));
     if (!done) return;
     state.reviewNote[id] = "";
-    if (verdict === "changes") {
-      const told = await pingDev(done.dev, id);
-      toast(told ? `Sent back to ${nameOf(done.dev)}, who's on it now.` : `Sent back to ${done.dev ? nameOf(done.dev) : "the dev"}. It's in their inbox.`);
-    } else toast("Approval recorded.");
+    const told = verdict === "changes" && await pingDev(done.dev, id);
+    state.reviewSent = { task: done.task || id, verdict, comments: done.comments.length, told };
     location.hash = reviewHref(id, "feature");
-    render(true);
+    await render(true);
+    scrollTo({ top: 0, behavior: "smooth" });   // the banner is at the top
   },
 };
 
@@ -2220,7 +2246,10 @@ const actions = {
   "board-view": (el) => { try { localStorage.setItem("boardView", el.dataset.view); } catch { /* this page only */ } render(true); },
   hand: async (el) => {
     const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/hand/${el.dataset.agent}`, { method: "POST" }));
-    if (done) { toast(done.message); refreshCounts(); render(true); }
+    if (!done) return;
+    if (state.reviewSent?.task === el.dataset.task) state.reviewSent.handed = el.dataset.agent;   // the banner says who's on it
+    else toast(done.message);
+    refreshCounts(); render(true);
   },
   "toggle-section": (el) => {
     const sec = el.closest(".rail-section").dataset.section;
@@ -2412,7 +2441,11 @@ document.addEventListener("toggle", (e) => {
   if (id) e.target.open ? state.openTools.add(id) : state.openTools.delete(id);
 }, true);
 
-window.addEventListener("hashchange", () => { render(); view.focus({ preventScroll: true }); });
+window.addEventListener("hashchange", () => {
+  if (route().page !== "review") state.reviewSent = null;   // the banner is for the review you just sent
+  render();
+  view.focus({ preventScroll: true });
+});
 
 // ---- boot ------------------------------------------------------------------------
 

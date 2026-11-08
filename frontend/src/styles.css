@@ -854,3 +854,9 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .tree-head .hide-viewed[aria-pressed="true"] { color: var(--brand); background: var(--brand-soft); }
 .tree-head .viewed-count { font-size: 0.78rem; white-space: nowrap; }
 .hide-viewed .tree li:has(> details):not(:has(.tree-file:not(.viewed))) { display: none; }
+
+/* after you submit a review */
+.sent-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--brand); border-radius: var(--radius-m); background: var(--brand-soft); }
+.sent-banner .tick { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--panel); font-weight: 700; }
+.sent-banner > div:first-of-type { flex: 1; min-width: 220px; }
+.sent-banner .btn-row { margin: 0; }

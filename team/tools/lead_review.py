@@ -393,7 +393,7 @@ def submit(task_id: str, verdict: str, comment: str = "", mode: str = "feature")
         if verdict == "changes":
             set_fields(path, status="changes-requested")
             on_task_change.process(path, actor="lead")
-    return {**r, "dev": meta.get("dev", "")}
+    return {**r, "dev": meta.get("dev", ""), "task": task_id}
 
 
 # ---- reading back (with the dev's replies) ----------------------------------------------
