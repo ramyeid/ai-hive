@@ -1716,7 +1716,7 @@ async function CodeReview(r) {
     </section>`}`;
 }
 
-// The banner after you submit a review: what happened, and the next step (the reviewer, or back to the board).
+// The banner after you submit a review: what happened, and the next step (request the final review, or back to the board).
 function sentBanner(s, d) {
   const task = { id: d.task, status: d.status, reviewer: d.reviewer, dev: d.dev };
   const dev = d.dev ? nameOf(d.dev) : "the dev";
@@ -1727,10 +1727,10 @@ function sentBanner(s, d) {
     next = s.told ? `${dev} is on it now.` : `It's in ${dev}'s inbox.`;
   } else {
     title = "You approved this branch";
-    if (s.handed) next = `${nameOf(s.handed)} is on it now, for the final look.`;
+    if (s.handed) next = `Final review requested: ${personOf(s.handed)} is on it now.`;
     else if (d.status === "ready-for-review" && reviewer) {
       next = "The reviewer has the last word before it's done.";
-      button = `<button class="btn small primary" data-action="hand" data-task="${esc(d.task)}" data-agent="${reviewer}">Let ${esc(personOf(reviewer))} take it</button>`;
+      button = `<button class="btn small primary" data-action="hand" data-task="${esc(d.task)}" data-agent="${reviewer}">Request final review from ${esc(personOf(reviewer))}</button>`;
     } else if (d.status === "in-review") next = `${d.reviewer ? nameOf(d.reviewer) : "The reviewer"} is reviewing it now.`;
     else if (d.status === "done") next = "It's done.";
     else next = `${dev} is still on it; it goes to the reviewer when ${dev} hands it on.`;
