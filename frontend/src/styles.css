@@ -551,7 +551,9 @@ details:not([open]) > .tree-dir::before { transform: rotate(-90deg); }
   .tree-strip span { writing-mode: horizontal-tb; }
   .review-tree { position: static; max-height: 260px; }
 }
-.review-file { margin: 12px 0; border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); overflow: hidden; }
+.review-file { margin: 12px 0; border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); overflow: clip; }
+/* the file's header stays at the top while you scroll through a long file, like GitHub (clip, not hidden: hidden would stop it sticking) */
+.review-file[open] > summary { position: sticky; top: 52px; z-index: 4; border-radius: var(--radius-m) var(--radius-m) 0 0; }
 .review-file > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; padding: 8px 12px; cursor: pointer; background: var(--sunken); border-bottom: 1px solid var(--rule); }
 .review-file:not([open]) > summary { border-bottom: 0; }
 .review-file .counts { margin-left: auto; font-size: 0.85rem; }
