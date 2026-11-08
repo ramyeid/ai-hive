@@ -5,7 +5,7 @@ running it in the background or on a server.
 
 ## Navigation
 
-- **Sidebar**: Home, Board and Activity; the Orchestrator, Team and Coach sections (each can be folded away);
+- **Sidebar**: Home, Board, Reviews and Activity; the Orchestrator, Team and Coach sections (each can be folded away);
   Knowledge; Settings and Terminal. On a phone it becomes a bar at the bottom.
 - **⌘K / Ctrl+K**: jump to any task, agent or page.
 - **/**: ask the Orchestrator from any page.
@@ -17,6 +17,7 @@ running it in the background or on a server.
 | **Home** | What needs you, each with its action: approvals, blocked tasks, tasks ready for review or waiting for a developer, the Coach's proposals. Then what's in progress and what was just finished. |
 | **Board** | Every task in its column (Blocked, Draft, Ready for dev, In dev, Ready for review, In review, Done), with filters by project and agent, and buttons to hand a task on or open its diff. **List** shows the same tasks as a table, with costs. |
 | **Task** | The spec, each agent's conversation on it, your code reviews, its activity and cost; a progress line; who wrote, built and reviewed it; the branch and related tasks. |
+| **Reviews** | Every feature branch, like a list of pull requests: **Open** (ready for review or being reviewed; the ones waiting for you first, also counted in the sidebar), **Draft** (the dev is still on it) and **Done**. Each shows its tasks, who has it, where your review stands and its size; search by branch, title or task ID. |
 | **Code review** | The branch's diff with line comments, request changes or approve. See [Usage](USAGE.md#reviewing-the-code-yourself). |
 | **Agent chat** | Talk to an agent. Tool calls are folded into one line per run; approval requests are pinned above the message box (Enter allows, Esc denies); `#` suggests task IDs. The side panel shows the task it's on, this conversation's cost and its earlier tasks. |
 | **Activity** | Every status change and who made it, by day, with filters; and every past conversation, which you can read or continue. |

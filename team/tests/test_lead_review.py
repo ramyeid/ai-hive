@@ -201,6 +201,46 @@ class LeadReviewTest(unittest.TestCase):
 
         self.assertEqual(self._field(task, "status"), "changes-requested")
 
+    def test_a_branch_ready_for_review_and_never_reviewed_is_open_and_needs_the_lead(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+
+        row = self._call(kit, "branches()")[0]
+
+        self.assertEqual((row["state"], row["needs_you"], row["your_review"], row["task"]), ("open", True, "none", self._id(task)))
+        self.assertEqual(row["size"]["files"], 1)
+
+    def test_after_the_lead_approves_the_branch_no_longer_needs_them_until_new_commits(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        self._call(kit, f"submit('{self._id(task)}', 'approve')")
+
+        approved = self._call(kit, "branches()")[0]
+        self._the_dev_edits(task, "app.py")
+        changed = self._call(kit, "branches()")[0]
+
+        self.assertEqual((approved["needs_you"], approved["your_review"]), (False, "approved"))
+        self.assertEqual((changed["needs_you"], changed["your_review"]), (True, "new"))
+
+    def test_a_branch_the_dev_is_still_on_is_a_draft_and_one_with_every_task_done_is_done(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="in-dev")
+
+        draft = self._call(kit, "branches()")[0]["state"]
+        self._set_field(task, "status", "done")
+        done = self._call(kit, "branches()")[0]
+
+        self.assertEqual((draft, done["state"], done["size"]), ("draft", "done", None))
+
+    def test_a_follow_up_task_shows_on_its_branchs_row_not_as_a_second_row(self):
+        kit, project = self._a_kit(), self._a_project()
+        first = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")
+        follow_up = self._a_follow_up_in_dev(kit, project, first)
+
+        rows = self._call(kit, "branches()")
+
+        self.assertEqual([[t["id"] for t in r["tasks"]] for r in rows], [[self._id(first), self._id(follow_up)]])
+
     # ---- helpers ----
 
     def _the_dev_edits(self, task: Path, file: str) -> None:

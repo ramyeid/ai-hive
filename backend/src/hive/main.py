@@ -476,6 +476,11 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         except lead_review.ReviewError as exc:
             raise HTTPException(409, str(exc))
 
+    @app.get("/api/reviews")
+    def reviews():
+        """Every feature branch, with where the lead's review stands (the Reviews page)."""
+        return lead_review.branches()
+
     @app.get("/api/tasks/{task_id}/review")
     def review(task_id: str, mode: str = "feature"):
         return reviewing(lead_review.diff, task_id, mode)

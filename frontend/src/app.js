@@ -236,6 +236,11 @@ function needsCount() {
 }
 
 function showCounts() {
+  const toReview = (state.reviews || []).filter((b) => b.needs_you).length;
+  const rb = document.getElementById("reviews-badge");
+  rb.textContent = toReview;
+  rb.hidden = toReview === 0;
+  rb.title = `${toReview} ${toReview === 1 ? "branch" : "branches"} waiting for your review`;
   const n = needsCount();
   for (const id of ["home-badge", "home-badge-tab"]) {
     const badge = document.getElementById(id);
@@ -246,7 +251,7 @@ function showCounts() {
 
 async function refreshCounts() {
   try {
-    state.tasks = await api("/api/tasks");
+    [state.tasks, state.reviews] = await Promise.all([api("/api/tasks"), api("/api/reviews").catch(() => state.reviews || [])]);
   } catch { return; }
   renderRail();
 }
@@ -259,7 +264,7 @@ function route() {
   if (page === "tasks" && id && sub === "review") return { page: "review", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
-    "": "overview", tasks: id ? "task" : "tasks", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
+    "": "overview", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -267,7 +272,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview };
+  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -290,7 +295,7 @@ function renderCrumb(r) {
   const link = (href, text) => `<a href="${href}">${esc(text)}</a>`;
   const parts = {
     overview: ["Home"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
-    task: [link("#/tasks", "Board"), r.id], review: [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Code review"],
+    task: [link("#/tasks", "Board"), r.id], review: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Code review"], reviews: ["Reviews"],
     "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
     agent: [state.agents[r.id] ? ({ orchestrator: "Orchestrator", coach: "Coach" }[roleOf(r.id)] || "Team") : "Agents", state.agents[r.id] ? nameOf(r.id) : r.id],
     settings: r.id ? [link("#/settings", "Settings"), ...(r.sub ? [link(`#/settings/${r.id}`, (SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]), r.sub[0].toUpperCase() + r.sub.slice(1)] : [(SETTINGS_SECTIONS.find(([k]) => k === r.id) || [, r.id])[1]])] : ["Settings"], terminal: ["Terminal"], improvements: ["Coach", "Improvements"], team: ["Coach", "Team history"],
@@ -303,7 +308,7 @@ function renderCrumb(r) {
 function highlightNav(r) {
   document.querySelectorAll("[data-nav]").forEach((a) => {
     const nav = a.dataset.nav;
-    const on = nav === r.page || (nav === "orchestrator-tab" && r.page === "agent" && r.id === "orchestrator") || (nav === "tasks" && ["task", "task-chat", "review"].includes(r.page)) || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
+    const on = nav === r.page || (nav === "orchestrator-tab" && r.page === "agent" && r.id === "orchestrator") || (nav === "tasks" && ["task", "task-chat"].includes(r.page)) || (nav === "reviews" && r.page === "review") || (nav === "history" && r.page === "session") || (nav === "knowledge" && r.page === "knowledge-file") || (nav === "team" && r.page.startsWith("team-"));
     on ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
   });
   document.querySelectorAll(".rail-agent").forEach((a) => {
@@ -370,7 +375,7 @@ function closeRail() { document.body.classList.remove("rail-open"); const s = do
 
 // ---- jump anywhere (⌘K) ----------------------------------------------------------
 
-const PAGES_TO_JUMP = [["Home", "#/"], ["Board", "#/tasks"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
+const PAGES_TO_JUMP = [["Home", "#/"], ["Board", "#/tasks"], ["Reviews", "#/reviews"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
   ["Team history", "#/team"], ["Knowledge", "#/knowledge"], ["Settings", "#/settings"], ["Terminal", "#/terminal"]];
 
 async function openJump() {
@@ -1716,6 +1721,59 @@ async function CodeReview(r) {
     </section>`}`;
 }
 
+// ---- Reviews: every feature branch, like a list of pull requests --------------------------
+
+const REVIEW_TABS = [["open", "Open"], ["draft", "Draft"], ["done", "Done"]];
+const YOUR_REVIEW = { new: ["New commits since your review", "need"], none: ["Not reviewed yet", "need"],
+  approved: ["You approved", "ok"], changes: ["Changes requested", "chg"] };
+
+async function Reviews() {
+  const all = await api("/api/reviews");
+  state.reviews = all;
+  showCounts();
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  const tab = REVIEW_TABS.some(([k]) => k === params.get("tab")) ? params.get("tab") : "open";
+  const projects = [...new Set(all.map((b) => b.project_name))].sort();
+  const tabs = REVIEW_TABS.map(([k, label]) => `<a class="tab" href="#/reviews?tab=${k}" ${k === tab ? 'aria-current="page"' : ""}>${label} <span class="count">${all.filter((b) => b.state === k).length}</span></a>`).join("");
+  const holder = (b) => b.state === "done" ? "done"
+    : b.status === "in-review" ? `${b.reviewer ? nameOf(b.reviewer) : "the reviewer"} is reviewing`
+    : b.status === "ready-for-review" ? `ready for review ${ago(b.updated)}`
+    : b.status === "in-dev" || b.status === "changes-requested" ? `${b.dev ? nameOf(b.dev) : "a dev"} ${b.status === "in-dev" ? "is building" : "has your changes"}`
+    : stageLabel(b.status).toLowerCase();
+  const row = (b) => {
+    const [you, cls] = !b.head ? ["No code yet", "none"] : b.state === "done" && b.your_review === "none" ? ["", ""] : YOUR_REVIEW[b.your_review];
+    const ids = b.tasks.map((x) => x.id).join(" ");
+    return `<a class="rv-row" href="${reviewHref(b.task)}" data-search="${esc(`${b.title} ${b.branch} ${ids} ${b.tasks.map((x) => x.title).join(" ")}`.toLowerCase())}" data-project="${esc(b.project_name)}">
+      <span class="rv-ico ${b.state}" aria-label="${b.state}"></span>
+      <span class="rv-main"><span class="rv-title">${esc(b.title)}</span>
+        <span class="rv-meta"><code>${esc(b.branch)}</code> · ${esc(b.project_name)} · ${esc(ids.replaceAll(" ", ", "))} · ${esc(holder(b))}</span></span>
+      ${you ? `<span class="rv-you ${cls}">${esc(you)}</span>` : "<span></span>"}
+      <span class="rv-size">${b.size ? `${plural(b.size.files, "file")} · <span class="plus">+${b.size.additions}</span> <span class="minus">−${b.size.deletions}</span>` : ""}</span></a>`;
+  };
+  const rows = all.filter((b) => b.state === tab);
+  const empty = { open: "Nothing to review: no branch is ready for review.", draft: "No branch is being built right now.", done: "No finished branches yet." }[tab];
+  return `<div class="page-head"><div><h1>Reviews</h1><p class="muted">Every feature branch the team has worked on, and where your review stands. Open one to review it.</p></div></div>
+    <nav class="tabs rv-tabs" aria-label="Branches">${tabs}</nav>
+    <div class="rv-filters"><input type="search" id="rv-search" placeholder="Search by branch, title or task ID…" aria-label="Search reviews" autocomplete="off">
+      ${projects.length > 1 ? `<select id="rv-project" aria-label="Project"><option value="">All projects</option>${projects.map((p) => `<option>${esc(p)}</option>`).join("")}</select>` : ""}</div>
+    ${rows.length ? `<div class="rv-list">${rows.map(row).join("")}</div><p class="empty rv-none" hidden>No branch matches.</p>` : `<div class="empty">${empty}</div>`}
+    ${tab === "done" ? `<p class="hint">Done means every task on the branch is done. Merging stays yours, outside Hive.</p>` : ""}`;
+}
+
+// Search and project filter on the Reviews page, in the page (no reload).
+function filterReviews() {
+  const q = (document.getElementById("rv-search")?.value || "").trim().toLowerCase();
+  const project = document.getElementById("rv-project")?.value || "";
+  let shown = 0;
+  document.querySelectorAll(".rv-row").forEach((r) => {
+    const on = (!q || q.split(/\s+/).every((w) => r.dataset.search.includes(w))) && (!project || r.dataset.project === project);
+    r.hidden = !on;
+    shown += on;
+  });
+  const none = document.querySelector(".rv-none");
+  if (none) none.hidden = shown > 0;
+}
+
 // The banner after you submit a review: what happened, and the next step (request the final review, or back to the board).
 function sentBanner(s, d) {
   const task = { id: d.task, status: d.status, reviewer: d.reviewer, dev: d.dev };
@@ -2145,6 +2203,10 @@ async function TerminalPage(r, quiet) {
 // ---- after-render wiring --------------------------------------------------------
 
 const afterRender = {
+  reviews() {
+    document.getElementById("rv-search")?.addEventListener("input", filterReviews);
+    document.getElementById("rv-project")?.addEventListener("change", filterReviews);
+  },
   async terminal() {
     const slot = document.getElementById("term-slot");
     if (!slot) return;

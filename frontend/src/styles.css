@@ -860,3 +860,35 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .sent-banner .tick { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--panel); font-weight: 700; }
 .sent-banner > div:first-of-type { flex: 1; min-width: 220px; }
 .sent-banner .btn-row { margin: 0; }
+
+/* Reviews: every feature branch, like a list of pull requests */
+.rv-tabs { margin-bottom: 14px; }
+.rv-tabs .count { margin-left: 4px; padding: 1px 7px; border-radius: 9px; background: var(--sunken); color: var(--muted); font-size: 0.74rem; font-weight: 600; }
+.rv-filters { display: flex; gap: 10px; margin-bottom: 14px; }
+.rv-filters input { flex: 1; max-width: 520px; }
+.rv-filters select { width: auto; }
+.rv-list { border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); overflow: hidden; }
+.rv-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid var(--rule); color: var(--ink); text-decoration: none; }
+.rv-row:last-child { border-bottom: 0; }
+.rv-row:hover { background: var(--sunken); }
+.rv-row[hidden] { display: none; }
+.rv-ico { width: 14px; height: 14px; border-radius: 50%; }
+.rv-ico.open { border: 2px solid var(--dev); }
+.rv-ico.draft { border: 2px dashed var(--muted); }
+.rv-ico.done { background: var(--techlead); }
+.rv-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rv-title { font-weight: 600; }
+.rv-meta { color: var(--muted); font-size: 0.84rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-meta code { font-size: 0.8rem; }
+.rv-you { padding: 2px 9px; border-radius: 10px; font-size: 0.78rem; white-space: nowrap; }
+.rv-you.need { background: var(--attention); color: var(--panel); }
+.rv-you.ok { background: var(--brand-soft); color: var(--ink); }
+.rv-you.none { background: var(--sunken); color: var(--muted); }
+.rv-you.chg { background: color-mix(in srgb, var(--warn-ink, #8a5a00) 14%, transparent); color: var(--warn-ink, #8a5a00); }
+.rv-size { min-width: 120px; color: var(--muted); font-size: 0.8rem; text-align: right; white-space: nowrap; }
+@media (max-width: 720px) {
+  .rv-row { grid-template-columns: 14px minmax(0, 1fr); }
+  .rv-you, .rv-size { grid-column: 2; justify-self: start; text-align: left; min-width: 0; }
+  .rv-meta { white-space: normal; }
+}

@@ -440,6 +440,57 @@ def rounds(task_id: str) -> list[dict]:
     return out
 
 
+# ---- every feature branch, for the Reviews page ------------------------------------------
+
+OPEN = ("ready-for-review", "in-review")
+_sizes: dict[tuple[str, str], dict] = {}   # (project, head commit) -> files and lines changed; a commit never changes
+
+
+def _size(meta: dict, commit: str) -> dict:
+    key = (meta["project"], commit)
+    if key not in _sizes:
+        stat = _git(meta["project"], "diff", "--shortstat", f"{base_ref(meta)}...{commit}").stdout
+        numbers = {k: int(n) for n, k in re.findall(r"(\d+) (file|insertion|deletion)", stat)}
+        _sizes[key] = {"files": numbers.get("file", 0), "additions": numbers.get("insertion", 0),
+                       "deletions": numbers.get("deletion", 0)}
+    return _sizes[key]
+
+
+def branches() -> list[dict]:
+    """One row per feature branch: its tasks, who has it, where the lead's review stands and how big it is.
+    state: open (ready for review or being reviewed), draft (the dev is still on it) or done (every task done).
+    needs_you: open, and new since the lead's last review (or never reviewed). Those come first."""
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for meta in map(parse, task_files()):
+        if meta.get("branch") and meta.get("project"):
+            groups.setdefault((meta["project"], meta["branch"]), []).append(meta)
+    out = []
+    for (project, branch), tasks in groups.items():
+        tasks.sort(key=lambda m: int(re.sub(r"\D", "", m.get("id", "0")) or 0))
+        active = [m for m in tasks if m.get("status") in ACTIVE]
+        current = (active or [m for m in tasks if m.get("dev")] or tasks)[-1]
+        status = current.get("status", "")
+        state = "done" if all(m.get("status") == "done" for m in tasks) else "open" if status in OPEN else "draft"
+        commit = head(current)
+        reviewed = branch_rounds(current)
+        last = reviewed[-1] if reviewed else None
+        needs_you = state == "open" and bool(commit) and (not last or last["commit"] != commit)
+        your_review = ("new" if last and needs_you else "none" if not last
+                       else "approved" if last["verdict"] == "approve" else "changes")
+        files = [find_task(m["id"]) for m in tasks]
+        updated = max((f.stat().st_mtime for f in files if f), default=0)
+        out.append({
+            "branch": branch, "project": project, "project_name": Path(project).name,
+            "title": tasks[0].get("title", ""), "tasks": [{"id": m["id"], "title": m.get("title", ""), "status": m.get("status", "")} for m in tasks],
+            "task": current["id"], "status": status, "dev": current.get("dev", ""), "reviewer": current.get("reviewer", ""),
+            "state": state, "needs_you": needs_you, "your_review": your_review, "head": commit,
+            "updated": dt.datetime.fromtimestamp(updated).isoformat(timespec="seconds") if updated else "",
+            "size": _size(current, commit) if commit and state != "done" else None,
+        })
+    out.sort(key=lambda b: b["updated"], reverse=True)       # newest first,
+    return sorted(out, key=lambda b: not b["needs_you"])     # and what needs the lead before the rest
+
+
 def all_reviewed() -> dict[str, dict]:
     """Per task: how many rounds the lead submitted and the commit last reviewed (for lists)."""
     out = {}
