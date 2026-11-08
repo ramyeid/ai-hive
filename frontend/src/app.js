@@ -1559,7 +1559,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
       ${f.changed_since_viewed ? `<span class="pill warn changed-since">Changed since you viewed it</span>` : ""}
       <button class="viewed-toggle" data-action="mark-viewed" aria-pressed="${!!f.viewed}" title="Mark as viewed: it folds away until the dev changes it"><span class="box" aria-hidden="true"></span>Viewed</button></summary>
-    ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap"><table class="code-diff ${layout}">
+    ${f.binary ? `<p class="muted pad">Binary file, not shown.</p>` : rows.length ? `<div class="table-wrap" style="contain-intrinsic-size: auto ${rows.length * 24}px"><table class="code-diff ${layout}">
       <colgroup>${layout === "split" ? `<col class="ln"><col class="half"><col class="ln"><col class="half">` : `<col class="ln"><col class="ln"><col>`}</colgroup>
       <tbody>${rows.join("")}</tbody></table></div>` : `<p class="muted pad">No line changes.</p>`}
   </details>`;
@@ -1601,14 +1601,15 @@ function fileTree(files, drafts) {
     });
     return dirs.join("") + items.join("");
   };
-  const eye = (hidden) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>${hidden ? '<path d="M2.5 13.5l11-11"/>' : ""}</svg>`;
   return `<aside class="review-tree" aria-label="Changed files">
     <div class="tree-head"><b>Files</b> <span class="muted viewed-count" title="Files you marked viewed">${files.filter((f) => f.viewed).length}/${files.length} viewed</span>
       <button class="btn small ghost" data-action="tree-fold" data-open="false" title="Fold every folder">Collapse all</button>
-      <button class="icon-btn hide-viewed" data-action="hide-viewed" aria-pressed="${hideViewed()}" aria-label="Hide viewed files" title="${hideViewed() ? "Show" : "Hide"} the files you marked viewed">${eye(hideViewed())}</button>
+      <button class="icon-btn hide-viewed" data-action="hide-viewed" aria-pressed="${hideViewed()}" aria-label="Hide viewed files" title="${hideViewed() ? "Show" : "Hide"} the files you marked viewed">${eyeIcon(hideViewed())}</button>
       <button class="icon-btn tree-hide" data-action="review-tree" aria-label="Hide the files" title="Hide the files, show only the diff"><svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.8" y="2.8" width="12.4" height="10.4" rx="1.5"/><path d="M6 2.8v10.4M10.5 6.2 8.7 8l1.8 1.8"/></svg></button></div>
     <ul class="tree">${render(root, "")}</ul></aside>`;
 }
+
+const eyeIcon = (hidden) => `<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>${hidden ? '<path d="M2.5 13.5l11-11"/>' : ""}</svg>`;
 
 // Whether files you marked viewed are hidden from the diff and the tree, remembered in this browser.
 function hideViewed() {
@@ -1778,9 +1779,13 @@ const reviewActions = {
       toast(err.message, true);
     }
   },
-  "hide-viewed": () => {
-    try { localStorage.setItem("hideViewed", hideViewed() ? "" : "1"); } catch { /* this page only */ }
-    render(true);
+  "hide-viewed": (el) => {   // in the page only: no need to fetch the diff again
+    const on = !hideViewed();
+    try { localStorage.setItem("hideViewed", on ? "1" : ""); } catch { /* this page only */ }
+    document.querySelector(".review-body")?.classList.toggle("hide-viewed", on);
+    el.setAttribute("aria-pressed", String(on));
+    el.title = `${on ? "Show" : "Hide"} the files you marked viewed`;
+    el.innerHTML = eyeIcon(on);
   },
   "open-folder": () => reviewOpen(),
   "review-tree": () => {
