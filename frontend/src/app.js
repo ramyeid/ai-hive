@@ -1143,7 +1143,7 @@ async function Settings(r) {
   const live = await api("/api/slack").catch(() => ({}));
   const keys = state.settings.providers.filter((p) => p.engine !== "claude" && p.has_key).length;
   const hint = { team: `${agentIds().length} agents`, models: keys ? `${keys} key${keys > 1 ? "s" : ""}` : "",
-    integrations: live.connected ? `<span class="ok">● Slack</span>` : live.error ? `<span class="bad">● Slack</span>` : "" };
+    integrations: integrationsDot(live) };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
   const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
     : section === "integrations" && r.sub === "editor" ? await editorSection()
@@ -1305,6 +1305,13 @@ function slackNotifications() {
       </fieldset>
       <div class="btn-row"><button class="btn primary">Save notifications</button></div>
     </form></section>`;
+}
+
+// One dot beside Integrations, whatever is set up: red when one needs attention, green when they're all fine.
+function integrationsDot(live) {
+  const on = [live.connected && "Slack", editorOn() && "Editor"].filter(Boolean);
+  if (live.error) return `<span class="bad" title="Slack: ${esc(live.error)}">●</span>`;
+  return on.length ? `<span class="ok" title="On: ${on.join(", ")}">●</span>` : "";
 }
 
 async function editorSection() {
