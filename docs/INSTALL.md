@@ -10,6 +10,7 @@
 | git | Each feature gets its own branch and worktree |
 | [uv](https://docs.astral.sh/uv/) | For the console. macOS: `brew install uv`. Linux: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | [GitHub CLI](https://cli.github.com) (optional) | Logged in (`gh auth login`), so the Coach can read your pull requests |
+| [code-server](https://github.com/coder/code-server) (optional) | To open code reviews in VS Code in the browser. macOS: `brew install code-server`. Linux: `curl -fsSL https://code-server.dev/install.sh \| sh` |
 
 ## Install
 
@@ -76,8 +77,15 @@ bash scripts/start.sh --background
 | `CONSOLE_PASSWORD` | Required with `CONSOLE_HOSTS` (8 characters or more) |
 | `CONSOLE_URL` | The address used in links from Slack and the Orchestrator (also in Settings → Access & links) |
 | `ENABLE_TERMINAL` | `0` turns off the browser terminal |
+| `ENABLE_EDITOR` | `0` turns off VS Code in the browser for good (it's off until turned on in Settings) |
+| `CODE_SERVER` | Where code-server is, if it isn't on the `PATH` or in the usual install places |
 
-Use HTTPS in front of the console if the network isn't trusted. Behind nginx, let the terminal's WebSocket through:
+To open code reviews in VS Code in the browser, install [code-server](https://github.com/coder/code-server) on the
+server (`curl -fsSL https://code-server.dev/install.sh | sh`), then turn it on in **Settings → Integrations →
+Editor**. See [CONSOLE.md](CONSOLE.md#vs-code-in-the-browser).
+
+Use HTTPS in front of the console if the network isn't trusted. Behind nginx, let the terminal's and the editor's
+WebSockets through:
 
 ```nginx
 proxy_http_version 1.1;

@@ -664,7 +664,7 @@ requires-dist = [
     { name = "python-multipart", specifier = ">=0.0.9" },
     { name = "slack-sdk", specifier = ">=3.27" },
     { name = "uvicorn", specifier = ">=0.29" },
-    { name = "websockets", specifier = ">=12" },
+    { name = "websockets", specifier = ">=14" },
 ]
 
 [[package]]

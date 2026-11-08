@@ -146,6 +146,8 @@ def save_settings(changes: dict) -> dict:
         if key in ("users", "channel"):
             value = ",".join(u for u in re.split(r"[\s,]+", value) if u)
         settings["slack"][key] = value
+    if "editor_browser" in changes:   # VS Code in the browser (code-server), see editor.py
+        settings["editor_browser"] = bool(changes["editor_browser"])
     if "slack_prefs" in changes:
         prefs = changes["slack_prefs"]
         current = slack_prefs()

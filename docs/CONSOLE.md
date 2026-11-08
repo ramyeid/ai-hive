@@ -58,6 +58,29 @@ agents' home folder. It's on by default; start the console with `ENABLE_TERMINAL
 > **Anyone who can open the console can run commands on that machine.** Keep it on localhost, or behind a login
 > (your reverse proxy or the console's password).
 
+## VS Code in the browser
+
+**Open in VS Code** (or **.**) in a code review opens the branch's worktree in VS Code in a new tab, like GitHub's
+**.**: [code-server](https://github.com/coder/code-server), run by Hive on the machine the console runs on, served
+at `/editor/` behind the console's own host and sign-in checks. Install it there once, then turn it on in
+**Settings → Integrations → Editor**:
+
+```bash
+curl -fsSL https://code-server.dev/install.sh | sh     # Linux
+brew install code-server                               # macOS
+```
+
+Hive starts it on first use (on a Unix socket in `data/editor/`, which also keeps its settings and extensions) and
+stops it with the console. Extensions come from [Open VSX](https://open-vsx.org): most are there, but not
+Microsoft's own (Pylance, for instance; Python and Ruff are). A browser may use the editor only after the console
+page opened it (a cookie no other site can send), and its live connection must come from the console's own page.
+
+> **Like the Terminal, anyone who can open the console can edit files and run commands with it.** It's off until you
+> turn it on; start the console with `ENABLE_EDITOR=0` to keep it off for good.
+
+Each browser can pick its desktop VS Code or Cursor instead (over SSH when Hive runs on a server), in the same
+settings page.
+
 ## Security
 
 - By default the console answers only on 127.0.0.1, to its own host names.

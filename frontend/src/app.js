@@ -148,6 +148,7 @@ async function loadState() {
   state.settings = data.settings;
   state.kit = data.kit;
   state.terminal = data.terminal;
+  state.editorBrowser = !!data.editor_browser;
   const improvements = document.getElementById("improvements-badge");
   improvements.textContent = data.improvements;
   improvements.hidden = !data.improvements;
@@ -1124,7 +1125,7 @@ async function Settings(r) {
     integrations: live.connected ? `<span class="ok">● Slack</span>` : live.error ? `<span class="bad">● Slack</span>` : "" };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
   const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
-    : section === "integrations" && r.sub === "editor" ? editorSection()
+    : section === "integrations" && r.sub === "editor" ? await editorSection()
     : await { team: teamSection, models: modelsSection, integrations: integrationsSection, access: accessSection, workspace: workspaceSection,
       appearance: appearanceSection, about: aboutSection }[section](live);
   return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
@@ -1135,13 +1136,13 @@ const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}<
 // The apps Hive connects to. Slack today; each new one gets a card here and its own page.
 const INTEGRATIONS = [
   { id: "slack", name: "Slack", icon: "slack", text: "Talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in a thread." },
-  { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code or Cursor, indexed: press . in a code review." },
+  { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code, in the browser like GitHub's . key, or in your desktop editor." },
 ];
 
 function integrationsSection(live) {
   const status = (id) => id === "slack"
     ? (live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>` : live.error ? `<span class="slack-status bad"><span class="dot"></span>Error</span>` : `<span class="slack-status"><span class="dot"></span>Not connected</span>`)
-    : id === "editor" ? (editorOn() ? `<span class="slack-status on"><span class="dot"></span>${esc(editorName())}${editorPrefs().where === "ssh" ? ` over SSH (${esc(editorPrefs().host)})` : ""}</span>` : `<span class="slack-status"><span class="dot"></span>Off</span>`)
+    : id === "editor" ? (editorOn() ? `<span class="slack-status on"><span class="dot"></span>${editorPrefs().app === "browser" ? "In the browser" : esc(editorName()) + (editorPrefs().where === "ssh" ? ` over SSH (${esc(editorPrefs().host)})` : "")}</span>` : `<span class="slack-status"><span class="dot"></span>Off</span>`)
     : "";
   return settingsHead("Integrations", "The apps Hive works with. More will appear here.")
     + `<div class="integrations">${INTEGRATIONS.map((i) => `<a class="integration" href="#/settings/integrations/${i.id}">
@@ -1285,21 +1286,34 @@ function slackNotifications() {
     </form></section>`;
 }
 
-function editorSection() {
-  const e = editorPrefs();
-  const radio = (name, value, label, checked) => `<label class="radio"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""}> ${label}</label>`;
+async function editorSection() {
+  const e = editorPrefs(), cs = await api("/api/editor").catch(() => ({}));
+  const radio = (name, value, label, checked, extra = "") => `<label class="radio"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""} ${extra}> <span>${label}</span></label>`;
+  const found = cs.installed
+    ? `<p class="hint"><span class="ok">●</span> code-server ${esc(cs.version)} found at <code>${esc(cs.path)}</code>.</p>`
+    : `<p class="hint"><span class="bad">●</span> code-server isn't installed on the Hive machine. Install it there once, then reload this page:<br>
+        Linux: <code>curl -fsSL https://code-server.dev/install.sh | sh</code> &nbsp; macOS: <code>brew install code-server</code></p>`;
+  const browserBlocked = !cs.allowed ? "disabled" : "";
   return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Editor</p>` + settingsHead("Editor", "")
-    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in your editor: <b>Open in VS Code</b> (or <b>.</b>) in a code review opens the branch's worktree folder, which your editor indexes (go to definition, references, search). Saved in this browser, so each computer can have its own.</p>
+    + `<section><p class="muted" style="max-width:68ch">Open the code you're reviewing in VS Code: <b>Open in VS Code</b> (or <b>.</b>) in a code review opens the branch's worktree folder, indexed (go to definition, references, search).</p>
     <form class="form editor-form" id="editor-form">
-      <fieldset><legend>Open code in</legend><div class="radios">${radio("app", "vscode", "VS Code", e.app === "vscode")}${radio("app", "cursor", "Cursor", e.app === "cursor")}${radio("app", "off", "Off", !EDITORS[e.app])}</div></fieldset>
-      <fieldset><legend>Where the code is</legend>
+      <fieldset><legend>Open code in</legend><div class="radios editor-apps">
+        ${radio("app", "browser", "<b>In the browser</b>: VS Code in a new tab, running on the Hive machine (like GitHub's <b>.</b>)", e.app === "browser", browserBlocked)}
+        ${radio("app", "vscode", "VS Code on this computer", e.app === "vscode")}
+        ${radio("app", "cursor", "Cursor on this computer", e.app === "cursor")}
+        ${radio("app", "off", "Off", e.app === "off")}</div></fieldset>
+      <div class="editor-browser">
+        ${!cs.allowed ? `<p class="hint"><span class="bad">●</span> Turned off on this server (<code>ENABLE_EDITOR=0</code>).</p>` : found}
+        <p class="hint">Anyone who can open this console can edit files and run commands with it, like the Terminal page. Extensions come from Open VSX (most are there; Microsoft's own, like Pylance, aren't). <code>ENABLE_EDITOR=0</code> turns it off for good.</p>
+      </div>
+      <fieldset class="editor-desktop"><legend>Where the code is</legend>
         ${radio("where", "local", "On this computer: Hive runs here", e.where !== "ssh")}
         ${radio("where", "ssh", "On a server I reach over SSH", e.where === "ssh")}
         <div class="ssh-host"><label for="editor-host">SSH host</label>
           <input type="text" id="editor-host" value="${esc(e.host)}" placeholder="hive-ec2" spellcheck="false" autocapitalize="off">
           <p class="hint">A <code>Host</code> from your <code>~/.ssh/config</code> (or <code>user@address</code>). Needs the <b>Remote - SSH</b> extension; the first time, your editor sets itself up on the server and installs your extensions there.</p></div>
+        <p class="hint">Saved in this browser, so each computer can have its own. The first time, your browser asks whether to open the app: tick <b>Always allow</b>.</p>
       </fieldset>
-      <p class="hint">The first time, your browser asks whether to open ${esc(editorName())}: tick <b>Always allow</b>.</p>
       <div class="btn-row"><button class="btn primary">Save</button></div>
     </form></section>`;
 }
@@ -1484,15 +1498,22 @@ function markHunk(lines) {
 
 // ---- opening the code in your editor (Settings → Integrations → Editor, kept in this browser) ----
 
-const EDITORS = { vscode: { name: "VS Code", scheme: "vscode" }, cursor: { name: "Cursor", scheme: "cursor" } };
+// browser: VS Code in a new tab, run by Hive on its own machine (code-server); vscode/cursor: the desktop app.
+const EDITORS = { browser: { name: "VS Code" }, vscode: { name: "VS Code", scheme: "vscode" }, cursor: { name: "Cursor", scheme: "cursor" } };
 const VSCODE_ICON = '<svg class="ico-vscode" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.6 2 8.4 10.4 3.7 6.8 2 7.7v8.6l1.7.9 4.7-3.6 9.2 8.4L22 20.2V3.8zM4 14.4V9.6L6.6 12zm13.6 2.3L12.1 12l5.5-4.7z"/></svg>';
 
-// Off until you set it up in Settings → Integrations → Editor.
+// In the browser once the lead turns it on for the server; a browser can pick a desktop editor instead (or Off).
 function editorPrefs() {
-  try { return { app: "off", where: "local", host: "", ...JSON.parse(localStorage.getItem("editor") || "{}") }; }
-  catch { return { app: "off", where: "local", host: "" }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("editor") || "{}"); } catch { /* private window */ }
+  const prefs = { where: "local", host: "", ...saved };
+  if (!saved.app || saved.app === "browser") prefs.app = state.editorBrowser ? "browser" : "off";
+  return prefs;
 }
-const editorOn = () => { const e = editorPrefs(); return !!EDITORS[e.app] && (e.where !== "ssh" || !!e.host); };
+const editorOn = () => {
+  const e = editorPrefs();
+  return e.app === "browser" ? state.editorBrowser : !!EDITORS[e.app] && (e.where !== "ssh" || !!e.host);
+};
 const editorName = () => (EDITORS[editorPrefs().app] || EDITORS.vscode).name;
 
 // vscode://file/<folder> on this computer; over SSH, vscode://vscode-remote/ssh-remote+<host>/<folder>
@@ -1833,7 +1854,13 @@ function reviewOpen() {
   const r = state.reviewFolder || {};
   if (!r.folder) return toast("This branch isn't checked out anywhere yet.", true);
   if (!r.onBranch) toast(`The branch's worktree was removed, so this opens your project folder, which may not be on ${r.branch}.`);
-  location.href = editorUrl(r.folder);
+  if (editorPrefs().app !== "browser") { location.href = editorUrl(r.folder); return; }
+  // Open the tab now, while the click still counts (later it would be blocked as a pop-up), then point it at VS Code.
+  const tab = window.open("", "_blank");
+  if (tab) tab.document.title = "Opening VS Code…";
+  api("/api/editor/open", { method: "POST", body: { folder: r.folder } })
+    .then((d) => { if (tab) tab.location.href = d.url; else location.href = d.url; })
+    .catch((err) => { tab?.close(); toast(err.message, true); });
 }
 
 const reviewActions = {
@@ -2268,13 +2295,22 @@ const afterRender = {
       const saved = await act(() => api("/api/settings/slack", { method: "PUT", body }));
       if (saved) { state.settings = saved; render(true); const s = await api("/api/slack"); toast(s.connected ? "Connected to Slack." : s.error || "Saved. Add both tokens and at least one member ID to connect.", !s.connected && !!s.error); }
     });
-    document.getElementById("editor-form")?.addEventListener("submit", (e) => {
+    document.getElementById("editor-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const form = e.target, pick = (n) => form.querySelector(`input[name=${n}]:checked`).value;
-      const prefs = { app: pick("app"), where: pick("where"), host: form.querySelector("#editor-host").value.trim() };
-      if (prefs.where === "ssh" && !prefs.host && prefs.app !== "off") return toast("Enter the SSH host you connect to the server with.", true);
-      try { localStorage.setItem("editor", JSON.stringify(prefs)); } catch { return toast("This browser doesn't keep settings (private window?).", true); }
-      toast("Editor saved.");
+      const form = e.target, pick = (n) => form.querySelector(`input[name=${n}]:checked`)?.value;
+      const prefs = { app: pick("app") || "off", where: pick("where"), host: form.querySelector("#editor-host").value.trim() };
+      const desktop = prefs.app === "vscode" || prefs.app === "cursor";
+      if (desktop && prefs.where === "ssh" && !prefs.host) return toast("Enter the SSH host you connect to the server with.", true);
+      // In the browser is on or off for the server (it runs there); a desktop editor is this browser's own choice.
+      let warned = false;
+      if (prefs.app === "browser" || (prefs.app === "off" && state.editorBrowser)) {
+        const s = await act(() => api("/api/editor", { method: "PUT", body: { enabled: prefs.app === "browser" } }));
+        if (!s) return;
+        if (prefs.app === "browser" && !s.installed) { warned = true; toast("Saved. Install code-server on the Hive machine to use it.", true); }
+        state.editorBrowser = s.enabled;
+      }
+      try { localStorage.setItem("editor", JSON.stringify(prefs)); } catch { if (desktop) return toast("This browser doesn't keep settings (private window?).", true); }
+      if (!warned) toast("Editor saved.");
       render(true);
     });
     document.getElementById("slack-notify-form")?.addEventListener("submit", async (e) => {

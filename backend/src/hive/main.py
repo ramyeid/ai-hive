@@ -9,6 +9,7 @@ import json
 import os
 import secrets
 import subprocess
+from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Form, HTTPException, Request, WebSocket
@@ -16,7 +17,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, board, chats, costs, ops, store, team, terminal
+from . import access, board, chats, costs, editor, ops, store, team, terminal
 from .agents import ORCHESTRATOR_KEY, TEAM_ACTION, AgentManager
 from .slack import SlackBridge
 from .engines import PROVIDERS
@@ -94,6 +95,14 @@ class SlackPrefsBody(BaseModel):
     replies: str | None = None     # thread | thread_and_dm
 
 
+class EditorSwitch(BaseModel):
+    enabled: bool
+
+
+class EditorOpen(BaseModel):
+    folder: str
+
+
 class ReviewViewed(BaseModel):
     path: str
     viewed: bool = True
@@ -146,6 +155,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         watcher.cancel()
         await slack.stop()
         await manager.stop_all()
+        editor.stop()
 
     app = FastAPI(title="Agent Team Console", lifespan=lifespan)
     app.state.manager = manager
@@ -206,6 +216,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     async def state():
         return {"agents": [r.info() for r in manager.agents.values()],
                 "settings": public_settings(), "kit": str(store.KIT), "terminal": terminal.ENABLED,
+                "editor_browser": editor.enabled(),
                 "improvements": sum(1 for p in team.proposals() if p["status"] == "pending")}
 
     # ---- the Coach's proposals, and the history of the team's instructions ----------------
@@ -266,6 +277,47 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         if not found:
             raise HTTPException(404, f"No knowledge file {repo}/{name}.")
         return found
+
+    # ---- VS Code in the browser (code-server), see editor.py --------------------------
+
+    @app.get("/api/editor")
+    def editor_status():
+        return editor.status()
+
+    @app.put("/api/editor")
+    def editor_switch(body: EditorSwitch):
+        if body.enabled and not editor.allowed_by_env():
+            raise HTTPException(409, "The editor in the browser is turned off on this server (ENABLE_EDITOR=0).")
+        store.save_settings({"editor_browser": body.enabled})
+        if not body.enabled:
+            editor.stop()
+        return editor.status()
+
+    @app.post("/api/editor/open")
+    async def editor_open(body: EditorOpen):
+        if not editor.enabled():
+            raise HTTPException(409, "The editor in the browser is off. Turn it on in Settings → Integrations → Editor.")
+        if not Path(body.folder).is_dir():
+            raise HTTPException(404, f"Folder not found: {body.folder}")
+        try:
+            await editor.ensure_started()
+        except RuntimeError as exc:
+            raise HTTPException(503, str(exc))
+        response = JSONResponse({"url": editor.open_url(body.folder)})
+        editor.grant(response)   # this browser (the page has the key) may use the editor
+        return response
+
+    @app.get("/editor")
+    async def editor_root():
+        return RedirectResponse("/editor/", status_code=307)
+
+    @app.api_route("/editor/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+    async def editor_http(request: Request, path: str):
+        return await editor.http(request, path)
+
+    @app.websocket("/editor/{path:path}")
+    async def editor_socket(ws: WebSocket, path: str):
+        await editor.socket(ws, path)
 
     @app.websocket("/api/terminal")
     async def terminal_socket(ws: WebSocket):

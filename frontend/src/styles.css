@@ -846,6 +846,12 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .editor-form .ssh-host { display: none; margin: 4px 0 0 26px; max-width: 420px; }
 .editor-form fieldset:has(input[value="ssh"]:checked) .ssh-host { display: block; }
 .editor-form .ssh-host label { display: block; margin-bottom: 4px; }
+.editor-form .radios.editor-apps { flex-direction: column; }
+.editor-form .editor-browser, .editor-form .editor-desktop { display: none; }
+.editor-form:has(input[value="browser"]:checked) .editor-browser { display: block; }
+.editor-form:has(input[value="vscode"]:checked, input[value="cursor"]:checked) .editor-desktop { display: flex; }
+.editor-form .editor-browser .ok { color: var(--dev); }
+.editor-form .editor-browser .bad { color: var(--danger); }
 .editor-form .ssh-host input { width: 100%; }
 
 /* Viewed files, like GitHub */
