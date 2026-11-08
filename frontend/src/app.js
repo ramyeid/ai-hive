@@ -767,6 +767,7 @@ async function codeTaskOf(name) {
 async function AgentChat(r) {
   const name = r.id;
   if (!state.agents[name]) throw new Error("There's no agent with that name. It may have been removed in Settings.");
+  reportWatching();
   const [, task] = await Promise.all([loadLive(name), codeTaskOf(name).catch(() => null)]);
   state.codeTask[name] = task;
   const a = ROLES[roleOf(name)];
@@ -936,7 +937,18 @@ setInterval(async () => {
     if (JSON.stringify(fresh) !== JSON.stringify(known) || count !== (state.live[r.id] || []).length) resync();
   } catch { /* ignore */ }
 }, 6000);
-document.addEventListener("visibilitychange", () => { if (!document.hidden) resync(); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { resync(); reportWatching(); } });
+
+// While an agent's chat is on screen, tell the server, so it doesn't notify you (Slack, Home) when that agent
+// stops to ask you something: you're already looking at it.
+function reportWatching() {
+  const r = route();
+  if (r.page === "agent" && !document.hidden && state.agents[r.id]) {
+    api(`/api/agents/${r.id}/watching`, { method: "POST" }).catch(() => { /* next time */ });
+  }
+}
+setInterval(reportWatching, 10000);
+addEventListener("hashchange", reportWatching);
 
 function askCard(e, agent, first = false) {
   return `<div class="ask" data-pid="${esc(e.id)}"><h3>${esc(nameOf(agent))} wants to ${e.tool === "Team action" ? "do this" : e.tool === "Bash" ? "run a command" : `use ${esc(e.tool)}`}</h3>

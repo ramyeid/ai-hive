@@ -319,6 +319,12 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         await _do(runner(name).interrupt())
         return runner(name).info()
 
+    @app.post("/api/agents/{name}/watching")
+    async def watching(name: str):
+        """The lead has this agent's chat open on screen (sent every few seconds): it doesn't need notifying."""
+        runner(name).lead_watching = store.now()
+        return {"ok": True}
+
     @app.post("/api/agents/{name}/message")
     async def message(name: str, body: MessageBody):
         if not body.text.strip():

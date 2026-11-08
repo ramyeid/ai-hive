@@ -112,13 +112,15 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(web.posted), before)
 
-    async def test_an_approval_asked_in_a_conversation_also_shows_outside_the_thread_so_it_notifies(self):
+    async def test_an_approval_asked_in_a_conversation_mentions_the_lead_in_the_thread_so_it_notifies(self):
         bridge, web = await self._a_bridge()
 
         await self._the_lead_writes(bridge, "Check the repo")
 
         ask = await self._wait_for(lambda: next((m for m in web.posted if "wants to" in m["text"]), None))
-        self.assertEqual((ask.get("thread_ts"), ask.get("reply_broadcast")), ("1.0", True))
+        self.assertEqual(ask.get("thread_ts"), "1.0")
+        self.assertNotIn("reply_broadcast", ask)
+        self.assertIn(f"<@{LEAD}>", ask["text"])
 
     async def test_an_agent_that_stopped_and_waits_for_the_lead_is_posted_in_its_task_thread(self):
         bridge, web = await self._a_bridge()
@@ -130,7 +132,8 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         posted = web.posted[-1]
         self.assertIn("stopped on TASK-001 and is waiting for you", posted["text"])
         self.assertIn("switch your project folder", posted["text"])
-        self.assertTrue(posted["reply_broadcast"])
+        self.assertNotIn("reply_broadcast", posted)
+        self.assertIn(f"<@{LEAD}>", posted["text"])
         self.assertEqual(self._buttons(posted), ["Open the chat with " + bridge_label("dev"), "Open the task"])
 
     async def test_new_proposals_from_the_coach_are_announced(self):

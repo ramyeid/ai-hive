@@ -27,7 +27,7 @@ from .agents import TEAM_ACTION
 STATE = store.DATA / "slack.json"
 WAIT_FOR_FREE = 30 * 60      # seconds a message waits for a busy agent
 CHUNK = 3500                 # characters per Slack message
-LOUD = {"ready-for-dev", "ready-for-review", "changes-requested", "done", "blocked"}   # also shown in the channel
+LOUD = {"ready-for-dev", "ready-for-review", "changes-requested", "done", "blocked"}   # mention the lead so they notify
 
 
 def to_mrkdwn(markdown: str) -> str:
@@ -99,6 +99,7 @@ class SlackBridge:
         self.bot_user = ""
         self.home = ""   # where notifications go: the channel in Settings, or a DM with the first member
         self.listening: dict[str, dict] = {}   # agent -> the Slack thread its next answer goes to
+        self.dm_users: dict[str, str] = {}      # direct-message channel -> the person in it
         self.seen: set[str] = set()
         self.proposals_seen: set[str] | None = None
         self.state = {"threads": {}, "convos": {}, "asks": {}}
@@ -181,15 +182,12 @@ class SlackBridge:
 
     # ---- sending ------------------------------------------------------------------------
 
-    async def post(self, channel: str, text: str, thread: str = "", buttons: list[dict] | None = None,
-                   broadcast: bool = False) -> str:
+    async def post(self, channel: str, text: str, thread: str = "", buttons: list[dict] | None = None) -> str:
         args = {"channel": channel, "text": text}
         if buttons:
             args["blocks"] = _blocks(text, buttons)
         if thread:
             args["thread_ts"] = thread
-            if broadcast:
-                args["reply_broadcast"] = True
         return (await self.web.chat_postMessage(**args))["ts"]
 
     async def _react(self, channel: str, ts: str, emoji: str) -> None:
@@ -240,6 +238,8 @@ class SlackBridge:
         if ts in self.seen:
             return   # a mention in one of its threads arrives twice (message + app_mention)
         self.seen = (self.seen | {ts}) if len(self.seen) < 200 else {ts}
+        if event.get("channel_type") == "im":
+            self.dm_users[channel] = event.get("user", "")
         if event.get("user") not in self.cfg.get("users", []):
             await self.post(channel, "You're not on this team's list. The lead can add your Slack member ID in the "
                                      "console's Settings.", thread or ts)
@@ -334,14 +334,14 @@ class SlackBridge:
         task = board.get_task(event.get("task", "")) if event.get("task") else None
         said = event.get("text", "").strip() or "It stopped without saying why."
         where = f" on {task['id']}" if task else ""
-        text = self._ping(f"*{ops.label(agent)}* stopped{where} and is waiting for you:\n") + to_mrkdwn(said)
+        thread = await self._thread(task) if task else ""
+        text = self._ping(f"*{ops.label(agent)}* stopped{where} and is waiting for you:\n", thread=thread) + to_mrkdwn(said)
         buttons = [_link(f"Open the chat with {ops.label(agent)}", ops.links(agent_id=agent)["chat"])]
         if task:
             buttons.append(_link("Open the task", ops.links(task["id"])["task"]))
-        thread = await self._thread(task) if task else ""
         parts = _chunks(text)
         for i, part in enumerate(parts):
-            await self.post(self.home, part, thread, buttons if i == len(parts) - 1 else None, broadcast=bool(thread) and i == 0)
+            await self.post(self.home, part, thread, buttons if i == len(parts) - 1 else None)
 
     async def _ask(self, agent: str, event: dict) -> None:
         pid, tool = event["id"], event["tool"]
@@ -356,7 +356,7 @@ class SlackBridge:
                    _button("Allow for this session", f"perm|{agent}|{pid}|always"),
                    _button("Deny", f"perm|{agent}|{pid}|deny", "danger"),
                    _link("Open the chat", ops.links(agent_id=agent)["chat"])]
-        ts = await self.post(channel, self._ping(text), thread, buttons, broadcast=bool(thread))   # a reply alone wouldn't notify
+        ts = await self.post(channel, self._ping(text, channel, thread), thread, buttons)
         self.state["asks"][pid] = {"channel": channel, "ts": ts, "text": text}
         self._save()
 
@@ -454,13 +454,20 @@ class SlackBridge:
         text, buttons = message
         thread = await self._thread(task)
         loud = entry.get("to") in LOUD
-        await self.post(self.home, self._ping(text) if loud else text, thread, buttons, broadcast=loud)
+        await self.post(self.home, self._ping(text, thread=thread) if loud else text, thread, buttons)
 
-    def _ping(self, text: str) -> str:
-        """In a channel, mention the people on the list so it notifies them (a direct message always does)."""
-        if self.home.startswith("D") or not self.cfg.get("users"):
-            return text
-        return " ".join(f"<@{u}>" for u in self.cfg["users"]) + " " + text
+    def _ping(self, text: str, channel: str = "", thread: str = "") -> str:
+        """Mention the lead so the message notifies: in a channel, everyone on the list; in a direct message, the person
+        in it, and only inside a thread (a reply in a thread you haven't joined doesn't notify by itself, a direct
+        message does)."""
+        channel = channel or self.home
+        users = self.cfg.get("users", [])
+        if channel.startswith("D"):
+            if not thread:
+                return text
+            users = [self.dm_users.get(channel) or (users[0] if users else "")]
+        users = [u for u in users if u]
+        return " ".join(f"<@{u}>" for u in users) + " " + text if users else text
 
     async def _watch_proposals(self) -> None:
         while True:

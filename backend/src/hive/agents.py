@@ -77,7 +77,8 @@ class AgentRunner:
         self.turn_source = ""            # who started this turn: console (you, in its chat), team or slack
         self.turn_text = ""              # the agent's last words this turn
         self.interrupted = False
-        self.waiting_for_lead: dict | None = None   # stopped on work you didn't start in its chat; see _after_turn
+        self.waiting_for_lead: dict | None = None   # stopped waiting for your answer; see _check_waiting
+        self.lead_watching = ""          # when the lead last had its chat open on screen
         self.error = ""
 
     # ---- state ---------------------------------------------------------------------
@@ -287,10 +288,14 @@ class AgentRunner:
 
 
     def _check_waiting(self, started: str) -> None:
-        """An agent that stops without moving any task, on work you didn't start in its chat, is waiting for you:
-        a question, or something only you can fix (like a branch checked out in your project folder). Agents don't
-        always mark the task Blocked, so Home, the sidebar and Slack show it from this instead."""
-        if self.turn_source != "team" or self.interrupted or self.role == "orchestrator" or self.status != "idle":
+        """An agent that stops without moving any task is waiting for you: a question, or something only you can fix
+        (like a branch checked out in your project folder). Agents don't always mark the task Blocked, so Home, the
+        sidebar and Slack show it from this instead. Not when you have its chat open (you see it there), not for
+        messages from Slack (the answer goes back to the Slack thread), and not for the Orchestrator, whose turns
+        are answers to you."""
+        if self.turn_source == "slack" or self.interrupted or self.role == "orchestrator" or self.status != "idle":
+            return
+        if self.lead_watching and _seconds_since(self.lead_watching) < WATCHING_SECONDS:
             return
         if any(a.get("actor") == self.name and a.get("ts", "") >= started for a in board.activity(500)):
             return   # it moved a task: the board and its notifications already say what's next
@@ -298,6 +303,14 @@ class AgentRunner:
                                  "text": (self.error if not self.turn_text else self.turn_text).strip()[:2000]}
         self.bus.publish({"kind": "agent", "agent": self.info()})
         self.bus.publish({"ts": store.now(), "agent": self.name, "kind": "waiting_for_lead", **self.waiting_for_lead})
+
+
+WATCHING_SECONDS = 30   # the chat page reports every 10 s while it's on screen
+
+
+def _seconds_since(iso: str) -> float:
+    from datetime import datetime
+    return (datetime.fromisoformat(store.now()) - datetime.fromisoformat(iso)).total_seconds()
 
 
 class AgentManager:
