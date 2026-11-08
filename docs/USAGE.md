@@ -37,7 +37,7 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
   sent with your review.
 - Tick **Viewed** on a file to fold it away (like GitHub); the eye in the file tree hides them. A viewed file
   comes back when the dev changes it.
-- Press **.** (or **Open in VS Code**) to open the branch's worktree in VS Code, indexed (go to definition,
+- Hold **.** for 2 seconds (or click **Open in VS Code**) to open the branch's worktree in VS Code, indexed (go to definition,
   references, search). Like GitHub's **.**, it opens in a new tab, run by Hive on its own machine; or, per browser,
   in your desktop VS Code or Cursor. It shows once it's set up in **Settings → Integrations → Editor**.
 - **Request changes**: your comments are added to the task under **Lead Review** and the task goes back to the

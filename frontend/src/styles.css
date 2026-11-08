@@ -835,6 +835,9 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .ico-vscode { width: 15px; height: 15px; flex: none; fill: #2f80d1; }
 .open-editor { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 6px auto; }
 .open-editor + .tree-toggle { margin-left: 0; }
+.open-editor { position: relative; overflow: hidden; }
+.open-editor::after { content: ""; position: absolute; inset: auto 0 0 0; height: 3px; background: var(--brand); transform: scaleX(0); transform-origin: left; }
+.open-editor.holding::after { transform: scaleX(1); transition: transform var(--hold, 2s) linear; }
 .open-editor kbd { padding: 0 6px; border: 1px solid var(--rule); border-radius: 4px; background: var(--sunken); color: var(--muted); font: 600 0.72rem/1.5 var(--mono); }
 .int-icon.editor { background: var(--sunken); }
 .int-icon.editor .ico-vscode { width: 24px; height: 24px; }

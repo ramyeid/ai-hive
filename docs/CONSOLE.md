@@ -60,7 +60,7 @@ agents' home folder. It's on by default; start the console with `ENABLE_TERMINAL
 
 ## VS Code in the browser
 
-**Open in VS Code** (or **.**) in a code review opens the branch's worktree in VS Code in a new tab, like GitHub's
+**Open in VS Code** (or holding **.** for 2 seconds) in a code review opens the branch's worktree in VS Code in a new tab, like GitHub's
 **.**: [code-server](https://github.com/coder/code-server), run by Hive on the machine the console runs on, served
 at `/editor/` behind the console's own host and sign-in checks. Install it there once, then turn it on in
 **Settings → Integrations → Editor**:
@@ -74,6 +74,8 @@ Hive starts it on first use (on a Unix socket in `data/editor/`, which also keep
 stops it with the console. Extensions come from [Open VSX](https://open-vsx.org): most are there, but not
 Microsoft's own (Pylance, for instance; Python and Ruff are). A browser may use the editor only after the console
 page opened it (a cookie no other site can send), and its live connection must come from the console's own page.
+Behind a reverse proxy, pass WebSockets through for `/editor/` (see [INSTALL.md](INSTALL.md#run-on-a-server)). When
+the editor's tab stays empty or keeps reconnecting, `data/hive.log` says why it refused the connection.
 
 > **Like the Terminal, anyone who can open the console can edit files and run commands with it.** It's off until you
 > turn it on; start the console with `ENABLE_EDITOR=0` to keep it off for good.

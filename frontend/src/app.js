@@ -430,8 +430,29 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/" && !typing && !document.getElementById("ask-pill").hidden) { e.preventDefault(); openDrawer(); }
   else if (e.key === "Escape" && !document.getElementById("drawer").hidden) closeDrawer();
   else if (e.key === "[" && !typing && !e.metaKey && !e.ctrlKey && !document.querySelector("dialog[open]")) toggleRail();
-  else if (e.key === "." && !typing && !e.metaKey && !e.ctrlKey && route().page === "review" && document.querySelector(".open-editor")) reviewOpen();
+  else if (e.key === "." && !typing && !e.metaKey && !e.ctrlKey && route().page === "review" && document.querySelector(".open-editor")) holdToOpen(e);
 });
+document.addEventListener("keyup", (e) => { if (e.key === ".") releaseHold(true); });
+window.addEventListener("blur", () => releaseHold(false));
+
+// Hold . for a moment to open the editor (a single press is too easy to hit by accident); the button fills meanwhile.
+const HOLD_MS = 2000;
+let hold = null;
+function holdToOpen(e) {
+  e.preventDefault();
+  if (hold || e.repeat) return;
+  const button = document.querySelector(".open-editor");
+  button.style.setProperty("--hold", `${HOLD_MS}ms`);
+  button.classList.add("holding");
+  hold = { button, timer: setTimeout(() => { releaseHold(false); reviewOpen(); }, HOLD_MS) };
+}
+function releaseHold(early) {
+  if (!hold) return;
+  clearTimeout(hold.timer);
+  hold.button.classList.remove("holding");
+  hold = null;
+  if (early) toast("Keep holding . to open VS Code.");
+}
 
 // ---- ask the Orchestrator from any page -------------------------------------------
 
@@ -1722,7 +1743,7 @@ async function CodeReview(r) {
     ${sent}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
-        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (.)">${VSCODE_ICON}Open in ${editorName()} <kbd>.</kbd></button>` : ""}
+        ${!earlier && d.head && editorOn() ? `<button class="btn small open-editor" data-action="open-folder" title="Open the branch in ${editorName()} (or hold .)">${VSCODE_ICON}Open in ${editorName()} <kbd>.</kbd></button>` : ""}
         ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
         ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
           `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
@@ -1857,10 +1878,11 @@ function reviewOpen() {
   if (editorPrefs().app !== "browser") { location.href = editorUrl(r.folder); return; }
   // Open the tab now, while the click still counts (later it would be blocked as a pop-up), then point it at VS Code.
   const tab = window.open("", "_blank");
-  if (tab) tab.document.title = "Opening VS Code…";
+  if (!tab) return toast("Your browser blocked the new tab: allow pop-ups for this site, or click Open in VS Code.", true);
+  tab.document.title = "Opening VS Code…";
   api("/api/editor/open", { method: "POST", body: { folder: r.folder } })
-    .then((d) => { if (tab) tab.location.href = d.url; else location.href = d.url; })
-    .catch((err) => { tab?.close(); toast(err.message, true); });
+    .then((d) => { tab.location.href = d.url; })
+    .catch((err) => { tab.close(); toast(err.message, true); });
 }
 
 const reviewActions = {

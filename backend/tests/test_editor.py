@@ -94,6 +94,16 @@ class EditorTest(unittest.TestCase):
             ws.send_text("hello")
             self.assertEqual(ws.receive_text(), "echo hello (host 127.0.0.1:8420)")
 
+    def test_behind_a_reverse_proxy_the_page_is_on_the_consoles_name_while_the_host_is_the_proxys_upstream(self):
+        self.env("CONSOLE_HOSTS", "hive.example.com")
+        self.env("CONSOLE_PASSWORD", "a long password")
+        self.turn_on()
+        self.console.post("/api/editor/open", headers=KEY, json={"folder": str(self.folder)})
+
+        with self.console.websocket_connect(SOCKET_URL, headers={"origin": "https://hive.example.com"}) as ws:
+            ws.send_text("hello")
+            self.assertEqual(ws.receive_text(), "echo hello (host hive.example.com)")
+
     def test_the_live_connection_from_another_website_is_refused(self):
         self.turn_on()
         self.console.post("/api/editor/open", headers=KEY, json={"folder": str(self.folder)})

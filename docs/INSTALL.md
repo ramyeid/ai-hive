@@ -88,9 +88,15 @@ Use HTTPS in front of the console if the network isn't trusted. Behind nginx, le
 WebSockets through:
 
 ```nginx
-proxy_http_version 1.1;
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection "upgrade";
+location / {
+    proxy_pass http://127.0.0.1:8420;
+    proxy_set_header Host $host;                 # the console checks it against CONSOLE_HOSTS
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;      # the Terminal's and the editor's WebSockets
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 1d;                       # keep them open while idle
+    proxy_buffering off;                         # live updates (the event stream)
+}
 ```
 
 ## Connect Slack

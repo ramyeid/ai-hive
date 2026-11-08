@@ -13,11 +13,13 @@ lead turns it on in Settings → Integrations → Editor, and ENABLE_EDITOR=0 tu
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import secrets
 import shutil
 import subprocess
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import websockets
@@ -35,6 +37,7 @@ HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authoriza
 SEARCH = [Path.home() / ".local/bin/code-server", Path("/usr/local/bin/code-server"),
           Path("/opt/homebrew/bin/code-server"), Path("/usr/bin/code-server")]
 
+log = logging.getLogger("hive.editor")
 _secret = secrets.token_urlsafe(32)              # the editor cookie's value, new each time the console starts
 _process: subprocess.Popen | None = None
 _starting = asyncio.Lock()
@@ -170,24 +173,60 @@ async def http(request: Request, path: str):
     return StreamingResponse(body(), status_code=upstream.status_code, headers=out)
 
 
-async def socket(ws: WebSocket, path: str) -> None:
-    """Pass VS Code's live connection through, after the same checks the HTTP middleware makes, plus the Origin."""
+def _same_origin(origin: str, headers) -> bool:
+    """The page opening the connection is the console itself. Behind a reverse proxy the Host may be the proxy's
+    upstream (127.0.0.1:8420) while the page is on hive.example.com, so the proxy's X-Forwarded-Host and the
+    names in CONSOLE_HOSTS count too."""
+    seen = urlsplit(origin).netloc.lower()
+    if not seen:
+        return False
+    hosts = {(headers.get("host") or "").lower(), (headers.get("x-forwarded-host") or "").split(",")[0].strip().lower()}
+    return seen in hosts or (urlsplit(origin).hostname or "") in access.extra_hosts()
+
+
+def _refusal(ws: WebSocket) -> str:
     host = (ws.headers.get("host") or "").split(":")[0]
     origin = ws.headers.get("origin", "")
-    same_origin = origin.split("://", 1)[-1] == ws.headers.get("host", "")
-    if (not enabled() or not access.allowed(host) or not (access.is_local(host) or access.signed_in(ws.cookies))
-            or not _granted(ws.cookies) or not same_origin):
+    if not enabled():
+        return "the editor is off"
+    if not access.allowed(host):
+        return f"the address {host!r} isn't in CONSOLE_HOSTS"
+    if not (access.is_local(host) or access.signed_in(ws.cookies)):
+        return "this browser isn't signed in"
+    if not _granted(ws.cookies):
+        return "no editor cookie (open the editor from a code review; the console restarted since?)"
+    if not _same_origin(origin, ws.headers):
+        return f"the page {origin!r} isn't the console at {ws.headers.get('host')!r}"
+    return ""
+
+
+async def socket(ws: WebSocket, path: str) -> None:
+    """Pass VS Code's live connection through, after the same checks the HTTP middleware makes, plus the Origin."""
+    refused = _refusal(ws)
+    if refused:
+        log.warning("Editor connection refused: %s.", refused)
         await ws.close(code=4403)
         return
-    await ensure_started()
+    try:
+        await ensure_started()
+    except RuntimeError as exc:
+        log.warning("Editor connection failed: %s", exc)
+        await ws.close(code=1011)
+        return
     query = f"?{ws.url.query}" if ws.url.query else ""
     headers = {k: v for k, v in ws.headers.items()
                if k.lower() in ("cookie", "origin", "user-agent", "accept-language")}
     subprotocols = [p.strip() for p in ws.headers.get("sec-websocket-protocol", "").split(",") if p.strip()]
-    # the URL's host becomes the Host header, so code-server's own origin check sees the console's address
-    async with websockets.unix_connect(str(SOCKET), f"ws://{ws.headers.get('host', 'localhost')}/{path}{query}",
-                                       additional_headers=headers, subprotocols=subprotocols or None,
-                                       max_size=None, compression=None) as upstream:
+    # the URL's host becomes the Host header: the page's own address, so code-server's origin check agrees
+    try:
+        upstream = await websockets.unix_connect(
+            str(SOCKET), f"ws://{urlsplit(ws.headers['origin']).netloc}/{path}{query}", additional_headers=headers,
+            subprotocols=subprotocols or None, max_size=None, compression=None)
+    except (OSError, websockets.InvalidHandshake) as exc:
+        log.warning("Editor connection failed: code-server answered %s.", exc)
+        await ws.close(code=1011)
+        return
+    async with upstream:
         await ws.accept(subprotocol=upstream.subprotocol)
 
         async def to_editor():
