@@ -1593,7 +1593,9 @@ function roundCard(r, dev) {
 
 async function CodeReview(r) {
   const view = reviewView();
-  const [t, d] = await Promise.all([api(`/api/tasks/${encodeURIComponent(r.id)}`), api(`/api/tasks/${encodeURIComponent(r.id)}/review?mode=${view}`)]);
+  const earlier = view === "earlier";   // your earlier reviews, in their own tab (the diff tabs show their comments on the lines)
+  const [t, d] = await Promise.all([api(`/api/tasks/${encodeURIComponent(r.id)}`),
+    api(`/api/tasks/${encodeURIComponent(r.id)}/review?mode=${earlier ? "feature" : view}`)]);
   const drafts = new Map();
   for (const c of d.pending) {
     if (!c.file || !c.line) continue;
@@ -1613,23 +1615,25 @@ async function CodeReview(r) {
   const tabs = REVIEW_VIEWS.map(([v, label]) => {
     const off = v === "since" && !d.last_reviewed;
     return off ? `<span class="tab off" title="After your first review">${label}</span>`
-      : `<a class="tab" href="${reviewHref(t.id, v)}" ${v === d.mode ? 'aria-current="page"' : ""}>${label}${v === "since" ? ` <code>${esc(d.last_reviewed.slice(0, 7))}</code>` : ""}</a>`;
-  }).join("");
+      : `<a class="tab" href="${reviewHref(t.id, v)}" ${v === d.mode && !earlier ? 'aria-current="page"' : ""}>${label}${v === "since" ? ` <code>${esc(d.last_reviewed.slice(0, 7))}</code>` : ""}</a>`;
+  }).join("") + (d.rounds.length
+    ? `<a class="tab" href="${reviewHref(t.id, "earlier")}" ${earlier ? 'aria-current="page"' : ""}>Earlier reviews <span class="count">${d.rounds.length}</span></a>`
+    : `<span class="tab off" title="After your first review">Earlier reviews</span>`);
+  const rounds = d.rounds.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
+    : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("");
   const dev = d.dev && nameOf(d.dev);
   return `<p><a href="#/tasks/${esc(t.id)}" class="muted">${esc(t.id)}</a></p>
     <div class="page-head"><div><h1>Review: ${esc(t.title)}</h1>
       <p><code>${esc(d.branch)}</code> into <code>${esc(d.base)}</code>, ${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}${d.head ? `, latest commit <code>${esc(d.head.slice(0, 7))}</code>` : ""}</p></div>
       ${d.pending.length ? `<button class="btn primary" data-action="finish-review">Finish your review (${plural(d.pending.length, "draft")})</button>` : ""}</div>
-    ${d.rounds.length ? `<section class="section"><h2>Your earlier reviews</h2>${d.rounds.slice().reverse().map((x, i) => i === 0 ? roundCard(x, d.dev)
-      : `<details class="older-round"><summary>Round ${x.n}, ${x.verdict === "changes" ? "changes requested" : "approved"} ${esc(ago(x.at))}</summary>${roundCard(x, d.dev)}</details>`).join("")}</section>` : ""}
     <section class="section">
       <div class="review-bar"><nav class="tabs" aria-label="What to compare">${tabs}</nav>
-        ${d.files.length ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
-        <div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
-          `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div></div>
-      <p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
+        ${d.files.length && !earlier ? `<button class="btn small tree-toggle" data-action="review-tree" aria-pressed="${treeOn}" title="Show or hide the file tree">Files</button>` : ""}
+        ${earlier ? "" : `<div class="segmented" role="group" aria-label="Layout">${[["unified", "Unified"], ["split", "Side by side"]].map(([v, label]) =>
+          `<button class="btn small" data-action="review-layout" data-layout="${v}" aria-pressed="${v === layout}">${label}</button>`).join("")}</div>`}</div>
+      ${earlier ? `<p class="muted">Every review you've submitted on this feature, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
       ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"}">${treeOn ? fileTree(d.files, drafts) : treeStrip}<div class="review-diffs">${files}</div></div>`
-        : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}
+        : `<div class="empty">${d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
     </section>
     <section class="section review-submit" id="review-submit"><h2>Your review</h2>
       ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
