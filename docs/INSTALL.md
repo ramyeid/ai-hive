@@ -123,11 +123,12 @@ and `CONSOLE_PASSWORD`.
 
 **Settings → Backup** makes one archive with everything Hive needs to start again as if nothing happened:
 all of `data/` (tasks, reviews, knowledge, the Coach's work, conversations, settings with their API keys and Slack
-tokens), the branches only this machine has (as git bundles), and Claude Code's conversations and sign-in. Send it
-to S3 or a folder, nightly at an hour you choose, keeping the last N.
+tokens), the branches only this machine has (as git bundles), and Claude Code's conversations and sign-in. It goes
+to an S3 bucket (and a folder in it) or a folder on the machine; every day, week or month at the hour you choose
+(one missed while the machine was off is made when Hive starts), keeping the last N.
 
-For S3, the machine needs the `aws` command (on Amazon Linux already) and access to the bucket, best with the
-instance's role. Keep the bucket private (it holds your keys), with server-side encryption on. A policy for the
+For S3, enter the bucket's name (and a folder) under **Where**. The machine needs the `aws` command (on Amazon
+Linux already) and access to the bucket, best with the instance's role. Keep the bucket private (it holds your keys), with server-side encryption on. A policy for the
 role, with your bucket's name:
 
 ```json
@@ -136,7 +137,10 @@ role, with your bucket's name:
   { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::my-bucket/hive/*" } ] }
 ```
 
-To restore, on the same machine or a new one, with Hive stopped:
+To restore from the console: **Settings → Backup → Restore**, upload a backup, check what's in it, and press
+**Restore this backup**: Hive stops, puts it back and starts again (it needs to have been started with
+`scripts/start.sh --background`; the steps are logged in `restore.log`). Or, on the same machine or a new one, with
+Hive stopped:
 
 ```bash
 git clone <Hive's repository> && cd hive-ai-squad   # on a new machine

@@ -920,7 +920,7 @@ table.plain .right { text-align: right; white-space: nowrap; }
   .rv-meta { white-space: normal; }
 }
 
-/* ---- Landing a branch ---------------------------------------------------------------------- */
+/* ---- Preparing the pull request ---------------------------------------------------------------------- */
 .land-steps { list-style: none; margin: 0; padding: 0; counter-reset: land; }
 .land-step { counter-increment: land; }
 .land-step > h2::before { content: counter(land) ". "; color: var(--muted); }
@@ -970,3 +970,26 @@ pre.code { margin: 0 0 8px; padding: 10px 12px; overflow-x: auto; border: 1px so
 .bk-history td:last-child { white-space: normal; }
 .spinner { display: inline-block; width: 12px; height: 12px; margin-right: 4px; border: 2px solid var(--rule); border-top-color: var(--brand); border-radius: 50%; vertical-align: -1px; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.land-one { margin: 0 0 10px; }
+.land-one textarea { display: block; width: 100%; margin-top: 6px; font: 0.86rem/1.45 var(--mono); }
+.land-more { margin: 14px 0 6px; }
+.land-more > summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+.land-more[open] > summary { margin-bottom: 8px; }
+button.link { padding: 0 2px; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.radios.bk-col { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.form .bk-col label.radio { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.form .bk-col label.radio input[type="radio"] { flex: none; width: auto; margin: 0; }
+.bk-sub { display: none; width: 100%; max-width: 520px; padding: 2px 0 6px 26px; }
+.bk-sub label { margin-top: 6px; }
+.bk-sub input[type=text] { width: 100%; }
+.bk-form:has(input[name=kind][value=s3]:checked) .bk-s3,
+.bk-form:has(input[name=kind][value=folder]:checked) .bk-folder { display: block; }
+.bk-at { display: none; padding-left: 0; }
+.bk-form:has(input[name=schedule][value=daily]:checked, input[name=schedule][value=weekly]:checked, input[name=schedule][value=monthly]:checked) .bk-at { display: block; }
+.bk-weekly, .bk-monthly { display: none; }
+.bk-form:has(input[name=schedule][value=weekly]:checked) .bk-weekly,
+.bk-form:has(input[name=schedule][value=monthly]:checked) .bk-monthly { display: inline; }
+.bk-at select { padding: 2px 6px; }
+.bk-upload { cursor: pointer; }
+.bk-found { padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); }
+.bk-found .facts { margin: 6px 0 10px; }

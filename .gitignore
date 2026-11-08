@@ -9,3 +9,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# The last restore from the console (Settings → Backup)
+restore.log

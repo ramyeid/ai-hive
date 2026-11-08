@@ -59,4 +59,5 @@ if [ -z "${NO_BROWSER:-}" ]; then
     fi ) &
 fi
 echo "Hive → ${CONSOLE_URL:-$URL}   (Ctrl+C to stop)"
-exec uv run --locked uvicorn hive.main:app --host "$HOST" --port "$PORT"
+# Open pages keep a live connection: at shutdown they get 5 s, then Hive stops its agents and exits.
+exec uv run --locked uvicorn hive.main:app --host "$HOST" --port "$PORT" --timeout-graceful-shutdown 5

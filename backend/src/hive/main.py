@@ -126,7 +126,13 @@ class BackupSettings(BaseModel):
     destination: str | None = None
     schedule: str | None = None
     hour: int | None = None
+    weekday: int | None = None
+    day: int | None = None
     keep: int | None = None
+
+
+class BackupRestore(BaseModel):
+    file: str
 
 
 class ReviewViewed(BaseModel):
@@ -638,6 +644,22 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         except backup.BackupError as exc:
             raise HTTPException(400, str(exc))
         return backup.status()
+
+    @app.post("/api/backup/upload")
+    async def backup_upload(request: Request):
+        """A backup sent as the request's body (any size), its file name in X-Filename."""
+        try:
+            found = await backup.receive(request.stream(), request.headers.get("x-filename", "backup.tar.gz"))
+        except backup.BackupError as exc:
+            raise HTTPException(400, str(exc))
+        return {**found, "restart": backup.can_restart()}
+
+    @app.post("/api/backup/restore")
+    def backup_restore(body: BackupRestore):
+        try:
+            return backup.restore(body.file)
+        except backup.BackupError as exc:
+            raise HTTPException(409, str(exc))
 
     @app.post("/api/backup/run")
     async def backup_now():

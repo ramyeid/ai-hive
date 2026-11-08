@@ -47,18 +47,19 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
 
 Reviewing is optional and can happen before or after the reviewer, as often as you like.
 
-## Landing a branch
+## From done to pull request
 
-Once every task on a branch is done, **Land this branch** (in its code review) takes it to a pull request:
+Once every task on a branch is done, **Prepare the pull request** (in its code review) takes it to GitHub:
 
-1. **Clean up the history**, like `git rebase -i main`: for each commit, **Keep**, **Squash into the one above**
-   (its message is added to that commit's), **Fold into the one above** (its message dropped) or **Drop**; move
-   commits up and down, and write each resulting commit's message. **Squash all into one** is the default, with a
-   message drafted from the spec. Applying also rebases the branch on `origin/main` (fetched first; your local
-   `main` is fast-forwarded too when nothing has it checked out).
+1. **Commits.** **Squash into one commit** (its message drafted from the spec: **Edit** to change it), or **Keep
+   the commits**; either way the branch is rebased on a freshly fetched `origin/main` (your local `main` is
+   fast-forwarded too when nothing has it checked out).
+   - **More actions** is `git rebase -i main`: for each commit, **Keep**, **Squash into the one above** (its message
+     added to that commit's), **Fold into the one above** (its message dropped) or **Drop**; move commits up and
+     down, and write each resulting commit's message.
    - On a conflict nothing changes: Hive names the files and offers to ask the dev to rebase and resolve them.
-   - The branch as the team made it is kept (`refs/hive/pre-land/<branch>`): **Undo the clean-up** puts it back,
-     and the Coach still sees the commits you made yourself.
+   - The commits as the team made them are kept (`refs/hive/pre-land/<branch>`): **Undo** puts them back, and the
+     Coach still sees the commits you made yourself.
 2. **Push**: `git push --force-with-lease`, after you confirm.
 3. **Pull request**: `gh pr create`, with a title and description written from the spec and the reviews (edit
    them first). Pressing it again later updates them.

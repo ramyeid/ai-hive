@@ -40,7 +40,8 @@ CLAUDE_FILES = [HOME / ".claude" / "projects", HOME / ".claude" / ".credentials.
 SKIP = re.compile(r"^(editor/(extensions|user/(logs|CachedData|CachedExtensionVSIXs|CachedProfilesData))(/|$)"
                   r"|hive\.pid$|.*\.sock$|backup/log\.json\.tmp$)")
 NAME = re.compile(r"^hive-backup-\d{8}-\d{6}\.tar\.gz$")
-DEFAULTS = {"destination": "", "schedule": "off", "hour": 3, "keep": 14}
+DEFAULTS = {"destination": "", "schedule": "off", "hour": 3, "weekday": 6, "day": 1, "keep": 14}
+SCHEDULES = ("off", "daily", "weekly", "monthly")   # weekly: on `weekday` (0 = Monday); monthly: on `day` (1-28)
 
 log = logging.getLogger("hive.backup")
 _running = threading.Lock()
@@ -69,20 +70,28 @@ def save_config(changes: dict) -> dict:
             where = str(Path(where).expanduser())
         current["destination"] = where
     if "schedule" in changes:
-        if changes["schedule"] not in ("off", "daily"):
-            raise BackupError("The schedule is off or daily.")
-        if changes["schedule"] == "daily" and current["schedule"] != "daily":
+        if changes["schedule"] not in SCHEDULES:
+            raise BackupError("The schedule is off, daily, weekly or monthly.")
+        if changes["schedule"] != "off" and current["schedule"] == "off":
             current["since"] = dt.datetime.now().isoformat(timespec="seconds")   # the first one at the next hour
         current["schedule"] = changes["schedule"]
     if "hour" in changes:
         if not 0 <= int(changes["hour"]) <= 23:
             raise BackupError("The hour is 0 to 23.")
         current["hour"] = int(changes["hour"])
+    if "weekday" in changes:
+        if not 0 <= int(changes["weekday"]) <= 6:
+            raise BackupError("The day of the week is 0 (Monday) to 6 (Sunday).")
+        current["weekday"] = int(changes["weekday"])
+    if "day" in changes:
+        if not 1 <= int(changes["day"]) <= 28:
+            raise BackupError("The day of the month is 1 to 28 (so every month has it).")
+        current["day"] = int(changes["day"])
     if "keep" in changes:
         if not 1 <= int(changes["keep"]) <= 365:
             raise BackupError("Keep between 1 and 365 backups.")
         current["keep"] = int(changes["keep"])
-    if current["schedule"] == "daily" and not current["destination"]:
+    if current["schedule"] != "off" and not current["destination"]:
         raise BackupError("Choose where the backups go first.")
     FOLDER.mkdir(parents=True, exist_ok=True)
     CONFIG.write_text(json.dumps(current, indent=2), encoding="utf-8")
@@ -105,7 +114,7 @@ def status() -> dict:
     past = history()
     return {**config(), "running": _running.locked(), "history": past[:20],
             "last_ok": next((h for h in past if h.get("ok")), None), "aws": bool(shutil.which("aws")),
-            "next": _next_run().isoformat(timespec="minutes") if config()["schedule"] == "daily" else ""}
+            "next": _next_run().isoformat(timespec="minutes") if config()["schedule"] != "off" else ""}
 
 
 # ---- making one -------------------------------------------------------------------------
@@ -230,23 +239,114 @@ def run(trigger: str = "manual") -> dict:
         _running.release()
 
 
+# ---- restoring one you upload -----------------------------------------------------------
+
+UPLOADS = FOLDER / "uploads"
+RESTORE_LOG = KIT / "restore.log"
+
+
+def inspect(archive: Path) -> dict:
+    """What's in a backup, after checking it is one (raises BackupError otherwise)."""
+    try:
+        with tarfile.open(archive) as tar:
+            names = tar.getnames()
+            if any(n.startswith(("/", "..")) or "/../" in n for n in names):
+                raise BackupError("This archive has unsafe paths; it isn't a Hive backup.")
+            if "manifest.json" not in names or not any(n.startswith("data/") for n in names):
+                raise BackupError("This isn't a Hive backup (no manifest.json and data/ inside).")
+            manifest = json.load(tar.extractfile("manifest.json"))
+    except (tarfile.TarError, OSError, json.JSONDecodeError, EOFError) as exc:
+        raise BackupError(f"This isn't a Hive backup: {exc}") from exc
+    return {"file": archive.name, "size": archive.stat().st_size, "made": manifest.get("made", ""),
+            "hive_version": manifest.get("hive_version", ""), "from": manifest.get("kit", ""),
+            "files": sum(1 for n in names if n.startswith("data/")),
+            "tasks": sum(1 for n in names if re.match(r"^data/tasks/TASK-\d+.*\.md$", n)),
+            "projects": [{"path": p["path"], "branches": len(p.get("refs", []))} for p in manifest.get("projects", [])],
+            "conversations": any(n.startswith("claude/") for n in names)}
+
+
+async def receive(chunks, name: str) -> dict:
+    """Keep an uploaded backup (only the latest one) and say what's in it."""
+    if UPLOADS.exists():
+        shutil.rmtree(UPLOADS)
+    UPLOADS.mkdir(parents=True)
+    safe = re.sub(r"[^\w.\-]", "_", Path(name).name) or "backup.tar.gz"
+    target = UPLOADS / safe
+    with target.open("wb") as f:
+        async for chunk in chunks:
+            f.write(chunk)
+    try:
+        return inspect(target)
+    except BackupError:
+        shutil.rmtree(UPLOADS)
+        raise
+
+
+def can_restart() -> str:
+    """'' when Hive was started with scripts/start.sh --background (so it can stop, restore and start itself);
+    otherwise why not."""
+    pid = DATA / "hive.pid"
+    try:
+        alive = pid.exists() and os.kill(int(pid.read_text().strip()), 0) is None
+    except (OSError, ValueError):
+        alive = False
+    if not alive:
+        return ("Hive wasn't started with scripts/start.sh --background, so it can't restart itself. Stop it, then "
+                "run: bash scripts/restore.sh ")
+    return ""
+
+
+def restore(name: str) -> dict:
+    """Stop Hive, restore the uploaded backup and start Hive again, from a process of its own (this one stops)."""
+    archive = UPLOADS / Path(name).name
+    if not archive.is_file():
+        raise BackupError("Upload the backup again: it's no longer here.")
+    inspect(archive)
+    if (why := can_restart()):
+        raise BackupError(why + str(archive))
+    scripts = KIT / "scripts"
+    steps = (f'sleep 1; echo "== {dt.datetime.now():%Y-%m-%d %H:%M} restoring {archive.name}"; '
+             f'bash "{scripts}/stop.sh"; bash "{scripts}/restore.sh" "{archive}"; '
+             f'echo "== starting Hive again"; bash "{scripts}/start.sh" --background')
+    with RESTORE_LOG.open("w") as out:
+        subprocess.Popen(["bash", "-c", steps], stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                         cwd=KIT, start_new_session=True)
+    return {"restarting": True, "log": str(RESTORE_LOG)}
+
+
 # ---- nightly ----------------------------------------------------------------------------
 
+def _last_slot(now: dt.datetime, settings: dict) -> dt.datetime:
+    """The latest time a scheduled backup was due, at or before `now`."""
+    at = now.replace(hour=settings["hour"], minute=0, second=0, microsecond=0)
+    if settings["schedule"] == "weekly":
+        at -= dt.timedelta(days=(now.weekday() - settings["weekday"]) % 7)
+        return at if at <= now else at - dt.timedelta(days=7)
+    if settings["schedule"] == "monthly":
+        at = at.replace(day=settings["day"])
+        if at > now:
+            at = (at.replace(day=1) - dt.timedelta(days=1)).replace(day=settings["day"])
+        return at
+    return at if at <= now else at - dt.timedelta(days=1)
+
+
 def _next_run(now: dt.datetime | None = None) -> dt.datetime:
-    now = now or dt.datetime.now()
-    at = now.replace(hour=config()["hour"], minute=0, second=0, microsecond=0)
-    return at if at > now else at + dt.timedelta(days=1)
+    settings, now = config(), now or dt.datetime.now()
+    last = _last_slot(now, settings)
+    if settings["schedule"] == "weekly":
+        return last + dt.timedelta(days=7)
+    if settings["schedule"] == "monthly":
+        return (last.replace(day=28) + dt.timedelta(days=4)).replace(day=settings["day"])
+    return last + dt.timedelta(days=1)
 
 
 def due(now: dt.datetime | None = None) -> bool:
-    """Daily backups: once the hour has come today, if today's hasn't been made (a missed night runs at start-up)."""
+    """Once its time has come, if that one hasn't been made (one missed while the machine was off runs at start-up)."""
     settings, now = config(), now or dt.datetime.now()
-    if settings["schedule"] != "daily" or not settings["destination"]:
+    if settings["schedule"] == "off" or not settings["destination"]:
         return False
-    today = now.replace(hour=settings["hour"], minute=0, second=0, microsecond=0)
     last = next((h["at"] for h in history() if h.get("trigger") == "scheduled"), "") or settings.get("since", "")
-    slot = today if now >= today else today - dt.timedelta(days=1)
-    return not last or dt.datetime.fromisoformat(last) < slot
+    return not last or dt.datetime.fromisoformat(last) < _last_slot(now, settings)
 
 
 async def watch() -> None:

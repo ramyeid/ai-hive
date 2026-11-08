@@ -3,6 +3,7 @@ scripts/restore.sh puts it all back on a machine that has nothing.
 
     uv run python -m unittest tests/test_backup.py
 """
+import asyncio
 import datetime as dt
 import json
 import os
@@ -121,6 +122,28 @@ class BackupTest(unittest.TestCase):
         self.assertFalse(backup.due(dt.datetime(2026, 11, 8, 20, 1)))   # not right away
         self.assertTrue(backup.due(dt.datetime(2026, 11, 10, 9, 0)))    # the machine was off at 3:00: at start-up
 
+    def test_a_weekly_backup_is_due_on_its_day(self):
+        backup.save_config({"destination": str(self.root / "b"), "schedule": "weekly", "weekday": 6, "hour": 3})   # Sundays
+        self._turned_on_at(dt.datetime(2026, 11, 2, 12, 0))   # a Monday
+
+        self.assertFalse(backup.due(dt.datetime(2026, 11, 7, 23, 0)))   # Saturday
+        self.assertTrue(backup.due(dt.datetime(2026, 11, 8, 3, 0)))     # Sunday 3:00
+        backup._remember({"at": "2026-11-08T03:00:05", "trigger": "scheduled", "ok": True})
+        self.assertFalse(backup.due(dt.datetime(2026, 11, 14, 12, 0)))
+        self.assertTrue(backup.due(dt.datetime(2026, 11, 15, 4, 0)))
+        self.assertEqual(backup._next_run(dt.datetime(2026, 11, 8, 4, 0)), dt.datetime(2026, 11, 15, 3, 0))
+
+    def test_a_monthly_backup_is_due_on_its_day_of_the_month(self):
+        backup.save_config({"destination": str(self.root / "b"), "schedule": "monthly", "day": 1, "hour": 2})
+        self._turned_on_at(dt.datetime(2026, 11, 8, 12, 0))
+
+        self.assertFalse(backup.due(dt.datetime(2026, 11, 30, 23, 0)))
+        self.assertTrue(backup.due(dt.datetime(2026, 12, 1, 2, 0)))
+        backup._remember({"at": "2026-12-01T02:00:05", "trigger": "scheduled", "ok": True})
+        self.assertFalse(backup.due(dt.datetime(2026, 12, 31, 23, 0)))
+        self.assertTrue(backup.due(dt.datetime(2027, 1, 1, 2, 0)))
+        self.assertEqual(backup._next_run(dt.datetime(2026, 12, 1, 3, 0)), dt.datetime(2027, 1, 1, 2, 0))
+
     def test_restore_puts_everything_back_on_a_machine_that_has_nothing(self):
         archive = backup.make(self.root)
         branch_head = self._git(self.project, "rev-parse", "feature-filter").stdout.strip()
@@ -159,7 +182,56 @@ class BackupTest(unittest.TestCase):
         self.assertEqual((kept[0] / "note.txt").read_text(), "mine")
         self.assertEqual(self._git(self.project, "rev-parse", "feature-filter").stdout.strip(), newer)
 
+    def test_an_uploaded_backup_is_checked_and_described(self):
+        archive = backup.make(self.root)
+        self.patch(backup, "UPLOADS", self.data / "backup" / "uploads")
+
+        found = asyncio.run(backup.receive(self._chunks(archive), "../../evil name.tar.gz"))
+
+        self.assertEqual(found["file"], "evil_name.tar.gz")
+        self.assertEqual(found["tasks"], 1)
+        self.assertEqual(found["projects"], [{"path": str(self.project), "branches": 1}])
+        self.assertTrue(found["conversations"])
+
+    def test_a_file_that_is_not_a_backup_is_refused_and_not_kept(self):
+        other = self.root / "photo.tar.gz"
+        other.write_bytes(b"not an archive")
+        self.patch(backup, "UPLOADS", self.data / "backup" / "uploads")
+
+        with self.assertRaisesRegex(backup.BackupError, "isn't a Hive backup"):
+            asyncio.run(backup.receive(self._chunks(other), "photo.tar.gz"))
+
+        self.assertFalse(backup.UPLOADS.exists())
+
+    def test_restoring_an_upload_needs_hive_started_in_the_background_so_it_can_restart(self):
+        self.patch(backup, "UPLOADS", self.data / "backup" / "uploads")
+        asyncio.run(backup.receive(self._chunks(backup.make(self.root)), "b.tar.gz"))
+        (self.data / "hive.pid").write_text("999999")   # not running
+
+        with self.assertRaisesRegex(backup.BackupError, "can't restart itself.*restore.sh .*b.tar.gz"):
+            backup.restore("b.tar.gz")
+
+    def test_restoring_an_upload_stops_restores_and_starts_hive_from_a_process_of_its_own(self):
+        self.patch(backup, "UPLOADS", self.data / "backup" / "uploads")
+        self.patch(backup, "RESTORE_LOG", self.root / "restore.log")
+        asyncio.run(backup.receive(self._chunks(backup.make(self.root)), "b.tar.gz"))
+        (self.data / "hive.pid").write_text(str(os.getpid()))
+        started = []
+        self.patch(backup.subprocess, "Popen", lambda cmd, **kw: started.append((cmd, kw)))
+
+        backup.restore("b.tar.gz")
+
+        steps = started[0][0][2]
+        self.assertLess(steps.index("stop.sh"), steps.index("restore.sh"))
+        self.assertLess(steps.index("restore.sh"), steps.index("start.sh\" --background"))
+        self.assertTrue(started[0][1]["start_new_session"])
+
     # ---- helpers ----------------------------------------------------------------------
+
+    async def _chunks(self, path: Path):
+        data = path.read_bytes()
+        for i in range(0, len(data), 65536):
+            yield data[i:i + 65536]
 
     def _turned_on_at(self, when: dt.datetime) -> None:
         saved = json.loads(backup.CONFIG.read_text())
