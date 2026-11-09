@@ -1,6 +1,17 @@
 // Team Console: talks to the local console server (server/main.py).
 
-const TOKEN = window.CONSOLE_TOKEN;
+// The page's key, new each time Hive starts. A tab opened before a restart fetches the new one by itself
+// (reading it from the page, as only this site can) instead of failing with "Reload the page." until you do.
+let TOKEN = window.CONSOLE_TOKEN;
+let tokenRefresh = null;
+function refreshToken() {
+  tokenRefresh ??= fetch("/", { cache: "no-store", credentials: "same-origin" })
+    .then((r) => r.text())
+    .then((html) => { const m = html.match(/CONSOLE_TOKEN = "([^"]+)"/); const changed = !!m && m[1] !== TOKEN; if (m) TOKEN = m[1]; return changed; })
+    .catch(() => false)
+    .finally(() => setTimeout(() => { tokenRefresh = null; }, 2000));
+  return tokenRefresh;
+}
 const view = document.getElementById("view");
 
 const ROLES = {
@@ -58,13 +69,16 @@ const emptyStream = () => ({ thinking: "", text: "", tool: "" });
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const md = (text) => DOMPurify.sanitize(marked.parse(text || "", { gfm: true, breaks: false }));
 
-async function api(path, { method = "GET", body } = {}) {
+async function api(path, { method = "GET", body } = {}, retried = false) {
   const res = await fetch(path, {
     method,
     headers: { "x-token": TOKEN, ...(body ? { "content-type": "application/json" } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.detail === "Reload the page." && !retried && await refreshToken()) {
+    return api(path, { method, body }, true);   // Hive restarted since this page loaded: same request, new key
+  }
   if (!res.ok) throw Object.assign(new Error(typeof data.detail === "string" ? data.detail : `Request failed (${res.status}).`), { data });
   return data;
 }
@@ -168,7 +182,12 @@ function connect() {
   const conn = document.getElementById("conn");
   const source = new EventSource(`/api/events?token=${encodeURIComponent(TOKEN)}`);
   source.onopen = () => { conn.textContent = "Live"; conn.classList.add("live"); resync(); };
-  source.onerror = () => { conn.textContent = "Reconnecting…"; conn.classList.remove("live"); };
+  source.onerror = () => {
+    conn.textContent = "Reconnecting…";
+    conn.classList.remove("live");
+    // The browser retries by itself, but gives up for good when Hive answers with an error (a restart: new key).
+    if (source.readyState === EventSource.CLOSED) setTimeout(() => refreshToken().then(connect), 2000);
+  };
   source.onmessage = (msg) => onEvent(JSON.parse(msg.data));
 }
 
@@ -2539,21 +2558,27 @@ async function openShell() {
   shell.xterm.open(box);
   new ResizeObserver(() => { if (box.isConnected && box.clientWidth) shell.fit.fit(); }).observe(box);
 
+  const send = (msg) => shell.socket?.readyState === 1 && shell.socket.send(JSON.stringify(msg));   // the current connection
+  shell.xterm.onData((data) => send({ type: "input", data }));
+  shell.xterm.onResize(({ cols, rows }) => send({ type: "resize", cols, rows }));
+  attachShell(shell);
+  shell.xterm.focus();
+  return shell;
+}
+
+function attachShell(shell, retried = false) {
   const socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/terminal`);
   socket.binaryType = "arraybuffer";
   shell.socket = socket;
   socket.onopen = () => { shell.fit.fit(); socket.send(JSON.stringify({ token: TOKEN, cols: shell.xterm.cols, rows: shell.xterm.rows })); };
   socket.onmessage = (e) => shell.xterm.write(new Uint8Array(e.data));
-  socket.onclose = (e) => {
+  socket.onclose = async (e) => {
+    if (e.code === 4401 && !retried && await refreshToken()) return attachShell(shell, true);   // Hive restarted
     shell.ended = true;
     shell.pane.classList.add("ended");
     shell.pane.querySelector(".term-state").textContent = "ended";
     shell.xterm.write(`\r\n\x1b[2m[${e.reason || "Disconnected."}]\x1b[0m\r\n`);
   };
-  shell.xterm.onData((data) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "input", data })));
-  shell.xterm.onResize(({ cols, rows }) => socket.readyState === 1 && socket.send(JSON.stringify({ type: "resize", cols, rows })));
-  shell.xterm.focus();
-  return shell;
 }
 
 function closeShell(n) {
