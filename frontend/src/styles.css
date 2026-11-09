@@ -602,6 +602,12 @@ details:not([open]) > .tree-dir::before { transform: rotate(-90deg); }
 .code-diff.split col.half { width: calc(50% - 3.4em); }
 .code-diff.split td.code + td.ln { border-left: 1px solid var(--rule); }
 .code-diff tr.hunk td { padding: 4px 10px; color: var(--muted); background: var(--sunken); }
+.code-diff tr.gap td { padding: 0 10px 0 0; }
+.code-diff .expanders { display: inline-flex; margin-right: 10px; vertical-align: middle; }
+.code-diff button.expand { width: 40px; height: 24px; border: 0; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--brand) 10%, var(--sunken)); color: var(--brand); font: 600 0.85rem var(--mono); cursor: pointer; }
+.code-diff button.expand:hover { background: var(--brand); color: #fff; }
+.code-diff button.expand:disabled { opacity: 0.5; cursor: progress; }
+.code-diff tr.expanded td.code { background: var(--panel); }
 .code-diff .mark { display: inline-block; width: 1.2em; color: var(--muted); user-select: none; }
 .add-comment { position: absolute; left: 2px; top: 1px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-s);
   background: var(--techlead); color: #fff; font: 600 0.8rem/18px var(--sans); cursor: pointer; opacity: 0; }

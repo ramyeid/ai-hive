@@ -243,6 +243,23 @@ class LeadReviewTest(unittest.TestCase):
 
     # ---- helpers ----
 
+    def test_a_files_lines_at_the_diffs_head_can_be_fetched_to_expand_unchanged_lines(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        head = self._call(kit, f"diff('{self._id(task)}')")["head"]
+
+        lines = self._call(kit, f"source('{self._id(task)}', '{head}', 'app.py')")
+
+        self.assertEqual(lines, (Path(self._field(task, "worktree")) / "app.py").read_text().splitlines())
+
+    def test_only_a_commit_can_be_asked_for_not_a_branch_or_an_option(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+
+        done = self._call_run(kit, f"source('{self._id(task)}', '--output=/tmp/x', 'app.py')")
+
+        self.assertIn("isn't a commit", done.stderr)
+
     def test_claiming_rework_prints_every_round_of_the_lead_not_only_the_newest(self):
         kit, project = self._a_kit(), self._a_project()
         task = self._a_task_sent_back_with_a_comment(kit, project, "Name it total.")

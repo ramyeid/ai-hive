@@ -1724,8 +1724,98 @@ function pairUp(lines) {
   return rows;
 }
 
+// ---- Unchanged lines around the changes, hidden until you expand them (like GitHub) ----
+// A file's lines at the diff's head are fetched once, the first time you expand something in it; what you expanded
+// is kept per file (by the lines it opened above and below each gap), so it survives a refresh of the page.
+const EXPAND_STEP = 20;
+let reviewCtx = null;                        // what the review page drew with, to draw one file again
+const reviewSource = new Map();              // "head:path" -> the file's lines
+const reviewExpanded = new Map();            // "head:path" -> { gap start line: { down, up } }
+
+// The gaps of unchanged lines in a file's new version: before each hunk, and after the last one.
+function diffGaps(f) {
+  const total = reviewSource.get(`${reviewCtx?.head}:${f.path}`)?.length;
+  const gaps = [];
+  let after = 0, delta = 0;   // the last new line shown so far; old line = new line + delta in unchanged code
+  for (const h of f.hunks) {
+    const m = h.header.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)/);
+    const oldStart = +m[1], newStart = +m[2];
+    const first = h.lines.find((l) => l.n != null)?.n ?? newStart;
+    gaps.push({ from: after + 1, to: first - 1, delta: oldStart - newStart, before: h });
+    const ns = h.lines.filter((l) => l.n != null).map((l) => l.n);
+    after = ns.length ? Math.max(...ns) : newStart - 1;
+    const os = h.lines.filter((l) => l.o != null).map((l) => l.o);
+    delta = (os.length ? Math.max(...os) : oldStart - 1) - after;
+  }
+  gaps.push({ from: after + 1, to: total ?? Infinity, delta, before: null });   // the end isn't known until fetched
+  return gaps;
+}
+
+function gapRows(f, gap, layout, cols) {
+  const key = `${reviewCtx?.head}:${f.path}`, src = reviewSource.get(key);
+  const open = reviewExpanded.get(key)?.[gap.from] || { down: 0, up: 0 };
+  const size = gap.to - gap.from + 1;   // Infinity until the file is fetched (after the last hunk)
+  if (size <= 0 || f.status === "deleted" || f.binary) return gap.before ? [`<tr class="hunk"><td colspan="${cols}">${esc(gap.before.header)}</td></tr>`] : [];
+  const down = Math.min(open.down, size), up = Math.min(open.up, size - down), hidden = size - down - up;
+  const line = (n) => {
+    const l = { t: " ", o: n + gap.delta, n, s: src?.[n - 1] ?? "" };
+    return layout === "split"
+      ? `<tr class="ctx expanded"><td class="ln">${l.o}</td>${codeCell(f, l, "new", "ctx")}<td class="ln">${l.n}</td>${codeCell(f, l, "new", "ctx")}</tr>`
+      : `<tr class="ctx expanded"><td class="ln">${l.o}</td><td class="ln">${l.n}</td>${codeCell(f, l, "new", "ctx")}</tr>`;
+  };
+  const rows = [];
+  for (let n = gap.from; n < gap.from + down; n++) rows.push(line(n));
+  if (hidden > 0) {
+    const btn = (dir, label, title) => `<button class="expand" data-action="expand-gap" data-path="${esc(f.path)}" data-from="${gap.from}" data-dir="${dir}" title="${title}">${label}</button>`;
+    const first = gap.from === 1, last = !gap.before, small = hidden <= EXPAND_STEP;
+    const buttons = small && Number.isFinite(hidden) ? btn("all", "↕", `Show ${plural(hidden, "hidden line")}`)
+      : [first ? "" : btn("down", "↓", `Show ${EXPAND_STEP} more lines below`), last ? "" : btn("up", "↑", `Show ${EXPAND_STEP} more lines above`)].join("");
+    const what = gap.before ? esc(gap.before.header) : Number.isFinite(hidden) ? `${plural(hidden, "more line")} to the end of the file` : "";
+    rows.push(`<tr class="hunk gap"><td colspan="${cols}"><span class="expanders">${buttons}</span>${what}</td></tr>`);
+  }
+  for (let n = gap.from + size - up; n <= gap.to && n < gap.from + size; n++) rows.push(line(n));
+  return rows;
+}
+
+async function expandGap(el) {
+  const ctx = reviewCtx, f = ctx?.files.find((x) => x.path === el.dataset.path);
+  if (!f) return;
+  const key = `${ctx.head}:${f.path}`;
+  if (!reviewSource.has(key)) {
+    el.disabled = true;
+    try {
+      const got = await api(`/api/tasks/${encodeURIComponent(ctx.task)}/review/source?rev=${ctx.head}&path=${encodeURIComponent(f.path)}`);
+      reviewSource.set(key, got.lines);
+    } catch (err) {
+      el.disabled = false;
+      return toast(err.message, true);
+    }
+  }
+  const from = +el.dataset.from, gap = diffGaps(f).find((g) => g.from === from);
+  if (!gap) return;
+  const all = reviewExpanded.get(key) || {}, open = all[from] || { down: 0, up: 0 };
+  const size = gap.to - gap.from + 1;
+  if (el.dataset.dir === "all") open.down = size;
+  else open[el.dataset.dir] += EXPAND_STEP;
+  all[from] = open;
+  reviewExpanded.set(key, all);
+  redrawDiffFile(f);
+}
+
+// Draw one file of the review again, in place (the rest of the page stays as it is).
+function redrawDiffFile(f) {
+  const ctx = reviewCtx, index = ctx.files.indexOf(f), old = document.getElementById(`file-${index}`);
+  if (!old) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = diffFile(f, ctx.drafts, new Set(), ctx.posted, ctx.dev, ctx.layout, index);
+  const fresh = tmp.firstElementChild;
+  fresh.open = old.open;
+  old.replaceWith(fresh);
+}
+
 function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unified", index = 0) {
   const rows = [], cols = layout === "split" ? 4 : 3;
+  const gaps = reviewCtx && !f.binary ? diffGaps(f) : [];
   const comments = (keys) => {
     for (const key of keys) {
       shown.add(key);
@@ -1733,9 +1823,9 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
       for (const c of drafts.get(key) || []) rows.push(`<tr class="comment-row"><td colspan="${cols}">${draftCard(c)}</td></tr>`);
     }
   };
-  for (const h of f.hunks) {
+  f.hunks.forEach((h, k) => {
     markHunk(h.lines);
-    rows.push(`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`);
+    rows.push(...(gaps[k] ? gapRows(f, gaps[k], layout, cols) : [`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`]));
     if (layout === "split") {
       for (const p of pairUp(h.lines)) {
         if (p.ctx) {   // an unchanged line is commented on as the new code, like in the unified view
@@ -1748,7 +1838,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
         rows.push(`<tr>${left}${right}</tr>`);
         comments([...(p.o ? [lineKey(f.path, "old", p.o.o)] : []), ...(p.n ? [lineKey(f.path, "new", p.n.n)] : [])]);
       }
-      continue;
+      return;
     }
     for (const l of h.lines) {
       const side = l.t === "-" ? "old" : "new", line = side === "old" ? l.o : l.n;
@@ -1756,7 +1846,8 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
       rows.push(`<tr class="${kind}"><td class="ln">${l.o ?? ""}</td><td class="ln">${l.n ?? ""}</td>${codeCell(f, l, side, kind)}</tr>`);
       comments([lineKey(f.path, side, line)]);
     }
-  }
+  });
+  if (f.hunks.length && gaps.length && f.status !== "added") rows.push(...gapRows(f, gaps[gaps.length - 1], layout, cols));
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
   return `<details class="review-file ${f.viewed ? "is-viewed" : ""}" id="file-${index}" data-index="${index}" data-path="${esc(f.path)}" ${changed > 400 || f.viewed ? "" : "open"}>
@@ -1871,6 +1962,7 @@ async function CodeReview(r) {
   const shown = new Set();
   const posted = placePosted(d.files, d.rounds, d.head);
   const layout = reviewLayout();
+  reviewCtx = { task: d.task, head: d.head, files: d.files, drafts, posted, dev: d.dev, layout };
   const files = d.files.map((f, i) => diffFile(f, drafts, shown, posted, d.dev, layout, i)).join("");
   const treeOn = reviewTreeShown() && d.files.length > 0;
   const treeStrip = `<button class="tree-strip" data-action="review-tree" aria-label="Show the files" title="Show the files">
@@ -2262,6 +2354,7 @@ const reviewActions = {
     render(true);
     waitForRestart();
   },
+  "expand-gap": (el) => expandGap(el),
   "chat-side": () => {
     try { localStorage.setItem("chatSide", chatSideShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     renderChatSide(route().id);

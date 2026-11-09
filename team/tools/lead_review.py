@@ -209,6 +209,26 @@ def diff(task_id: str, mode: str = "feature") -> dict:
     return result
 
 
+SOURCE_LIMIT = 2_000_000   # bytes: a bigger file isn't expanded
+
+
+def source(task_id: str, rev: str, path: str) -> list[str]:
+    """A file's lines at a commit of the task's branch, for expanding the unchanged lines around a change (like
+    GitHub). rev is the commit the diff shows (its head)."""
+    if not re.fullmatch(r"[0-9a-f]{7,40}", rev or ""):
+        raise ReviewError("That isn't a commit.")
+    _, meta = _task(current_task(task_id))
+    if not Path(meta.get("project", "")).is_dir():
+        raise ReviewError("The project folder isn't there.")
+    size = _git(meta["project"], "cat-file", "-s", f"{rev}:{path}")
+    if size.returncode != 0:
+        raise ReviewError(f"{path} isn't in {rev[:7]}.")
+    if int(size.stdout.strip() or 0) > SOURCE_LIMIT:
+        raise ReviewError(f"{path} is too big to expand here: open it in the editor.")
+    shown = subprocess.run(["git", "-C", meta["project"], "show", f"{rev}:{path}"], capture_output=True)
+    return shown.stdout.decode("utf-8", errors="replace").splitlines()
+
+
 # ---- files the lead marked as viewed (per branch, like GitHub) ---------------------------
 
 def _viewed_file(meta: dict) -> Path:

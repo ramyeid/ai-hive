@@ -588,6 +588,10 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     def review(task_id: str, mode: str = "feature"):
         return reviewing(lead_review.diff, task_id, mode)
 
+    @app.get("/api/tasks/{task_id}/review/source")
+    def review_source(task_id: str, rev: str, path: str):
+        return {"lines": reviewing(lead_review.source, task_id, rev, path)}
+
     @app.post("/api/tasks/{task_id}/review/comments")
     def review_comment(task_id: str, body: ReviewComment):
         return reviewing(lead_review.add_comment, task_id, body.body, body.file, body.line, body.side, body.code)

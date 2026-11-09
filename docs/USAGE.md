@@ -33,6 +33,8 @@ Open a task and press **Review the code** (also in the Dev's and Reviewer's chat
 - Review the **branch**: the whole branch against its base, or what changed since your last review, in unified or
   side-by-side view. Follow-up tasks add commits to the same branch, so **Earlier reviews** lists every round on it,
   and your comments go to the branch's current task (the one its dev is on).
+- Unchanged lines between changes are folded, like GitHub: **↕** shows a small gap, **↑** and **↓** 20 more lines
+  at a time (the last **↓** reaches the end of the file). You can comment on those lines too.
 - Hover a line and press **+** to comment on it. Anything not about one line goes in the **General comment** box,
   sent with your review.
 - Tick **Viewed** on a file to fold it away (like GitHub); the eye in the file tree hides them. A viewed file
