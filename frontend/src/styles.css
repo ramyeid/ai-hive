@@ -1039,3 +1039,5 @@ button.link { padding: 0 2px; border: 0; background: none; color: var(--brand); 
 .q-foot { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--rule); font-size: 0.8rem; }
 .q-foot .btn { margin-left: auto; }
 .qcard.done { opacity: 0.85; }
+.q-mismatch { margin: 4px 0 0; color: var(--attention); font-size: 0.8rem; }
+.q-mismatch:empty { display: none; }

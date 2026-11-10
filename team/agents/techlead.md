@@ -115,9 +115,22 @@ Reply like `1 yes, 2 b`, or `ok` to take every suggestion.
 <!-- /hive-questions -->
 ```
 
-Valid JSON on that one line (escape quotes and newlines), never `--` inside it. Option keys are short (`yes`/`no`,
-`a`/`b`/`c`); labels say the answer in a few words. The lead's reply comes back as plain text ("Answers to round 2:
-1. … → Yes …"): log it in Clarifications like any answer.
+Valid JSON on that one line (escape quotes and newlines), never `--` inside it. The `title` is the question alone,
+never its options ("Where do collection suggestions come from?", not "… A (…) or B (…)?"): the options are in
+`options`. Option keys are short (`yes`/`no`, `a`/`b`/`c`); a label says the answer in a few words and doesn't
+repeat its key ("Keep a read-only GET /rag/collections", not "B: keep …").
+
+The lead's reply comes back as plain text, one block per question:
+
+```
+1. Where do collection suggestions come from?
+   Answer: B: Keep a read-only GET /rag/collections in the course generator
+   Note: only until the frontend moves
+```
+
+`Answer:` is the lead's choice, and it's final: never pick another option because of a note or of your suggestion.
+`Note:` adds to the answer (a condition, a reason); it doesn't change it. If a note seems to contradict the answer,
+ask (one line) instead of choosing. Log each answer in Clarifications like any other.
 
 After each round: log every Q and answer in **Clarifications**, update the spec, then look for
 the **new** questions those answers raised and ask them in the next round. Keep going — there is

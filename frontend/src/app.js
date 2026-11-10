@@ -1087,15 +1087,33 @@ function questionsState(key, q) {
 }
 
 // The reply the lead sends: self-contained (each question named), so it reads well in the chat and in Clarifications.
+// An option as the lead reads it: "B: keep a read-only GET" (a label that already starts with its letter isn't doubled).
+function optionText(o) {
+  const label = o.label.replace(new RegExp(`^\\s*${o.key.replace(/[^\w]/g, "")}\\s*[.):\\-–]\\s*`, "i"), "").trim();
+  return o.key.length === 1 ? `${o.key.toUpperCase()}: ${label}` : label;
+}
+
+// A note that starts with another option's letter ("B. keep it") was meant as that answer: say so before sending.
+function noteNamesOtherOption(x, s) {
+  const m = (s.notes[x.id] || "").match(/^\s*([a-z])(?:\s*[.):\-–]|\s+|$)/i);
+  const other = m && (x.options || []).find((o) => o.key.toLowerCase() === m[1].toLowerCase());
+  return other && other.key !== s.pick[x.id] ? other : null;
+}
+
+// The reply: one block per question, the answer on its own line, a note apart (it adds to the answer, never changes it).
 function questionsReply(q, s) {
-  const lines = [`Answers to round ${q.round ?? ""}:`.replace(" :", ":")];
+  const lines = [`Answers to ${q.round != null ? `round ${q.round}` : "your questions"} (each "Answer:" is my choice; a "Note:" adds to it, it doesn't change it):`];
   q.questions.forEach((x, i) => {
     const pick = s.pick[x.id], opt = (x.options || []).find((o) => o.key === pick);
     const note = (s.notes[x.id] || "").trim();
-    const chosen = !opt ? pick : opt.key.length === 1 ? `${opt.key.toUpperCase()}: ${opt.label}` : opt.label;
-    const answer = pick === "own" ? note || "(no answer)" : `${chosen}${note ? ` (${note})` : ""}`;
-    lines.push(`${i + 1}. ${x.title} → ${answer}`);
+    lines.push("", `${i + 1}. ${x.title}`);
+    if (pick === "own") lines.push(`   Answer (in my words): ${note || "(none yet)"}`);
+    else {
+      lines.push(`   Answer: ${opt ? optionText(opt) : pick}`);
+      if (note) lines.push(`   Note: ${note}`);
+    }
   });
+  if (q.decisions.length) lines.push("");
   const against = q.decisions.map((d, i) => [d, s.disagree[i]]).filter(([, v]) => v !== undefined);
   if (q.decisions.length) {
     const ok = q.decisions.length - against.length;
@@ -1123,8 +1141,10 @@ function questionsMessage(e, agent, answered) {
     return `<details class="qrow" data-q="${esc(key)}" data-id="${esc(x.id)}" ${s.open.has(x.id) || s.pick[x.id] === "own" ? "open" : ""}>
       <summary><span class="n">${i + 1}</span><span class="t">${inlineCode(x.title)}<small>${inlineCode(first)}</small></span>${seg}</summary>
       <div class="qbody">${x.details ? `<div class="prose">${md(x.details)}</div>` : ""}
-        ${(x.options || []).length ? `<ul class="q-options">${x.options.map((o) => `<li><b>${esc(o.key.toUpperCase())}</b> ${esc(o.label)}${x.suggested === o.key ? ` <span class="muted">(suggested)</span>` : ""}</li>`).join("")}</ul>` : ""}
-        ${done ? "" : `<input class="q-note" data-q="${esc(key)}" data-id="${esc(x.id)}" value="${esc(s.notes[x.id] || "")}" placeholder="${s.pick[x.id] === "own" ? "Your answer" : "Add a note (optional)"}">`}</div></details>`;
+        ${(x.options || []).length ? `<ul class="q-options">${x.options.map((o) => `<li>${esc(optionText(o))}${x.suggested === o.key ? ` <span class="muted">(suggested)</span>` : ""}</li>`).join("")}</ul>` : ""}
+        ${done ? "" : `<input class="q-note" data-q="${esc(key)}" data-id="${esc(x.id)}" value="${esc(s.notes[x.id] || "")}"
+          placeholder="${s.pick[x.id] === "own" ? "Your answer, in your own words" : "A note that goes with your answer (optional; to answer differently, pick another option)"}">
+          <p class="q-mismatch" data-q="${esc(key)}" data-id="${esc(x.id)}">${mismatchHtml(x, s, key)}</p>`}</div></details>`;
   }).join("");
   const decisions = q.decisions.length ? `<details class="q-decisions" ${s.open.has("decisions") ? "open" : ""} data-q="${esc(key)}" data-id="decisions">
       <summary>${plural(q.decisions.length, "decision")}, accepted unless you say otherwise</summary>
@@ -1146,6 +1166,14 @@ function questionsOf(key) {
   const [agent, ts] = key.split("|");
   const e = (state.questionEvents ?? new Map()).get(key);
   return e ? parseQuestions(e.text) : null;
+}
+
+function mismatchHtml(x, s, key) {
+  const other = noteNamesOtherOption(x, s);
+  if (!other) return "";
+  const picked = (x.options || []).find((o) => o.key === s.pick[x.id]);
+  return `Your note starts with ${esc(other.key.toUpperCase())}, but the answer selected is ${esc(picked ? picked.key.toUpperCase() : "your own")}.
+    <button type="button" class="link" data-action="question-pick" data-q="${esc(key)}" data-id="${esc(x.id)}" data-key="${esc(other.key)}">Answer ${esc(other.key.toUpperCase())}</button>`;
 }
 
 function refreshReply(key) {
@@ -2471,6 +2499,9 @@ const reviewActions = {
   "question-pick": (el) => {   // (the click handler's preventDefault keeps the question from opening or closing)
     const s = state.questions[el.dataset.q];
     s.pick[el.dataset.id] = el.dataset.key;
+    if (el.closest(".q-mismatch")) {   // "B. keep it" was the answer itself: keep only what it adds
+      s.notes[el.dataset.id] = (s.notes[el.dataset.id] || "").replace(/^\s*[a-z]\s*[.):\-–]?\s*/i, "");
+    }
     if (el.dataset.key === "own") s.open.add(el.dataset.id);
     render(true);
   },
@@ -2484,6 +2515,8 @@ const reviewActions = {
     const key = el.dataset.q, q = questionsOf(key), s = state.questions[key];
     const missing = q.questions.findIndex((x) => s.pick[x.id] === "own" && !(s.notes[x.id] || "").trim());
     if (missing >= 0) return toast(`Write your answer to question ${missing + 1}, or pick one of its options.`, true);
+    const unsure = q.questions.findIndex((x) => noteNamesOtherOption(x, s));
+    if (unsure >= 0 && !confirm(`Question ${unsure + 1}: your note names another option than the one selected. Send anyway?`)) return;
     const ok = await act(() => api(`/api/agents/${el.dataset.agent}/message`, { method: "POST", body: { text: questionsReply(q, s) } }));
     if (ok) { s.sent = true; render(true); }
   },
@@ -3123,7 +3156,12 @@ document.addEventListener("change", (e) => {
 document.addEventListener("input", (e) => {
   const key = e.target.dataset?.q, s = key && state.questions?.[key];
   if (!s) return;
-  if (e.target.classList.contains("q-note")) s.notes[e.target.dataset.id] = e.target.value;
+  if (e.target.classList.contains("q-note")) {
+    s.notes[e.target.dataset.id] = e.target.value;
+    const x = questionsOf(key)?.questions.find((y) => y.id === e.target.dataset.id);
+    const hint = e.target.parentElement.querySelector(".q-mismatch");
+    if (x && hint) hint.innerHTML = mismatchHtml(x, s, key);
+  }
   else if (e.target.classList.contains("q-against")) s.disagree[+e.target.dataset.i] = e.target.value;
   else return;
   refreshReply(key);
