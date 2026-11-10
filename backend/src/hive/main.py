@@ -139,6 +139,7 @@ class BackupRestore(BaseModel):
 class ReviewViewed(BaseModel):
     path: str
     viewed: bool = True
+    at: str = ""   # the commit the page showed: the file is viewed as it was there
 
 
 class ConsoleUrlBody(BaseModel):
@@ -608,7 +609,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
 
     @app.post("/api/tasks/{task_id}/review/viewed")
     def review_viewed(task_id: str, body: ReviewViewed):
-        return reviewing(lead_review.mark_viewed, task_id, body.path, body.viewed)
+        return reviewing(lead_review.mark_viewed, task_id, body.path, body.viewed, body.at)
 
     @app.post("/api/tasks/{task_id}/review/submit")
     def review_submit(task_id: str, body: ReviewSubmit):

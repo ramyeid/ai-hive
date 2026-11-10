@@ -111,7 +111,8 @@ def branch_rounds(meta: dict) -> list[dict]:
 
 
 def _git(project: str, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", project, *args], capture_output=True, text=True)
+    # core.quotePath off: file names with accents or in other scripts come as they are, not as "\330\257…"
+    return subprocess.run(["git", "-C", project, "-c", "core.quotePath=false", *args], capture_output=True, text=True)
 
 
 def _exists(project: str, ref: str) -> bool:
@@ -244,24 +245,30 @@ def _viewed(meta: dict) -> dict[str, str]:
         return {}
 
 
-def _blobs(meta: dict, paths: list[str]) -> dict[str, str]:
-    """Each file's blob at the branch's head ('deleted' for a file that's gone): what "viewed" is tied to."""
+def _blobs(meta: dict, paths: list[str], rev: str = "") -> dict[str, str]:
+    """Each file's blob at `rev` (the branch's head by default; 'deleted' for a file that isn't there): what "viewed"
+    is tied to. -z: names with accents or other scripts come raw, not quoted, so they match."""
     out = {p: "deleted" for p in paths}
     if paths:
-        listed = _git(meta["project"], "ls-tree", meta["branch"], "--", *paths).stdout
-        for line in listed.splitlines():
-            info, _, path = line.partition("\t")
-            out[path] = info.split()[2]
+        listed = _git(meta["project"], "ls-tree", "-z", rev or meta["branch"], "--", *paths).stdout
+        for entry in listed.split("\0"):
+            info, _, path = entry.partition("\t")
+            if path:
+                out[path] = info.split()[2]
     return out
 
 
-def mark_viewed(task_id: str, path: str, viewed: bool = True) -> dict:
-    """Mark a file viewed (or not) as it is now; it shows as not viewed again once the dev changes it."""
+def mark_viewed(task_id: str, path: str, viewed: bool = True, at: str = "") -> dict:
+    """Mark a file viewed (or not) as the lead saw it: at the commit the page showed (`at`), not at whatever the
+    branch has now; so a change the dev made meanwhile shows the file as not viewed. It's unviewed again whenever
+    the file changes."""
+    if at and not re.fullmatch(r"[0-9a-f]{7,40}", at):
+        raise ReviewError("That isn't a commit.")
     _, meta = _task(current_task(task_id))
     with lock():
         seen = _viewed(meta)
         if viewed:
-            seen[path] = _blobs(meta, [path])[path]
+            seen[path] = _blobs(meta, [path], at)[path]
         else:
             seen.pop(path, None)
         _viewed_file(meta).parent.mkdir(parents=True, exist_ok=True)

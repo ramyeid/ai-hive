@@ -173,6 +173,28 @@ class LeadReviewTest(unittest.TestCase):
         file = self._call(kit, f"diff('{self._id(task)}')")["files"][0]
         self.assertEqual((file["viewed"], file["changed_since_viewed"]), (False, True))
 
+    def test_a_file_viewed_on_a_page_opened_before_the_dev_changed_it_is_not_viewed(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        seen = self._call(kit, f"diff('{self._id(task)}')")["head"]   # the page the lead has open
+        self._the_dev_edits(task, "app.py")                          # meanwhile
+
+        self._call(kit, f"mark_viewed('{self._id(task)}', 'app.py', True, '{seen}')")
+
+        file = self._call(kit, f"diff('{self._id(task)}')")["files"][0]
+        self.assertEqual((file["viewed"], file["changed_since_viewed"]), (False, True))
+
+    def test_a_file_named_in_another_script_is_unviewed_when_it_changes(self):
+        kit, project = self._a_kit(), self._a_project()
+        task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
+        self._the_dev_edits(task, "دروس.py")
+        self._call(kit, f"mark_viewed('{self._id(task)}', 'دروس.py')")
+
+        self._the_dev_edits(task, "دروس.py", "def lessons():\n    return []\n")
+
+        file = next(f for f in self._call(kit, f"diff('{self._id(task)}')")["files"] if f["path"] == "دروس.py")
+        self.assertEqual((file["viewed"], file["changed_since_viewed"]), (False, True))
+
     def test_unmarking_a_file_makes_it_unviewed(self):
         kit, project = self._a_kit(), self._a_project()
         task = self._a_task_built_by(kit, project, "dev-2", status="ready-for-review")
@@ -298,10 +320,11 @@ class LeadReviewTest(unittest.TestCase):
 
         self.assertNotIn("The lead's comments", said)
 
-    def _the_dev_edits(self, task: Path, file: str) -> None:
+    def _the_dev_edits(self, task: Path, file: str, content: str = "def total():\n    return 3\n") -> None:
         folder = Path(self._field(task, "worktree"))
-        (folder / file).write_text("def total():\n    return 3\n")
-        _git(folder, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qam", f"edit {file}")
+        (folder / file).write_text(content)
+        _git(folder, "add", "--", file)
+        _git(folder, "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", f"edit {file}")
 
     def _a_follow_up_in_dev(self, kit: Path, project: Path, earlier: Path) -> Path:
         """The earlier task done, and a follow-up on its branch claimed by the same dev."""

@@ -2391,7 +2391,7 @@ const reviewActions = {
       file.open = true;
     }
     try {
-      await api(`/api/tasks/${encodeURIComponent(route().id)}/review/viewed`, { method: "POST", body: { path: file.dataset.path, viewed } });
+      await api(`/api/tasks/${encodeURIComponent(route().id)}/review/viewed`, { method: "POST", body: { path: file.dataset.path, viewed, at: reviewCtx?.head || "" } });
     } catch (err) {
       show(!viewed);
       toast(err.message, true);
