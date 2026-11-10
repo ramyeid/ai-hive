@@ -67,7 +67,20 @@ const emptyStream = () => ({ thinking: "", text: "", tool: "" });
 // ---- helpers ------------------------------------------------------------------
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const md = (text) => DOMPurify.sanitize(marked.parse(text || "", { gfm: true, breaks: false }));
+// Agents often start a list right under a sentence ("Backend\n3. Searcher…"). Standard Markdown then glues the
+// items onto that sentence (only a list starting at 1 may follow one directly): give each list a blank line above.
+function listsOnTheirOwn(text) {
+  let fenced = false, prev = "";
+  const item = /^ {0,3}(?:\d{1,3}[.)]|[-*+])\s+\S/;
+  return (text || "").split("\n").map((line) => {
+    if (/^ {0,3}(```|~~~)/.test(line)) fenced = !fenced;
+    const out = !fenced && item.test(line) && prev.trim() && !item.test(prev) && !/^\s/.test(prev) && !/^ {0,3}(#|>|\|)/.test(prev)
+      ? `\n${line}` : line;
+    prev = line;
+    return out;
+  }).join("\n");
+}
+const md = (text) => DOMPurify.sanitize(marked.parse(listsOnTheirOwn(text), { gfm: true, breaks: false }));
 
 async function api(path, { method = "GET", body } = {}, retried = false) {
   const res = await fetch(path, {

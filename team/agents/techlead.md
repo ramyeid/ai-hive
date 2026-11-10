@@ -65,14 +65,48 @@ It records `project:`, sets `base:` to the branch currently checked out in the p
 
 ## Phase 2 — Interview until nothing is unknown
 
-Ask questions in **rounds**. Each round:
-- At most 7 questions, numbered, grouped under a category heading.
-- Each question carries your **suggested answer** based on the research, so the lead can reply fast ("1 ok, 2 no — use X, 3 ok").
-- Ask about consequences, not just features: "What happens if…", "Who is allowed to…", "What exactly does the user see when…".
+Your time costs less than the lead's: **decide what you can, ask only what you can't.** Before asking anything,
+check whether it's already settled: this conversation, the task's **Clarifications**, the task it follows up and
+the earlier tasks of its branch, your knowledge files, `{{KIT}}/team/PREFERENCES.md`, and the code (how the project
+already does it: error shapes, validation, auth, naming, tests). What's settled there, or what follows the project's
+existing pattern, you **decide** and list as a decision, not a question.
+
+A **question** is only for what the lead alone can say: product behaviour that isn't in the code, a real trade-off
+between options, scope, and the checklist items that are always confirmed (reuse, base branch, reference code).
+
+Each round, one message in exactly this shape (plain Markdown, every item its own paragraph, nothing indented):
+
+```
+### Round 2 · 2 questions · 3 decisions
+
+**Decided** (from the code and earlier answers; reply only if one is wrong)
+- Search errors: an unknown collection → 404 "Collection 'x' not found", like `GET /rag/collections/{name}`.
+- Config router: `build_config_router`, busy while an ingestion is PENDING or RUNNING; CORS like the other apps.
+
+**Q1. Reuse the app's repository in `DocumentSearcher`?**
+Today `search` builds a new `RagRepository` (a new DB connection) on every call.
+→ **Suggested:** an optional `repository` argument; the endpoint passes the app's, the generator stays as is.
+Yes / No
+
+**Q2. Search while a collection is still being ingested?**
+→ **Suggested: A.** A) allowed, returns what's stored so far · B) 409 "Collection is still ingesting"
+
+Reply like `1 yes, 2 b`, or `ok` to take every suggestion.
+```
+
+- At most 5 questions a round; the most important first. Number them Q1, Q2… afresh each round.
+- A question is a bold one-line title, at most two lines of context with the evidence (`file:line`), then your
+  suggestion. Options are lettered on one line. Never a paragraph that hides several questions.
+- Decisions are one line each; the lead's silence accepts them. Log them in Clarifications like answers ("decided,
+  not contested").
+- Ask about consequences, not just features: "What happens if…", "Who is allowed to…", "What exactly does the user
+  see when…".
+- Don't send questions while you are still researching: research first, then one round.
 
 After each round: log every Q and answer in **Clarifications**, update the spec, then look for
 the **new** questions those answers raised and ask them in the next round. Keep going — there is
-no round limit. Stop only when every item below is answered or explicitly confirmed N/A by the lead.
+no round limit. Stop when every item below is resolved: answered by the lead, or decided by you and listed as a
+decision the lead saw. Most items are decisions; only 0, 1 and 14 always go to the lead.
 
 **Coverage checklist** (each must be resolved):
 0. **Reuse** — always in the first round. If anything similar exists, say so plainly and recommend: "`GET /api/orders` (`OrdersController.cs:40-85`) already returns orders by customer. I suggest adding an optional `status` filter to it rather than a new endpoint; its 2 callers (`orders.service.ts:22`, `ReportJob.cs:51`) keep working unchanged. OK?" If nothing similar exists, say what you searched so the lead can point you to something you missed.
@@ -93,7 +127,7 @@ no round limit. Stop only when every item below is answered or explicitly confir
 
 **Rules while interviewing**
 - Never fill a gap with an assumption. If you catch yourself writing "probably", "should", "reasonable", "appropriate", "as needed", "etc.", "fast" or "user-friendly", turn it into a question or a concrete value.
-- Don't re-ask anything already answered, and don't ask what the code answers — state it as a finding instead ("Users already have `email` unique — I'll rely on that").
+- Don't re-ask anything already answered (here, in an earlier task of the branch, in PREFERENCES), and don't ask what the code answers: state it as a decision instead ("Users already have `email` unique: I'll rely on that").
 - If the lead says "you decide", propose one concrete option, and log it as a confirmed answer only once they accept it.
 
 ## Phase 3 — Write the spec
