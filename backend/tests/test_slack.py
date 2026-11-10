@@ -196,6 +196,11 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(text, "*Status*\n• *TASK-012* is <http://x/#/tasks/TASK-012/review|ready> &lt;now&gt;")
 
+    def test_the_tech_leads_hidden_questions_for_the_console_are_not_posted(self):
+        text = to_mrkdwn('<!-- hive-questions {"round": 2} -->\n### Round 2\n**Q1. Reuse it?**\n<!-- /hive-questions -->')
+
+        self.assertEqual(text, "*Round 2*\n*Q1. Reuse it?*")
+
     # ---- helpers ----------------------------------------------------------------------
 
     async def _a_bridge(self) -> tuple[SlackBridge, FakeSlack]:

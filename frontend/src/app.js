@@ -1062,6 +1062,97 @@ function toolItem(e, results) {
     <pre>${esc(res ? res.text || "(no output)" : toolDetail(e.name, e.input))}</pre></details>`;
 }
 
+// ---- A round of the Tech Lead's questions, as cards (or as the text it wrote) ----------------
+// The Tech Lead writes its round as text, between <!-- hive-questions {json} --> and <!-- /hive-questions -->; the
+// JSON holds the same questions for the cards. Text outside the round is shown as it is, and each question opens to
+// everything written about it, so the cards lose nothing; the switch shows the message exactly as written.
+const QUESTIONS = /<!--\s*hive-questions\s+([\s\S]*?)-->([\s\S]*?)<!--\s*\/hive-questions\s*-->/;
+const questionsView = () => { try { return localStorage.getItem("questionsView") || "cards"; } catch { return "cards"; } };
+
+function parseQuestions(text) {
+  const m = text.match(QUESTIONS);
+  if (!m) return null;
+  try {
+    const q = JSON.parse(m[1]);
+    if (!Array.isArray(q.questions)) return null;
+    return { ...q, decisions: q.decisions || [], before: text.slice(0, m.index), after: text.slice(m.index + m[0].length) };
+  } catch { return null; }
+}
+
+function questionsState(key, q) {
+  state.questions ??= {};
+  return (state.questions[key] ??= {
+    pick: Object.fromEntries(q.questions.map((x) => [x.id, x.suggested ?? x.options?.[0]?.key ?? ""])),
+    notes: {}, disagree: {}, open: new Set(["preview"]), sent: false });   // the reply shows until folded
+}
+
+// The reply the lead sends: self-contained (each question named), so it reads well in the chat and in Clarifications.
+function questionsReply(q, s) {
+  const lines = [`Answers to round ${q.round ?? ""}:`.replace(" :", ":")];
+  q.questions.forEach((x, i) => {
+    const pick = s.pick[x.id], opt = (x.options || []).find((o) => o.key === pick);
+    const note = (s.notes[x.id] || "").trim();
+    const chosen = !opt ? pick : opt.key.length === 1 ? `${opt.key.toUpperCase()}: ${opt.label}` : opt.label;
+    const answer = pick === "own" ? note || "(no answer)" : `${chosen}${note ? ` (${note})` : ""}`;
+    lines.push(`${i + 1}. ${x.title} → ${answer}`);
+  });
+  const against = q.decisions.map((d, i) => [d, s.disagree[i]]).filter(([, v]) => v !== undefined);
+  if (q.decisions.length) {
+    const ok = q.decisions.length - against.length;
+    lines.push(against.length === 0 ? `Decisions: ${q.decisions.length === 1 ? "accepted" : `all ${q.decisions.length} accepted`}.`
+      : `Decisions: ${ok ? `${ok} accepted, ` : ""}${against.length === 1 && !ok ? "not accepted" : `${against.length} not`}:`);
+    for (const [d, v] of against) lines.push(`- ${d} → instead: ${v.trim() || "(say what)"}`);
+  }
+  return lines.join("\n");
+}
+
+// One line of an agent's Markdown with only its `code` kept (titles and their first line of context).
+const inlineCode = (text) => esc(text.replace(/\*\*|__/g, "")).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+function questionsMessage(e, agent, answered) {
+  const q = parseQuestions(e.text);
+  const cards = questionsView() === "cards";
+  const toggle = `<button class="link q-view" data-action="questions-view">${cards ? "Show as text" : "Show as cards"}</button>`;
+  if (!q || !cards) return `<div class="msg agent prose">${md(e.text)}</div>${q ? `<p class="q-switch">${toggle}</p>` : ""}`;
+  const key = `${agent}|${e.ts}`, s = questionsState(key, q), done = answered || s.sent;
+  const rows = q.questions.map((x, i) => {
+    const first = (x.details || "").split("\n").find((l) => l.trim()) || "";
+    const opts = [...(x.options || []), { key: "own", label: "…", title: "Answer in your own words" }];
+    const seg = done ? "" : `<span class="seg">${opts.map((o) => `<button type="button" class="${s.pick[x.id] === o.key ? "on" : ""} ${x.suggested === o.key ? "sug" : ""}"
+        data-action="question-pick" data-q="${esc(key)}" data-id="${esc(x.id)}" data-key="${esc(o.key)}" title="${esc(o.title || o.label)}${x.suggested === o.key ? " (suggested)" : ""}">${esc(o.key === "own" ? "…" : o.label.length <= 12 ? o.label : o.key.toUpperCase())}</button>`).join("")}</span>`;
+    return `<details class="qrow" data-q="${esc(key)}" data-id="${esc(x.id)}" ${s.open.has(x.id) || s.pick[x.id] === "own" ? "open" : ""}>
+      <summary><span class="n">${i + 1}</span><span class="t">${inlineCode(x.title)}<small>${inlineCode(first)}</small></span>${seg}</summary>
+      <div class="qbody">${x.details ? `<div class="prose">${md(x.details)}</div>` : ""}
+        ${(x.options || []).length ? `<ul class="q-options">${x.options.map((o) => `<li><b>${esc(o.key.toUpperCase())}</b> ${esc(o.label)}${x.suggested === o.key ? ` <span class="muted">(suggested)</span>` : ""}</li>`).join("")}</ul>` : ""}
+        ${done ? "" : `<input class="q-note" data-q="${esc(key)}" data-id="${esc(x.id)}" value="${esc(s.notes[x.id] || "")}" placeholder="${s.pick[x.id] === "own" ? "Your answer" : "Add a note (optional)"}">`}</div></details>`;
+  }).join("");
+  const decisions = q.decisions.length ? `<details class="q-decisions" ${s.open.has("decisions") ? "open" : ""} data-q="${esc(key)}" data-id="decisions">
+      <summary>${plural(q.decisions.length, "decision")}, accepted unless you say otherwise</summary>
+      <ul>${q.decisions.map((d, i) => `<li><span class="prose">${md(d)}</span>${done ? "" : s.disagree[i] === undefined
+        ? `<button type="button" class="link" data-action="question-disagree" data-q="${esc(key)}" data-i="${i}">Disagree</button>`
+        : `<input class="q-against" data-q="${esc(key)}" data-i="${i}" value="${esc(s.disagree[i])}" placeholder="What should it be?"><button type="button" class="link" data-action="question-disagree" data-q="${esc(key)}" data-i="${i}">Keep it</button>`}</li>`).join("")}</ul></details>` : "";
+  return `${q.before.trim() ? `<div class="msg agent prose">${md(q.before)}</div>` : ""}
+    <div class="qcard ${done ? "done" : ""}" data-q="${esc(key)}">
+      <div class="q-head"><b>Round ${esc(String(q.round ?? ""))}</b><span class="muted">${plural(q.questions.length, "question")}${done ? " · answered" : ""}</span>${toggle}</div>
+      ${rows}${decisions}
+      ${done ? "" : `<details class="q-preview" ${s.open.has("preview") ? "open" : ""} data-q="${esc(key)}" data-id="preview"><summary>Message to ${esc(personOf(agent))}</summary><pre class="q-reply" data-q="${esc(key)}">${esc(questionsReply(q, s))}</pre></details>
+      <div class="q-foot"><span class="muted">Suggested answers are preselected.</span><button type="button" class="btn primary small" data-action="question-send" data-q="${esc(key)}" data-agent="${esc(agent)}">Send</button></div>`}
+    </div>
+    ${q.after.trim() ? `<div class="msg agent prose">${md(q.after)}</div>` : ""}`;
+}
+
+// The card's question, from the transcript on screen (the message's text is in the page's state).
+function questionsOf(key) {
+  const [agent, ts] = key.split("|");
+  const e = (state.questionEvents ?? new Map()).get(key);
+  return e ? parseQuestions(e.text) : null;
+}
+
+function refreshReply(key) {
+  const q = questionsOf(key), pre = document.querySelector(`.q-reply[data-q="${CSS.escape(key)}"]`);
+  if (q && pre) pre.textContent = questionsReply(q, state.questions[key]);
+}
+
 function transcriptHTML(events, { pending = [], agent = "", pinned = false } = {}) {
   const results = {}, decisions = {};
   for (const e of events) {
@@ -1077,7 +1168,12 @@ function transcriptHTML(events, { pending = [], agent = "", pinned = false } = {
     else if (e.kind === "tool") items.push({ kind: "tool-run", tools: [e] });
     else items.push(e);
   }
-  return items.map((e) => {
+  return items.map((e, i) => {
+    if (e.kind === "text" && agent && QUESTIONS.test(e.text)) {
+      (state.questionEvents ??= new Map()).set(`${agent}|${e.ts}`, e);
+      const answered = items.slice(i + 1).some((x) => x.kind === "user");
+      return questionsMessage(e, agent, answered);
+    }
     if (e.kind === "tool-run") {
       const failed = e.tools.filter((t) => results[t.id]?.is_error).length;
       const running = e.tools.find((t) => !results[t.id]);
@@ -2368,6 +2464,29 @@ const reviewActions = {
     waitForRestart();
   },
   "expand-gap": (el) => expandGap(el),
+  "questions-view": () => {
+    try { localStorage.setItem("questionsView", questionsView() === "cards" ? "text" : "cards"); } catch { /* this page only */ }
+    render(true);
+  },
+  "question-pick": (el) => {   // (the click handler's preventDefault keeps the question from opening or closing)
+    const s = state.questions[el.dataset.q];
+    s.pick[el.dataset.id] = el.dataset.key;
+    if (el.dataset.key === "own") s.open.add(el.dataset.id);
+    render(true);
+  },
+  "question-disagree": (el) => {
+    const s = state.questions[el.dataset.q], i = +el.dataset.i;
+    if (s.disagree[i] === undefined) s.disagree[i] = ""; else delete s.disagree[i];
+    s.open.add("decisions");
+    render(true);
+  },
+  "question-send": async (el) => {
+    const key = el.dataset.q, q = questionsOf(key), s = state.questions[key];
+    const missing = q.questions.findIndex((x) => s.pick[x.id] === "own" && !(s.notes[x.id] || "").trim());
+    if (missing >= 0) return toast(`Write your answer to question ${missing + 1}, or pick one of its options.`, true);
+    const ok = await act(() => api(`/api/agents/${el.dataset.agent}/message`, { method: "POST", body: { text: questionsReply(q, s) } }));
+    if (ok) { s.sent = true; render(true); }
+  },
   "chat-side": () => {
     try { localStorage.setItem("chatSide", chatSideShown() ? "hidden" : "shown"); } catch { /* this page only */ }
     renderChatSide(route().id);
@@ -3000,6 +3119,19 @@ document.addEventListener("input", (e) => {
 document.addEventListener("change", (e) => {
   if (e.target.id === "bk-file" && e.target.files[0]) uploadBackup(e.target.files[0]);
 });
+// The question cards keep what you type and open in state: the chat is drawn again when anything happens.
+document.addEventListener("input", (e) => {
+  const key = e.target.dataset?.q, s = key && state.questions?.[key];
+  if (!s) return;
+  if (e.target.classList.contains("q-note")) s.notes[e.target.dataset.id] = e.target.value;
+  else if (e.target.classList.contains("q-against")) s.disagree[+e.target.dataset.i] = e.target.value;
+  else return;
+  refreshReply(key);
+});
+document.addEventListener("toggle", (e) => {
+  const key = e.target.dataset?.q, s = key && state.questions?.[key];
+  if (s && e.target.dataset.id) (e.target.open ? s.open.add(e.target.dataset.id) : s.open.delete(e.target.dataset.id));
+}, true);
 document.addEventListener("toggle", (e) => {
   if (e.target.classList?.contains("land-more") && state.land[route().id]) state.land[route().id].more = e.target.open;
 }, true);

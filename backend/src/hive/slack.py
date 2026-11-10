@@ -30,7 +30,9 @@ CHUNK = 3500                 # characters per Slack message
 
 
 def to_mrkdwn(markdown: str) -> str:
-    """The agents write Markdown; Slack has its own flavour."""
+    """The agents write Markdown; Slack has its own flavour. Hidden notes for the console (<!-- … -->, such as the
+    Tech Lead's questions as cards) are left out."""
+    markdown = re.sub(r"<!--.*?-->\n?", "", markdown, flags=re.S)
     out, in_code = [], False
     for line in markdown.splitlines():
         line = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")

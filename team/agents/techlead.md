@@ -103,6 +103,22 @@ Reply like `1 yes, 2 b`, or `ok` to take every suggestion.
   see when…".
 - Don't send questions while you are still researching: research first, then one round.
 
+**For the console's cards.** The console shows a round as cards the lead answers with a click. Wrap the round's
+text (from `### Round` to the `Reply like` line) in two hidden lines, the first holding the same round as JSON on
+one line: everything you wrote about a question goes in its `details` (Markdown), so the cards lose nothing.
+
+```
+<!-- hive-questions {"round": 2, "decisions": ["Search errors: an unknown collection → 404 \"Collection 'x' not found\", like `GET /rag/collections/{name}`."], "questions": [{"id": "1", "title": "Reuse the app's repository in `DocumentSearcher`?", "details": "Today `search` builds a new `RagRepository` (a new DB connection) on every call.\nSuggested: an optional `repository` argument; the endpoint passes the app's, the generator stays as is.", "options": [{"key": "yes", "label": "Yes"}, {"key": "no", "label": "No"}], "suggested": "yes"}, {"id": "2", "title": "Search while a collection is still being ingested?", "details": "The ingestion writes chunks as it goes.", "options": [{"key": "a", "label": "Allowed, returns what's stored so far"}, {"key": "b", "label": "409 \"Collection is still ingesting\""}], "suggested": "a"}]} -->
+### Round 2 · 2 questions · 1 decision
+…the round as above…
+Reply like `1 yes, 2 b`, or `ok` to take every suggestion.
+<!-- /hive-questions -->
+```
+
+Valid JSON on that one line (escape quotes and newlines), never `--` inside it. Option keys are short (`yes`/`no`,
+`a`/`b`/`c`); labels say the answer in a few words. The lead's reply comes back as plain text ("Answers to round 2:
+1. … → Yes …"): log it in Clarifications like any answer.
+
 After each round: log every Q and answer in **Clarifications**, update the spec, then look for
 the **new** questions those answers raised and ask them in the next round. Keep going — there is
 no round limit. Stop when every item below is resolved: answered by the lead, or decided by you and listed as a
