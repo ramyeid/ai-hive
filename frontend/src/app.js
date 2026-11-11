@@ -1,4 +1,5 @@
 // Team Console: talks to the local console server (server/main.py).
+import { setupOffice, OfficePage, mountOffice, officeRefresh } from "./office.js";
 
 // The page's key, new each time Hive starts. A tab opened before a restart fetches the new one by itself
 // (reading it from the page, as only this site can) instead of failing with "Reload the page." until you do.
@@ -220,6 +221,7 @@ function onEvent(event) {
     refreshIf(["overview"]);
     if (route().page === "agent" && route().id === event.agent.name) renderAgentChrome(event.agent.name);
     if (event.agent.name === "orchestrator") renderDrawer();
+    if (route().page === "office") officeRefresh();
     return;
   }
   if (event.kind === "team") {
@@ -228,7 +230,7 @@ function onEvent(event) {
   }
   if (event.kind === "board") {
     clearTimeout(boardTimer);
-    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task"]); refreshCounts(); }, 300);
+    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task"]); refreshCounts().then(() => { if (route().page === "office") officeRefresh(); }); }, 300);
     return;
   }
   if (event.kind === "delta") {
@@ -299,7 +301,7 @@ function route() {
   if (page === "tasks" && id && ["pr", "land"].includes(sub)) return { page: "land", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
-    "": "overview", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
+    "": "overview", office: "office", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -307,7 +309,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews, land: Land };
+  const pages = { overview: Overview, office: OfficePage, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews, land: Land };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -329,7 +331,7 @@ async function render(quiet = false) {
 function renderCrumb(r) {
   const link = (href, text) => `<a href="${href}">${esc(text)}</a>`;
   const parts = {
-    overview: ["Home"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
+    overview: ["Home"], office: ["Office"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
     task: [link("#/tasks", "Board"), r.id], review: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Code review"], reviews: ["Reviews"],
     land: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Pull request"],
     "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
@@ -411,7 +413,7 @@ function closeRail() { document.body.classList.remove("rail-open"); const s = do
 
 // ---- jump anywhere (⌘K) ----------------------------------------------------------
 
-const PAGES_TO_JUMP = [["Home", "#/"], ["Board", "#/tasks"], ["Reviews", "#/reviews"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
+const PAGES_TO_JUMP = [["Home", "#/"], ["Office", "#/office"], ["Board", "#/tasks"], ["Reviews", "#/reviews"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
   ["Team history", "#/team"], ["Knowledge", "#/knowledge"], ["Settings", "#/settings"], ["Terminal", "#/terminal"]];
 
 async function openJump() {
@@ -2869,6 +2871,7 @@ async function TerminalPage(r, quiet) {
 // ---- after-render wiring --------------------------------------------------------
 
 const afterRender = {
+  office: mountOffice,
   reviews() {
     document.getElementById("rv-search")?.addEventListener("input", filterReviews);
     document.getElementById("rv-project")?.addEventListener("change", filterReviews);
@@ -3254,6 +3257,8 @@ window.addEventListener("hashchange", () => {
 });
 
 // ---- boot ------------------------------------------------------------------------
+
+setupOffice({ state, api, esc, personOf, nameOf, roleOf, agentIds, OWNER_LABEL, STATUS_TEXT, doing, busyWith, parseQuestions, actions });
 
 (async () => {
   try {

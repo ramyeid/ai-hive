@@ -1041,3 +1041,41 @@ button.link { padding: 0 2px; border: 0; background: none; color: var(--brand); 
 .qcard.done { opacity: 0.85; }
 .q-mismatch { margin: 4px 0 0; color: var(--attention); font-size: 0.8rem; }
 .q-mismatch:empty { display: none; }
+
+/* ---- the Office -------------------------------------------------------------- */
+.office-head { margin-bottom: 12px; align-items: center; }
+.office-head p { margin: 4px 0 0; }
+.office-zoom { display: flex; gap: 4px; flex: none; }
+.office-zoom .btn { min-width: 34px; }
+.office-stage { position: relative; height: calc(100dvh - 190px); min-height: 420px; border: 1px solid var(--rule); border-radius: var(--radius-m);
+  background: var(--sunken); overflow: hidden; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.office-stage.dragging { cursor: grabbing; }
+.office-stage svg { width: 100%; height: 100%; display: block; font-family: var(--sans); }
+.office-stage .o-click { cursor: pointer; }
+.office-stage.dragging .o-click { cursor: grabbing; }
+.office-stage .o-station { transition: filter .15s; }
+.office-stage .o-station.o-hover { filter: brightness(1.08) drop-shadow(0 0 6px rgba(255, 246, 214, .9)); }
+.office-stage .o-tag.o-hover rect { stroke: var(--brand); stroke-width: 2; }
+.office-stage .o-pill:hover rect, .office-stage .o-hire:hover rect { filter: brightness(1.04); }
+.office-stage .o-pill { animation: o-pop .5s ease-out; }
+@keyframes o-pop { from { opacity: 0; } }
+.office-stage .o-bob { animation: o-bob .45s ease-in-out infinite alternate; }
+@keyframes o-bob { to { transform: translateY(-3px); } }
+.office-stage .o-walker .o-leg-l { animation: o-step .45s ease-in-out infinite alternate; }
+.office-stage .o-walker .o-leg-r { animation: o-step .45s ease-in-out infinite alternate-reverse; }
+@keyframes o-step { from { transform: translateY(-3px); } to { transform: translateY(1px); } }
+.office-stage .o-zz { animation: o-zz 2.4s ease-in-out infinite; }
+@keyframes o-zz { 50% { opacity: .35; transform: translateY(-4px); } }
+.office-stage .o-steam { animation: o-zz 2s ease-in-out infinite; }
+.office-stage .o-bee { animation: o-bee 3s ease-in-out infinite; }
+.office-stage .o-bee-1 { animation-delay: -1s; } .office-stage .o-bee-2 { animation-delay: -2s; }
+@keyframes o-bee { 33% { transform: translate(4px, -3px); } 66% { transform: translate(-3px, 2px); } }
+.office-tip { position: absolute; z-index: 2; max-width: 280px; display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; font-size: 12.5px; line-height: 1.35;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius-m); box-shadow: 0 6px 20px rgba(0, 0, 0, .14); pointer-events: none; }
+.office-tip .attn { color: var(--attention); font-weight: 600; }
+.office-hire-menu { position: absolute; z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 10px; min-width: 150px;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius-m); box-shadow: 0 8px 24px rgba(0, 0, 0, .16); }
+.office-hire-menu b { font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .office-stage * { animation: none !important; } .office-stage .o-walker { transition: none !important; } }
+@media (max-width: 720px) { .office-stage { height: calc(100dvh - 230px); } .office-head p { display: none; } }
+.office-stage .o-ls { transform: scale(var(--ls, 1)); }
