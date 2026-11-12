@@ -1,5 +1,21 @@
 // Team Console: talks to the local console server (server/main.py).
-import { setupOffice, OfficePage, mountOffice, officeRefresh } from "./office.js";
+// In the Office's chat panel the console shows just the chat: no menu, and other pages open in the main window.
+const EMBED = new URLSearchParams(location.search).has("embed");
+if (EMBED) {
+  document.documentElement.classList.add("embed");
+  addEventListener("hashchange", () => { if (!location.hash.startsWith("#/agents/")) { const to = location.hash; history.back(); window.top.location.hash = to; } });
+}
+// The Office is 3D: its code and its people load the first time you open it.
+let officeMod = null;
+async function office() {
+  if (!officeMod) {
+    officeMod = await import("./office3d.js");
+    officeMod.setupOffice({ state, api, esc, personOf, nameOf, roleOf, agentIds, OWNER_LABEL, STATUS_TEXT, doing, busyWith, parseQuestions, actions, avatarHtml: (id) => avatar(id) });
+  }
+  return officeMod;
+}
+const OfficePage = async () => (await office()).OfficePage();
+const officeRefresh = () => officeMod?.officeRefresh();
 
 // The page's key, new each time Hive starts. A tab opened before a restart fetches the new one by itself
 // (reading it from the page, as only this site can) instead of failing with "Reload the page." until you do.
@@ -316,6 +332,8 @@ async function render(quiet = false) {
     const scrollY = window.scrollY;
     parkTerminal();   // keep the shell alive while other pages are shown
     view.innerHTML = html;
+    document.body.classList.toggle("office-full", r.page === "office");
+    if (r.page !== "office") document.body.classList.remove("office-rail");
     window.scrollTo(0, quiet ? scrollY : 0);   // a new page opens at the top; a refresh keeps your place
     afterRender[r.page]?.(r);
   } catch (err) {
@@ -2981,7 +2999,7 @@ async function TerminalPage(r, quiet) {
 // ---- after-render wiring --------------------------------------------------------
 
 const afterRender = {
-  office: mountOffice,
+  office: () => officeMod?.mountOffice(),
   reviews() {
     document.getElementById("rv-search")?.addEventListener("input", filterReviews);
     document.getElementById("rv-project")?.addEventListener("change", filterReviews);
@@ -3403,7 +3421,6 @@ window.addEventListener("hashchange", () => {
 
 // ---- boot ------------------------------------------------------------------------
 
-setupOffice({ state, api, esc, personOf, nameOf, roleOf, agentIds, OWNER_LABEL, STATUS_TEXT, doing, busyWith, parseQuestions, actions });
 
 (async () => {
   try {
