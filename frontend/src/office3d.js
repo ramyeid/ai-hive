@@ -371,6 +371,24 @@ glassRoom(0, 5.0, 4.2, 8.8, ["x", 4.2, 6.9]);
 glassRoom(0, 11.4, 4.4, RD, ["x", 4.4, 12.3]);
 glassRoom(17.0, 11.0, RW, RD, ["x", 17.0, 12.0]);
 glassRoom(9.0, 12.6, 13.4, RD, ["z", 12.6, 11.2]);
+// each room's name on its glass, as frosted lettering on the side you look at
+function glassSign(text, x, z, rotY, w = 2.0) {
+  const c = document.createElement("canvas"); c.width = 1024; c.height = 200;
+  const g = c.getContext("2d");
+  g.fillStyle = "rgba(255,255,255,0.82)"; g.beginPath(); g.roundRect(4, 4, 1016, 192, 28); g.fill();
+  g.fillStyle = "#3f7a5f"; g.fillRect(44, 52, 14, 96);
+  g.fillStyle = "#1f3229"; g.textBaseline = "middle"; let size = 112; do { g.font = `700 ${size}px 'IBM Plex Sans', system-ui, sans-serif`; size -= 4; } while (g.measureText(text.toUpperCase()).width > 880 && size > 40);
+  if ("letterSpacing" in g) g.letterSpacing = "6px";
+  g.fillText(text.toUpperCase(), 90, 104);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 200 / 1024), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
+  m.position.set(x, 1.62, z); m.rotation.y = rotY; m.renderOrder = 4; scene.add(m);
+}
+glassSign("Coach", 4.425, 2.0, Math.PI / 2, 2.6);
+glassSign("Orchestrator", 2.1, 8.825, 0, 3.6);
+glassSign("HR · Hiring", 4.425, 14.4, Math.PI / 2, 3.0);
+glassSign("Finance", 13.425, 14.3, Math.PI / 2, 3.0);
+glassSign("Your office", 19.5, 11.025, 0, 4.0);
 // Finance: a desk with the spending on screen, a filing cabinet, a plant
 const finDesk = workDesk(11.2, 14.7, 0, { screen: "chart", lamp: true, mug: "#3f7a5f", papers: true });
 { const fc = new THREE.Group(); fc.position.set(9.5, 0, 15.6); scene.add(fc); mesh(rbox(0.5, 1.3, 0.6, 0.01), M.steel, 0, 0.65, 0, fc); for (const y of [0.3, 0.72, 1.12]) mesh(boxG(0.16, 0.02, 0.02), M.darkSteel, 0, y, 0.31, fc, false); }
@@ -835,7 +853,7 @@ function drawLabels() {
   const host = document.getElementById("o3-labels");
   if (!host) return;
   const ids = new Set(H.agentIds());
-  for (const [k, l] of labels) if (!ids.has(k) && !k.startsWith("npc") && !k.startsWith("room") && k !== "you") { l.el.remove(); l.pill?.remove(); labels.delete(k); }
+  for (const [k, l] of labels) if (!ids.has(k) && !k.startsWith("npc") && k !== "you") { l.el.remove(); l.pill?.remove(); labels.delete(k); }
   const ensure = (k) => { let l = labels.get(k); if (!l) { l = { el: document.createElement("button") }; l.el.className = "o3-tag"; l.el.type = "button"; host.appendChild(l.el); labels.set(k, l); } return l; };
   const pillOf = (l, html, cls = "") => { if (!html) { l.pill?.remove(); l.pill = null; return; } if (!l.pill) { l.pill = document.createElement("button"); l.pill.type = "button"; host.appendChild(l.pill); } l.pill.className = `o3-pill ${cls}`; l.pill.innerHTML = html; };
   for (const id of ids) {
@@ -859,10 +877,7 @@ function drawLabels() {
     l.pill.dataset.npc = n.role;
     l.anchor = () => n.p.head ? n.p.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.36, 0)) : new THREE.Vector3(n.seat.x, 1.3, n.seat.z);
   }
-  // rooms, and your desk
-  for (const [k, text, x, z] of [["room-coach", "Coach", 2.0, 3.9], ["room-orch", "Orchestrator", 3.0, 8.65], ["room-hr", "HR · Hiring", 3.2, 15.8], ["room-fin", "Finance", 12.4, 15.8], ["room-you", "Your office", 18.6, 15.8]]) {
-    const l = ensure(k); l.el.className = "o3-room"; l.el.textContent = text; l.anchor = () => new THREE.Vector3(x, 0.02, z);   // a sign on the floor by the door
-  }
+  // your desk
   const reviews = H.state.reviews || [], toReview = reviews.filter((r) => r.needs_you).length, prs = reviews.filter((r) => r.pr && !r.merged).length;
   const you = ensure("you");
   you.el.innerHTML = `<b>Your desk</b><small>${toReview} review${toReview === 1 ? "" : "s"} · ${prs} pull request${prs === 1 ? "" : "s"}</small>`;

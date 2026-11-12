@@ -1108,7 +1108,6 @@ body.office-full.office-rail .rail { display: flex !important; position: fixed; 
 .o3-pill .cta { color: #3f7a5f; }
 .o3-pill.green { border-color: #3f7a5f; } .o3-pill.green .n { background: #3f7a5f; }
 @keyframes o3-pop { from { opacity: 0; } }
-.o3-room { translate: -50% -50%; padding: 2px 8px; border-radius: 6px; background: rgb(255 255 255 / 0.72); font-size: 12px; font-weight: 700; color: #3f5d50; pointer-events: none; }
 .o3-chip { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; border: 0; border-radius: 10px; background: rgb(255 255 255 / 0.93); box-shadow: 0 2px 10px rgb(0 0 0 / 0.12); color: #22302a; font: inherit; font-size: 13px; text-decoration: none; cursor: pointer; }
 .o3-chip.o3-icon { padding: 7px 11px; font-size: 15px; }
 .o3-chip .muted { color: #6f7c75; }
