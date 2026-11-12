@@ -10,7 +10,7 @@ let officeMod = null;
 async function office() {
   if (!officeMod) {
     officeMod = await import("./office3d.js");
-    officeMod.setupOffice({ state, api, esc, personOf, nameOf, roleOf, agentIds, OWNER_LABEL, STATUS_TEXT, doing, busyWith, parseQuestions, actions, avatarHtml: (id) => avatar(id) });
+    officeMod.setupOffice({ state, api, esc, personOf, nameOf, roleOf, agentIds, OWNER_LABEL, STATUS_TEXT, doing, busyWith, parseQuestions, actions, openRail, avatarHtml: (id) => avatar(id) });
   }
   return officeMod;
 }

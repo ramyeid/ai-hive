@@ -371,24 +371,27 @@ glassRoom(0, 5.0, 4.2, 8.8, ["x", 4.2, 6.9]);
 glassRoom(0, 11.4, 4.4, RD, ["x", 4.4, 12.3]);
 glassRoom(17.0, 11.0, RW, RD, ["x", 17.0, 12.0]);
 glassRoom(9.0, 12.6, 13.4, RD, ["z", 12.6, 11.2]);
-// each room's name on its glass, as frosted lettering on the side you look at
-function glassSign(text, x, z, rotY, w = 2.0) {
-  const c = document.createElement("canvas"); c.width = 1024; c.height = 200;
+// each room's name on its glass, as frosted vinyl lettering: the name, a thin rule and what the room is for
+function glassSign(name, sub, x, z, rotY, w = 1.7) {
+  const c = document.createElement("canvas"); c.width = 1024; c.height = 300;
   const g = c.getContext("2d");
-  g.fillStyle = "rgba(255,255,255,0.82)"; g.beginPath(); g.roundRect(4, 4, 1016, 192, 28); g.fill();
-  g.fillStyle = "#3f7a5f"; g.fillRect(44, 52, 14, 96);
-  g.fillStyle = "#1f3229"; g.textBaseline = "middle"; let size = 112; do { g.font = `700 ${size}px 'IBM Plex Sans', system-ui, sans-serif`; size -= 4; } while (g.measureText(text.toUpperCase()).width > 880 && size > 40);
-  if ("letterSpacing" in g) g.letterSpacing = "6px";
-  g.fillText(text.toUpperCase(), 90, 104);
+  g.shadowColor = "rgba(15, 25, 20, 0.55)"; g.shadowBlur = 10; g.shadowOffsetY = 2;
+  g.fillStyle = "rgba(255, 255, 255, 0.96)"; g.textBaseline = "alphabetic";
+  let size = 136; do { g.font = `600 ${size}px 'IBM Plex Sans', system-ui, sans-serif`; size -= 4; } while (g.measureText(name).width > 980 && size > 48);
+  g.fillText(name, 18, 150);
+  g.fillRect(20, 186, Math.min(980, g.measureText(name).width * 0.42), 5);
+  g.font = "400 50px 'IBM Plex Sans', system-ui, sans-serif"; if ("letterSpacing" in g) g.letterSpacing = "5px";
+  g.fillText(sub.toUpperCase(), 20, 262);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 200 / 1024), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
-  m.position.set(x, 1.62, z); m.rotation.y = rotY; m.renderOrder = 4; scene.add(m);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 1024), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
+  m.position.set(x, 1.66, z); m.rotation.y = rotY; m.renderOrder = 4; scene.add(m);
 }
-glassSign("Coach", 4.425, 2.0, Math.PI / 2, 2.6);
-glassSign("Orchestrator", 2.1, 8.825, 0, 3.6);
-glassSign("HR · Hiring", 4.425, 14.4, Math.PI / 2, 3.0);
-glassSign("Finance", 13.425, 14.3, Math.PI / 2, 3.0);
-glassSign("Your office", 19.5, 11.025, 0, 4.0);
+// on the glass you look at, where no other wall or the bookshelf comes in front
+glassSign("Coach", "Team practices", 4.425, 1.05, Math.PI / 2, 1.9);
+glassSign("Orchestrator", "Runs the team", 2.0, 8.825, 0, 2.5);
+glassSign("HR", "Hiring & onboarding", 1.9, 11.425, 0, 2.3);
+glassSign("Finance", "Budget & spending", 13.425, 14.4, Math.PI / 2, 2.4);
+glassSign("Your office", "Team lead", 19.2, 11.025, 0, 2.6);
 // Finance: a desk with the spending on screen, a filing cabinet, a plant
 const finDesk = workDesk(11.2, 14.7, 0, { screen: "chart", lamp: true, mug: "#3f7a5f", papers: true });
 { const fc = new THREE.Group(); fc.position.set(9.5, 0, 15.6); scene.add(fc); mesh(rbox(0.5, 1.3, 0.6, 0.01), M.steel, 0, 0.65, 0, fc); for (const y of [0.3, 0.72, 1.12]) mesh(boxG(0.16, 0.02, 0.02), M.darkSteel, 0, y, 0.31, fc, false); }
@@ -397,7 +400,7 @@ plant(13.0, 15.6, 0.8, scene, "snake");
 const coachDesk = workDesk(2.0, 1.4, 0, { screen: "off", lamp: true, mug: "#6b5a8e", plant: true });
 { const wbT = canvasTex(512, 300, (g, w, h) => { g.fillStyle = "#fbfbf8"; g.fillRect(0, 0, w, h); g.strokeStyle = "#2f5aa8"; g.lineWidth = 3; for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(30, 40 + i * 34); g.lineTo(80 + rnd() * 300, 40 + i * 34); g.stroke(); } g.strokeStyle = "#c23a3a"; g.beginPath(); g.arc(400, 120, 50, 0, 7); g.stroke(); });
   const wb = mesh(boxG(0.04, 1.0, 1.6), new THREE.MeshStandardMaterial({ map: wbT, roughness: 0.3 }), 0.03, 1.5, 2.2, scene, false); }
-plant(3.9, 0.45, 0.85, scene, "snake");
+plant(0.45, 3.55, 0.85, scene, "snake");
 // Orchestrator
 const orchDesk = workDesk(1.65, 6.9, Math.PI / 2, { screen: "off", lamp: true, mug: "#3f7a5f", papers: true });
 plant(0.45, 8.35, 0.8, scene, "leafy");
@@ -661,6 +664,7 @@ export async function OfficePage() {
     <div class="o3-tip" id="o3-tip" hidden></div>
     <div class="o3-hire" id="o3-hire" hidden><b>Hire</b><p>Who should join the team?</p>
       <button class="btn small" data-o3-hire="techlead">Tech Lead</button><button class="btn small" data-o3-hire="dev">Dev</button><button class="btn small" data-o3-hire="reviewer">Reviewer</button></div>
+    <div class="o3-hire o3-fin" id="o3-fin" hidden></div>
     <aside class="o3-chat" id="o3-chat" hidden><header><span id="o3-chat-who"></span><a class="btn small" id="o3-chat-full" href="#/">Open full page</a><button class="o3-x" id="o3-chat-close" aria-label="Close the chat">✕</button></header>
       <iframe id="o3-chat-frame" title="Chat"></iframe></aside>
   </div>`;
@@ -671,6 +675,7 @@ export function mountOffice() {
   const stage = document.getElementById("o3-stage");
   if (!stage) return;
   document.body.classList.add("office-full");
+  try { document.body.classList.toggle("office-rail", localStorage.getItem("officeRail") === "1"); } catch { /* menu hidden */ }
   try { if (!W) makeWorld(); } catch (e) { document.getElementById("o3-loading").textContent = "This browser can't show the 3D office (WebGL is off)."; console.error(e); return; }
   stage.appendChild(W.renderer.domElement);
   W.places = new Map();
@@ -870,11 +875,9 @@ function drawLabels() {
   for (const n of W.npcs) {
     n.name = n.names.find((x) => !taken.has(x.toLowerCase())) || n.names[0];
     const l = ensure(`npc-${n.role}`);
-    l.el.innerHTML = `<b><i style="background:${DOT.working}"></i>${n.name}</b><small>${n.role === "hr" ? "HR · hiring" : "Finance"}</small>`;
+    l.el.innerHTML = `<b><i style="background:${DOT.working}"></i>${n.name}</b><small>${n.role === "hr" ? "HR · click to hire" : "Finance · click for spending"}</small>`;
     l.el.dataset.npc = n.role;
-    pillOf(l, n.role === "hr" ? `<span class="n">+</span>Hire a Tech Lead, Dev or Reviewer<span class="cta">Hire →</span>`
-      : `<span class="n">$</span>${usd(finance.today)} today · ${usd(finance.month)} this month<span class="cta">Finance →</span>`, "green");
-    l.pill.dataset.npc = n.role;
+    pillOf(l, null);
     l.anchor = () => n.p.head ? n.p.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.36, 0)) : new THREE.Vector3(n.seat.x, 1.3, n.seat.z);
   }
   // your desk
@@ -942,7 +945,7 @@ function wire(stage) {
   const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { stage.classList.remove("dragging"); setTimeout(() => { drag = null; }, 0); } };
   stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
   stage.addEventListener("pointerleave", () => { tip.hidden = true; });
-  stage.addEventListener("click", (e) => { if (drag?.moved) return; hire.hidden = true; const id = nearest(e); if (id) act(id, e); });
+  stage.addEventListener("click", (e) => { if (drag?.moved) return; hire.hidden = true; document.getElementById("o3-fin").hidden = true; const id = nearest(e); if (id) act(id, e); });
   stage.addEventListener("dblclick", () => fit());
   root.addEventListener("click", (e) => {
     const role = e.target.closest("[data-o3-hire]")?.dataset.o3Hire;
@@ -953,9 +956,13 @@ function wire(stage) {
     if (t.dataset.npc) { act(`npc-${t.dataset.npc}`, e); return; }
     if (t.dataset.agent) openChat(t.dataset.agent);
   });
-  document.getElementById("o3-menu").addEventListener("click", () => document.body.classList.toggle("office-rail"));
+  document.getElementById("o3-menu").addEventListener("click", (e) => {
+    if (innerWidth <= 720) { e.stopPropagation(); H.openRail(); return; }   // (the console closes the menu on clicks that reach it)   // a phone: the menu slides in, as everywhere
+    const on = document.body.classList.toggle("office-rail");
+    try { localStorage.setItem("officeRail", on ? "1" : ""); } catch { /* this visit only */ }
+  });
   document.getElementById("o3-chat-close").addEventListener("click", closeChat);
-  addEventListener("keydown", function esc(e) { if (!root.isConnected) { removeEventListener("keydown", esc); return; } if (e.key === "Escape") { if (chatOpen()) closeChat(); hire.hidden = true; document.body.classList.remove("office-rail"); } });
+  addEventListener("keydown", function esc(e) { if (!root.isConnected) { removeEventListener("keydown", esc); return; } if (e.key === "Escape") { if (chatOpen()) closeChat(); hire.hidden = true; document.getElementById("o3-fin").hidden = true; } });
 }
 // The person closest to where you clicked or hovered (their name tag or their body on screen).
 function nearest(e) {
@@ -969,8 +976,12 @@ function nearest(e) {
   return best;
 }
 function act(k, e) {
-  if (k === "npc-finance") { location.hash = "#/finance"; return; }
-  if (k === "npc-hr") { const hire = document.getElementById("o3-hire"), r = document.getElementById("o3").getBoundingClientRect(); hire.hidden = false;
+  if (k === "npc-finance") { const fin = document.getElementById("o3-fin"), r = document.getElementById("o3").getBoundingClientRect();
+    document.getElementById("o3-hire").hidden = true;
+    fin.innerHTML = `<b>Spending</b><div class="o3-fin-row"><span>Today</span><b>${usd(finance.today)}</b></div><div class="o3-fin-row"><span>This month</span><b>${usd(finance.month)}</b></div><a class="btn small" href="#/finance">Open Finance</a>`;
+    fin.hidden = false; loadFinance();
+    fin.style.left = `${Math.min(e.clientX - r.left, r.width - fin.offsetWidth - 12)}px`; fin.style.top = `${Math.min(e.clientY - r.top + 12, r.height - fin.offsetHeight - 12)}px`; return; }
+  if (k === "npc-hr") { const hire = document.getElementById("o3-hire"), r = document.getElementById("o3").getBoundingClientRect(); hire.hidden = false; document.getElementById("o3-fin").hidden = true;
     hire.style.left = `${Math.min(e.clientX - r.left, r.width - hire.offsetWidth - 12)}px`; hire.style.top = `${Math.min(e.clientY - r.top + 12, r.height - hire.offsetHeight - 12)}px`; return; }
   openChat(k);
 }
