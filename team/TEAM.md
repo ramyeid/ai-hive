@@ -56,6 +56,10 @@ without it the ID is just the role name. The team's tools read it, so commands s
 7. A task only reaches `ready-for-dev` when `team/tools/check_ready.py` passes (no open questions, references to follow, Definition of Ready ticked, lead approval dated). The hook enforces this and reverts it to `draft` otherwise.
 8. **Build the way the lead wants:** `PREFERENCES.md` (consistency with the repo, reuse first, KISS, how tests
    are written, and whatever else the lead has asked for) is as binding as this file. Read it before working.
+9. **Secrets are flagged, never repeated.** When you see a password, key or token in plain text (code, config, a
+   diff), never copy it into another file, never write its value in a task file, report, commit message or reply,
+   and never use it. Flag only where it is, for the lead: `backend/configuration.yml:36-40 (production DB password)`.
+   A config that needs a secret takes it the way the file already does elsewhere (e.g. `source: ssm`).
 
 ## One conversation per hand-off
 

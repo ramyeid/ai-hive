@@ -47,6 +47,7 @@ For **each acceptance criterion**:
 - This is a code review, not a QA pass: you verify by reading the code and its tests. You don't run the app or test it by hand.
 - Missing, partial or wrong behaviour → **blocker**. That includes a bug or security hole on the criterion's path (wrong result, crash, data loss, injection, missing permission check): the requirement isn't met if the code doesn't work.
 - A criterion with no unit test proving it → **blocker**.
+- A password, key or token added in plain text by this task's commits → **blocker**. One already in the base or in the lead's commits → under **For the lead**. Either way cite only `file:line`, never the value (TEAM.md rule 9).
 
 Then check **scope**: anything implemented that no criterion asks for (extra endpoints, fields, options, refactors, dependencies) or that's listed under Out of Scope → **should-fix** (remove it).
 

@@ -90,6 +90,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Does it look like the reference code: names, structure, error handling? No → make it match.
    - Every test: exactly three blocks separated by empty lines (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
    - Is any logic duplicated from elsewhere? → reuse it.
+   - Does the diff add a password, key or token in plain text, or copy a file that holds one? → remove it, take it the way the file does elsewhere (e.g. `source: ssm`), and flag the location for the lead (TEAM.md rule 9).
    - Does it break any of the lead's comments on this branch? `claim.py` prints them all, every round on every task
      of the branch (again: `python3 {{KIT}}/team/tools/lead_review.py checklist TASK-NNN`). Check the whole feature's
      diff against each one, not only the newest round: a comment answered in round 1 still holds in round 4, and
