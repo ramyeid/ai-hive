@@ -552,6 +552,10 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     def cost_summary():
         return costs.summary()
 
+    @app.get("/api/finance")
+    def finance():
+        return costs.ledger()
+
     @app.put("/api/prices")
     def price(body: PriceBody):
         if body.input is None and body.output is None:

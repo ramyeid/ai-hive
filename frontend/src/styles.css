@@ -1079,3 +1079,44 @@ button.link { padding: 0 2px; border: 0; background: none; color: var(--brand); 
 @media (prefers-reduced-motion: reduce) { .office-stage * { animation: none !important; } .office-stage .o-walker { transition: none !important; } }
 @media (max-width: 720px) { .office-stage { height: calc(100dvh - 230px); } .office-head p { display: none; } }
 .office-stage .o-ls { transform: scale(var(--ls, 1)); }
+
+/* ---- Finance ---------------------------------------------------------------- */
+.fin-filters { align-items: center; }
+.fin-filters #fin-q { min-width: 180px; }
+.fin-filters input[type=date] { padding: 6px 8px; border: 1px solid var(--rule); border-radius: var(--radius-s); background: var(--panel); color: var(--ink); }
+.fin-filters .segmented { margin: 0; }
+.fin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.fin-stat { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: var(--radius-m); background: var(--panel); }
+.fin-stat span { font-size: 0.8rem; color: var(--muted); }
+.fin-stat b { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.fin-stat small { color: var(--muted); font-size: 0.78rem; }
+.fin-card { margin-bottom: 18px; }
+.fin-chart { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 8px; height: 220px; padding-bottom: 22px; }
+.fin-y { display: flex; flex-direction: column; justify-content: space-between; font-size: 0.72rem; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; margin-bottom: -6px; margin-top: -6px; }
+.fin-plot { position: relative; min-width: 0; }
+.fin-grid { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.fin-grid i { border-top: 1px solid var(--rule); opacity: .7; }
+.fin-grid i:last-child { border-top-color: var(--muted); opacity: .5; }
+.fin-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 2px; }
+.fin-bar { position: relative; flex: 1 1 0; min-width: 0; height: 100%; padding: 0; border: 0; background: none; cursor: pointer; display: flex; align-items: flex-end; }
+.fin-bar span { display: block; width: 100%; max-width: 28px; margin: 0 auto; height: var(--h); min-height: 0; background: var(--brand); border-radius: 4px 4px 0 0; transition: opacity .12s; }
+.fin-bar[style*="--h:0%"] span { height: 0; }
+.fin-bars:hover .fin-bar span { opacity: .55; }
+.fin-bars .fin-bar:hover span, .fin-bar:focus-visible span { opacity: 1; }
+.fin-bar em { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 5px; font-style: normal; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+.fin-tip { position: absolute; top: 0; z-index: 2; display: flex; flex-direction: column; gap: 2px; min-width: 170px; padding: 8px 10px; font-size: 0.78rem; background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: var(--radius-s); box-shadow: 0 6px 18px rgba(0,0,0,.14); pointer-events: none; }
+.fin-tip .fin-tip-total { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fin-tip span { display: flex; justify-content: space-between; gap: 12px; }
+.fin-tip span i { font-style: normal; font-variant-numeric: tabular-nums; }
+.fin-tip small { color: var(--muted); margin-top: 3px; }
+.fin-section { margin-bottom: 18px; }
+.fin-section h2 { font-size: 1rem; margin: 0 0 8px; }
+.fin-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 16px; }
+.fin-table { width: 100%; font-size: 0.86rem; }
+.fin-table td, .fin-table th { padding: 7px 10px; }
+.fin-table td.num, .fin-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fin-share-cell { white-space: nowrap; width: 1%; }
+.fin-share { display: inline-block; width: 70px; height: 6px; margin-right: 6px; vertical-align: middle; background: var(--sunken); border-radius: 3px; overflow: hidden; }
+.fin-share i { display: block; height: 100%; background: var(--brand); border-radius: 3px; }
+.fin-table .avatar { width: 20px; height: 20px; font-size: 0.65rem; vertical-align: middle; }
+@media (max-width: 720px) { .fin-filters select, .fin-filters input { flex: 1 1 140px; } .fin-chart { height: 180px; } .fin-table .wide-only { display: none; } }

@@ -301,7 +301,7 @@ function route() {
   if (page === "tasks" && id && ["pr", "land"].includes(sub)) return { page: "land", id: decodeURIComponent(id), sub };
   if (page === "tasks" && sub === "chats" && name) return { page: "task-chat", id: decodeURIComponent(id), sub, name: decodeURIComponent(name) };
   const map = { improvements: "improvements", team: id ? (sub === "files" ? "team-files" : "team-change") : "team",
-    "": "overview", office: "office", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
+    "": "overview", office: "office", finance: "finance", tasks: id ? "task" : "tasks", reviews: "reviews", agents: "agent", history: id ? "session" : "history", settings: "settings", terminal: "terminal", knowledge: id ? "knowledge-file" : "knowledge" };
   return { page: map[page] || "overview", id: decodeURIComponent(id), sub };
 }
 
@@ -309,7 +309,7 @@ let renderSeq = 0;
 async function render(quiet = false) {
   const r = route();
   const seq = ++renderSeq;
-  const pages = { overview: Overview, office: OfficePage, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews, land: Land };
+  const pages = { overview: Overview, office: OfficePage, finance: Finance, tasks: Tasks, task: TaskDetail, agent: AgentChat, history: History, session: SessionView, settings: Settings, terminal: TerminalPage, "task-chat": TaskChat, improvements: Improvements, team: TeamHistory, "team-change": TeamChange, "team-files": TeamFiles, knowledge: KnowledgeList, "knowledge-file": KnowledgeView, review: CodeReview, reviews: Reviews, land: Land };
   try {
     const html = await pages[r.page](r, quiet);
     if (seq !== renderSeq || html === null) return;
@@ -331,7 +331,7 @@ async function render(quiet = false) {
 function renderCrumb(r) {
   const link = (href, text) => `<a href="${href}">${esc(text)}</a>`;
   const parts = {
-    overview: ["Home"], office: ["Office"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
+    overview: ["Home"], office: ["Office"], finance: ["Finance"], tasks: ["Board"], history: ["Activity"], session: [link("#/history", "Activity"), "Conversation"],
     task: [link("#/tasks", "Board"), r.id], review: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Code review"], reviews: ["Reviews"],
     land: [link("#/reviews", "Reviews"), link(`#/tasks/${r.id}`, r.id), "Pull request"],
     "task-chat": [link("#/tasks", "Board"), link(`#/tasks/${r.id}`, r.id), "Conversations"],
@@ -413,7 +413,7 @@ function closeRail() { document.body.classList.remove("rail-open"); const s = do
 
 // ---- jump anywhere (⌘K) ----------------------------------------------------------
 
-const PAGES_TO_JUMP = [["Home", "#/"], ["Office", "#/office"], ["Board", "#/tasks"], ["Reviews", "#/reviews"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
+const PAGES_TO_JUMP = [["Home", "#/"], ["Office", "#/office"], ["Finance", "#/finance"], ["Board", "#/tasks"], ["Reviews", "#/reviews"], ["Activity", "#/history"], ["Improvements", "#/improvements"],
   ["Team history", "#/team"], ["Knowledge", "#/knowledge"], ["Settings", "#/settings"], ["Terminal", "#/terminal"]];
 
 async function openJump() {
@@ -1243,6 +1243,116 @@ function transcriptHTML(events, { pending = [], agent = "", pinned = false } = {
 // ---- history ------------------------------------------------------------------
 
 const activityFilter = { project: "", agent: "", status: "" };
+
+// ---- Finance: where the money went, per task, per day or month, with filters ------------------------
+const financeFilter = { range: "30d", from: "", to: "", by: "day", agent: "", model: "", project: "", q: "" };
+const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const RANGES = [["7d", "Last 7 days"], ["30d", "Last 30 days"], ["90d", "Last 90 days"], ["month", "This month"], ["lastmonth", "Last month"], ["year", "This year"], ["all", "All time"], ["custom", "Custom…"]];
+
+// The first and last day (YYYY-MM-DD) the range covers; "" means open.
+function financeSpan(f, lines) {
+  const today = new Date(), t = dayKey(today);
+  const back = (n) => { const d = new Date(today); d.setDate(d.getDate() - (n - 1)); return dayKey(d); };
+  if (f.range === "7d") return [back(7), t];
+  if (f.range === "30d") return [back(30), t];
+  if (f.range === "90d") return [back(90), t];
+  if (f.range === "month") return [`${t.slice(0, 7)}-01`, t];
+  if (f.range === "lastmonth") { const d = new Date(today.getFullYear(), today.getMonth() - 1, 1), e = new Date(today.getFullYear(), today.getMonth(), 0); return [dayKey(d), dayKey(e)]; }
+  if (f.range === "year") return [`${t.slice(0, 4)}-01-01`, t];
+  if (f.range === "custom") return [f.from || (lines[0]?.ts.slice(0, 10) ?? t), f.to || t];
+  return [lines[0]?.ts.slice(0, 10) ?? t, t];
+}
+const usd = (x) => (x > 0 && x < 0.01 ? "<$0.01" : `$${(x || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+const niceMax = (v) => { if (v <= 0) return 1; const p = 10 ** Math.floor(Math.log10(v)); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p; };
+
+async function Finance() {
+  const [{ lines: all }, tasks] = await Promise.all([api("/api/finance"), api("/api/tasks")]);
+  const f = financeFilter;
+  const byId = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const projectOfTask = (id) => byId[id]?.project_name || byId[id]?.project?.split("/").pop() || "";
+  const [from, to] = financeSpan(f, all);
+  const q = f.q.trim().toLowerCase();
+  const lines = all.filter((l) => { const d = l.ts.slice(0, 10);
+    return d >= from && d <= to && (!f.agent || l.agent === f.agent) && (!f.model || l.model === f.model)
+      && (!f.project || (l.task && projectOfTask(l.task) === f.project))
+      && (!q || (l.task && (l.task.toLowerCase().includes(q) || (byId[l.task]?.title || "").toLowerCase().includes(q)))); });
+  state.financeLines = lines;
+  const sum = (ls) => ls.reduce((a, l) => a + (l.cost_usd || 0), 0);
+  const total = sum(lines);
+  const unpriced = lines.filter((l) => l.cost_usd === null).reduce((a, l) => a + l.tokens, 0);
+  const unlinked = sum(lines.filter((l) => !l.task));
+
+  // buckets for the chart and the period table: every day (or month) in the range, empty ones too
+  const by = f.by;
+  const buckets = new Map();
+  for (let d = new Date(`${from}T00:00`); dayKey(d) <= to; d.setDate(d.getDate() + 1)) {
+    const k = by === "month" ? dayKey(d).slice(0, 7) : dayKey(d);
+    if (!buckets.has(k)) buckets.set(k, { key: k, cost: 0, tasks: new Map() });
+    if (buckets.size > 1500) break;
+  }
+  for (const l of lines) { const k = by === "month" ? l.ts.slice(0, 7) : l.ts.slice(0, 10); const b = buckets.get(k); if (!b) continue;
+    b.cost += l.cost_usd || 0; const t = l.task || "—"; b.tasks.set(t, (b.tasks.get(t) || 0) + (l.cost_usd || 0)); }
+  const series = [...buckets.values()];
+  const days = series.length * (by === "month" ? 30.4 : 1);
+  const label = (k) => (by === "month" ? new Date(`${k}-01T00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" })
+    : new Date(`${k}T00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }));
+  const top = niceMax(Math.max(0, ...series.map((b) => b.cost)));
+  const every = Math.max(1, Math.ceil(series.length / (innerWidth < 720 ? 5 : 12)));
+  const chart = series.length ? `<div class="fin-chart" role="img" aria-label="Spending per ${by}">
+      <div class="fin-y"><span>${usd(top)}</span><span>${usd(top / 2)}</span><span>$0</span></div>
+      <div class="fin-plot"><div class="fin-grid"><i></i><i></i><i></i></div>
+        <div class="fin-bars">${series.map((b, i) => `<button type="button" class="fin-bar" data-fin-bucket="${b.key}" style="--h:${(b.cost / top) * 100}%"
+          aria-label="${esc(label(b.key))}: ${usd(b.cost)}"><span></span>${i % every === 0 ? `<em>${esc(label(b.key))}</em>` : ""}</button>`).join("")}</div></div>
+      <div class="fin-tip" id="fin-tip" hidden></div></div>` : "";
+
+  const group = (keyOf) => { const m = new Map(); for (const l of lines) { const k = keyOf(l); const g = m.get(k) || { key: k, cost: 0, tokens: 0, turns: 0, agents: new Set(), models: new Set() };
+    g.cost += l.cost_usd || 0; g.tokens += l.tokens; g.turns += 1; g.agents.add(l.agent); g.models.add(l.model); m.set(k, g); } return [...m.values()].sort((a, b) => b.cost - a.cost || b.tokens - a.tokens); };
+  const share = (c) => (total ? `<span class="fin-share"><i style="width:${Math.max(1, (c / total) * 100)}%"></i></span><span class="muted">${Math.round((c / total) * 100)}%</span>` : "");
+  const byTask = group((l) => l.task || "");
+  const taskRows = byTask.map((g) => { const t = byId[g.key];
+    return `<tr><td>${g.key ? `<a href="#/tasks/${esc(g.key)}"><b>${esc(g.key)}</b> ${esc(t?.title || "")}</a>` : `<span class="muted">Not linked to a task</span>`}</td>
+      <td class="muted wide-only">${esc(g.key ? projectOfTask(g.key) : "")}</td><td class="wide-only">${t ? statusPill(t.status) : ""}</td>
+      <td class="wide-only">${[...g.agents].map((a) => esc(personOf(a))).join(", ")}</td><td class="num wide-only">${g.tokens.toLocaleString()}</td><td class="num"><b>${usd(g.cost)}</b></td><td class="fin-share-cell">${share(g.cost)}</td></tr>`; }).join("");
+  const agentRows = group((l) => l.agent).map((g) => `<tr><td>${avatar(g.key)} ${esc(personOf(g.key))} <span class="muted">${esc(OWNER_LABEL[roleOf(g.key)] || "")}</span></td>
+      <td class="num">${g.turns}</td><td class="num">${g.tokens.toLocaleString()}</td><td class="num"><b>${usd(g.cost)}</b></td><td class="fin-share-cell">${share(g.cost)}</td></tr>`).join("");
+  const modelRows = group((l) => l.model).map((g) => `<tr><td>${esc(g.key)}</td><td class="num">${g.tokens.toLocaleString()}</td><td class="num"><b>${usd(g.cost)}</b></td><td class="fin-share-cell">${share(g.cost)}</td></tr>`).join("");
+  const periodRows = [...series].reverse().filter((b) => b.cost > 0).map((b) => { const t = [...b.tasks.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3);
+    return `<tr><td>${esc(by === "month" ? label(b.key) : new Date(`${b.key}T00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric" }))}</td>
+      <td class="muted">${t.map(([id, c]) => `${esc(id === "—" ? "not linked" : id)} ${usd(c)}`).join(" · ")}</td><td class="num"><b>${usd(b.cost)}</b></td></tr>`; }).join("");
+
+  const option = (value, text, cur) => `<option value="${esc(value)}" ${value === cur ? "selected" : ""}>${esc(text)}</option>`;
+  const projects = [...new Set(tasks.map((t) => projectOfTask(t.id)).filter(Boolean))].sort();
+  const models = [...new Set(all.map((l) => l.model))].sort();
+  const agents = [...new Set(all.map((l) => l.agent))].sort((a, b) => personOf(a).localeCompare(personOf(b)));
+  const tasksWorked = byTask.filter((g) => g.key).length;
+  return `<div class="page-head"><div><h1>Finance</h1><p>What the team spent, per task and over time. Costs come from every agent turn; a turn that worked on several tasks is split between them.</p></div>
+      <button class="btn" data-action="finance-csv" ${lines.length ? "" : "disabled"}>Export CSV</button></div>
+    <div class="filters fin-filters">
+      <select id="fin-range" aria-label="Period">${RANGES.map(([v, l]) => option(v, l, f.range)).join("")}</select>
+      ${f.range === "custom" ? `<input type="date" id="fin-from" aria-label="From" value="${esc(f.from)}"><input type="date" id="fin-to" aria-label="To" value="${esc(f.to)}">` : ""}
+      <select id="fin-agent" aria-label="Agent">${option("", "Everyone", f.agent)}${agents.map((a) => option(a, nameOf(a), f.agent)).join("")}</select>
+      <select id="fin-project" aria-label="Project">${option("", "All projects", f.project)}${projects.map((p) => option(p, p, f.project)).join("")}</select>
+      <select id="fin-model" aria-label="Model">${option("", "All models", f.model)}${models.map((m) => option(m, m, f.model)).join("")}</select>
+      <input type="text" id="fin-q" placeholder="Task ID or title" aria-label="Task" value="${esc(f.q)}">
+      <span class="segmented" role="group" aria-label="Group by">${[["day", "Per day"], ["month", "Per month"]].map(([v, l]) =>
+        `<button type="button" class="btn small" data-fin-by="${v}" aria-pressed="${f.by === v}">${l}</button>`).join("")}</span>
+    </div>
+    <div class="fin-stats">
+      <div class="fin-stat"><span>Spent</span><b>${usd(total)}</b><small>${esc(new Date(`${from}T00:00`).toLocaleDateString())} – ${esc(new Date(`${to}T00:00`).toLocaleDateString())}</small></div>
+      <div class="fin-stat"><span>Per day, on average</span><b>${usd(total / Math.max(1, Math.round(days)))}</b><small>over ${Math.round(days)} day${Math.round(days) === 1 ? "" : "s"}</small></div>
+      <div class="fin-stat"><span>Tasks worked on</span><b>${tasksWorked}</b><small>${tasksWorked ? `${usd((total - unlinked) / tasksWorked)} per task` : "none in this period"}</small></div>
+      <div class="fin-stat"><span>Not linked to a task</span><b>${usd(unlinked)}</b><small>questions, planning, chats</small></div>
+    </div>
+    ${unpriced ? `<p class="notice">${unpriced.toLocaleString()} tokens are from models without a price, so they aren't in these totals. <a href="#/settings">Set prices in Settings</a>.</p>` : ""}
+    ${lines.length ? `<section class="card-box fin-card"><h2>Spending per ${by}</h2>${chart}</section>
+    <section class="fin-section"><h2>By task</h2><div class="table-wrap"><table class="fin-table"><thead><tr><th>Task</th><th class="wide-only">Project</th><th class="wide-only">Status</th><th class="wide-only">Who</th><th class="num wide-only">Tokens</th><th class="num">Spent</th><th>Share</th></tr></thead><tbody>${taskRows}</tbody></table></div></section>
+    <div class="fin-two">
+      <section class="fin-section"><h2>By agent</h2><div class="table-wrap"><table class="fin-table"><thead><tr><th>Agent</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Spent</th><th>Share</th></tr></thead><tbody>${agentRows}</tbody></table></div></section>
+      <section class="fin-section"><h2>By model</h2><div class="table-wrap"><table class="fin-table"><thead><tr><th>Model</th><th class="num">Tokens</th><th class="num">Spent</th><th>Share</th></tr></thead><tbody>${modelRows}</tbody></table></div></section>
+    </div>
+    <section class="fin-section"><h2>Per ${by}</h2><div class="table-wrap"><table class="fin-table"><thead><tr><th>${by === "month" ? "Month" : "Day"}</th><th>Biggest tasks</th><th class="num">Spent</th></tr></thead><tbody>${periodRows || `<tr><td colspan="3" class="muted">Nothing spent in this period.</td></tr>`}</tbody></table></div></section>`
+    : `<div class="empty">${all.length ? "Nothing was spent in this period with these filters." : "Spending shows up here once the agents have worked."}</div>`}`;
+}
 
 async function History() {
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
@@ -2902,6 +3012,31 @@ const afterRender = {
       if (!ok) { text.value = value; state.drafts[r.id] = value; resync(); }
     });
   },
+  finance() {
+    const f = financeFilter, again = () => render(true);
+    for (const [id, key] of [["fin-range", "range"], ["fin-agent", "agent"], ["fin-project", "project"], ["fin-model", "model"], ["fin-from", "from"], ["fin-to", "to"]]) {
+      document.getElementById(id)?.addEventListener("change", (e) => { f[key] = e.target.value; if (key === "range" && f.range === "custom" && !f.from) f.from = state.financeLines?.[0]?.ts.slice(0, 10) || ""; again(); });
+    }
+    document.getElementById("fin-q")?.addEventListener("input", (e) => { f.q = e.target.value; clearTimeout(afterRender.t); afterRender.t = setTimeout(() => { again().then?.(() => { const i = document.getElementById("fin-q"); i?.focus(); i?.setSelectionRange(i.value.length, i.value.length); }); }, 300); });
+    document.querySelectorAll("[data-fin-by]").forEach((b) => b.addEventListener("click", () => { f.by = b.dataset.finBy; again(); }));
+    const tip = document.getElementById("fin-tip");
+    document.querySelectorAll(".fin-bar").forEach((bar) => {
+      bar.addEventListener("mouseenter", () => {
+        const k = bar.dataset.finBucket, ls = (state.financeLines || []).filter((l) => (f.by === "month" ? l.ts.slice(0, 7) : l.ts.slice(0, 10)) === k);
+        const per = new Map(); for (const l of ls) per.set(l.task || "Not linked", (per.get(l.task || "Not linked") || 0) + (l.cost_usd || 0));
+        const total = [...per.values()].reduce((a, b) => a + b, 0);
+        tip.innerHTML = `<b>${esc(bar.getAttribute("aria-label").split(":")[0])}</b><span class="fin-tip-total">${usd(total)}</span>${[...per.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t, c]) => `<span>${esc(t)} <i>${usd(c)}</i></span>`).join("")}${ls.length ? `<small>Click to see only this ${f.by}</small>` : ""}`;
+        tip.hidden = false;
+        const box = bar.closest(".fin-chart").getBoundingClientRect(), r = bar.getBoundingClientRect();
+        tip.style.left = `${Math.min(box.width - tip.offsetWidth - 4, Math.max(0, r.left - box.left + r.width / 2 - tip.offsetWidth / 2))}px`;
+      });
+      bar.addEventListener("mouseleave", () => { tip.hidden = true; });
+      bar.addEventListener("click", () => { const k = bar.dataset.finBucket;
+        if (f.by === "month") { const [y, m] = k.split("-").map(Number); f.range = "custom"; f.from = `${k}-01`; f.to = dayKey(new Date(y, m, 0)); f.by = "day"; }
+        else { f.range = "custom"; f.from = f.to = k; }
+        again(); });
+    });
+  },
   history() {
     for (const [id, key] of [["act-project", "project"], ["act-agent", "agent"], ["act-status", "status"]]) {
       document.getElementById(id)?.addEventListener("change", (e) => { activityFilter[key] = e.target.value; render(true); });
@@ -2973,6 +3108,16 @@ const afterRender = {
 // ---- actions (event delegation) -------------------------------------------------
 
 const actions = {
+  "finance-csv"() {
+    const rows = [["time", "task", "title", "agent", "provider", "model", "tokens", "cost_usd"],
+      ...(state.financeLines || []).map((l) => [l.ts, l.task || "", state.tasks?.find?.((t) => t.id === l.task)?.title || "", personOf(l.agent), l.provider, l.model, l.tokens, l.cost_usd ?? ""])];
+    const csv = rows.map((r) => r.map((v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : v)).join(",")).join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.download = `hive-spending-${dayKey(new Date())}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  },
   ...reviewActions,
   "add-agent-picked": (el) => actions["add-agent"]({ dataset: { role: document.getElementById("add-role").value } }),
   "slack-test": () => act(() => api("/api/slack/test", { method: "POST" }), "Sent. Check Slack."),

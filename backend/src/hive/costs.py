@@ -115,6 +115,35 @@ def summary() -> dict:
     return _summary[1]
 
 
+_ledger: tuple[tuple, dict] | None = None
+
+
+def ledger() -> dict:
+    """Every finished turn as a line of spending, for the Finance page: when, which task (None when it's not linked
+    to one), who, which model, its tokens and cost. A turn on several tasks is split evenly between them, as in
+    summary(). cost_usd is None for tokens of a model without a price. Worked out again only when something changed."""
+    global _ledger
+    prices = store.load_settings().get("prices", {})
+    sessions = store.list_sessions()
+    key = (json.dumps(prices, sort_keys=True),
+           tuple((s["id"], s.get("agent"), s.get("provider"), s.get("model"), store.events_stamp(s["id"])) for s in sessions))
+    if _ledger and _ledger[0] == key:
+        return _ledger[1]
+    lines = []
+    for session in sessions:
+        for row in session_turns(session["id"], session):
+            cost = _priced(row, prices)
+            targets = row["tasks"] or [None]
+            share = 1 / len(targets)
+            for task in targets:
+                lines.append({"ts": row["ts"], "task": task, "agent": row["agent"], "provider": row["provider"],
+                              "model": row["model"], "tokens": round((row["tokens_in"] + row["tokens_out"]) * share),
+                              "cost_usd": None if cost is None else round(cost * share, 6)})
+    lines.sort(key=lambda line: line["ts"])
+    _ledger = (key, {"lines": lines})
+    return _ledger[1]
+
+
 def _summary_of(sessions: list[dict], prices: dict) -> dict:
     buckets: dict[str, dict] = defaultdict(lambda: defaultdict(lambda: {
         "turns": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0, "unpriced_tokens": 0}))

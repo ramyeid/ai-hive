@@ -110,6 +110,12 @@ def main():
     check(abs(after - (t7_before + 0.5)) < 1e-9, f"a new turn in a conversation is counted at once: {after}")
     store.save_settings({"prices": {"kimi-k2-thinking": {"input": 1, "output": 1}}})
     check(costs.summary()["tasks"]["TASK-008"]["unpriced_tokens"] == 0, "a new price is used at once")
+    lines = costs.ledger()["lines"]
+    t7 = sum(l["cost_usd"] or 0 for l in lines if l["task"] == "TASK-007")
+    check(abs(t7 - costs.summary()["tasks"]["TASK-007"]["cost_usd"]) < 1e-3, f"the ledger adds up to the task's cost: {t7}")
+    check(all(l["ts"] and l["agent"] for l in lines), "every line says when and who")
+    check(lines == sorted(lines, key=lambda l: l["ts"]), "the ledger is in time order")
+    check(costs.ledger() is costs.ledger(), "the ledger is reused until something changes")
     print(f"\nAll {checks} checks passed.")
 
 
