@@ -18,6 +18,13 @@ Consistency beats cleverness: the whole codebase should look like one author wro
 ### Reuse first
 Before anything new is built, check whether the project already does it or nearly does. Extending existing code (an extra parameter, a small refactor) beats a parallel copy. A near-duplicate is a defect: the Tech Lead looks for it in the spec (**Existing Code to Reuse**, checked by the gate), the dev before writing code, the reviewer on every review.
 
+### Files and imports
+- A small enum or class used only by one class lives in that class's file (e.g. on top of the service that uses
+  it), and a package's small exception classes together in one `exceptions.py`: no file of their own. A type that
+  a public method returns goes in the project's models folder (e.g. `models/`).
+- No `if TYPE_CHECKING:` imports unless a circular import truly can't be avoided; one usually means the new code
+  depends the wrong way (a base class importing a type only its subclass needs).
+
 ### Keep it simple
 KISS above all: build exactly what the task asks with the simplest code that works. No boilerplate, no speculative abstractions, no clever code.
 

@@ -96,6 +96,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
      diff against each one, not only the newest round: a comment answered in round 1 still holds in round 4, and
      in a follow-up task. Yes → fix it.
    - Does any new endpoint, method, query or component do nearly what an existing one does? → you missed a reuse; extend the existing one if the task says so, otherwise set `blocked` (see 1b).
+   - A new file holding only a small enum or class that one class uses, or an `if TYPE_CHECKING:` import? → move it into that class's file, fix the import's direction ("Files and imports" in `{{KIT}}/team/PREFERENCES.md`).
 8. **Hand off.** Append to the Dev Log:
    - **Changed:** files, with one line each on why. Include this task's diff size (`git diff --stat <from_commit>..HEAD`).
    - **Criteria → code:** each AC number → where it's implemented and tested.

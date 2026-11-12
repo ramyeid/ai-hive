@@ -56,6 +56,7 @@ Compare the new code to the references and the surrounding code. The whole codeb
 - folder and file placement, module structure, layering
 - naming (files, functions, variables, tests), function shape and size
 - error handling, return types, typing, imports, logging
+- files and imports: small types used by one class live in its file, returned types in the models folder, no `if TYPE_CHECKING:` imports ("Files and imports" in `{{KIT}}/team/PREFERENCES.md`)
 - test framework, file location, naming, fixtures, assertion library
 - reuse: does it duplicate logic, helpers, models or fixtures that already exist?
 - every rule under **Conventions to Follow**
