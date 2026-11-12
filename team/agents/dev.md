@@ -116,6 +116,11 @@ one of them; check the whole diff against every one before handing off (step 7).
 **The lead's comments** (Lead Review) are the lead's own code review, made on the diff in the console:
 - Each comment points at a line (`file:line`, with the code it was about) or is general. It's binding, like
   `PREFERENCES.md`: do what it says, with the smallest change that does it.
+- A comment you could read two ways (which class "this" is, where something should move, what "here" means):
+  don't pick one. Before changing code for it, set `status: blocked` and write under **Open Questions** the comment
+  and each reading as a lettered option, with your suggestion: "1.13 'move this into its own file': A)
+  `GenerationStrategy` to `generation_strategy.py` · B) `LlmModel` and the types it uses to `llm_model.py`.
+  Suggested: B." Build it once the lead answers.
 - Apply it **everywhere it applies**: if the lead corrected one spot ("errors are always `{ code, message }`"),
   fix every other place in the feature's diff (`git diff <base>...HEAD`) that has the same problem.
 - Answer **every** comment on its `- Reply:` line, in the task file, after committing:
