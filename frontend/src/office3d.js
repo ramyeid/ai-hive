@@ -331,19 +331,22 @@ const ball = mesh(sph(0.02, 12, 8), "#f6f2e8", 0, 0, 0, scene, false);
   for (const [x, z, r, c] of [[-0.9, 0.35, 0.3, "#b8232b"], [0.95, -0.4, -2.4, "#1b1b1b"]]) { const pd = new THREE.Group(); pd.position.set(x, 0.79, z); pd.rotation.y = r; p.add(pd);
     mesh(cyl(0.075, 0.075, 0.012, 24), c, 0, 0, 0, pd); const h = mesh(boxG(0.03, 0.02, 0.1), M.oak, 0, 0, 0.11, pd); }
 }
-// foosball
+// foosball, as big as the table-tennis table next to it
 {
-  const f = new THREE.Group(); f.position.set(19.4, 0, 8.0); scene.add(f);
-  const field = canvasTex(512, 300, (g, w, h) => { g.fillStyle = "#2f7a3f"; g.fillRect(0, 0, w, h); g.strokeStyle = "#fff"; g.lineWidth = 3; g.strokeRect(6, 6, w - 12, h - 12); g.beginPath(); g.moveTo(w / 2, 6); g.lineTo(w / 2, h - 6); g.stroke(); g.beginPath(); g.arc(w / 2, h / 2, 34, 0, 7); g.stroke(); });
-  mesh(boxG(1.22, 0.06, 0.7), new THREE.MeshStandardMaterial({ map: field, roughness: 0.8 }), 0, 0.74, 0, f);
-  for (const [w, d, x, z] of [[1.3, 0.04, 0, 0.37], [1.3, 0.04, 0, -0.37], [0.04, 0.78, 0.65, 0], [0.04, 0.78, -0.65, 0]]) mesh(boxG(w, 0.2, d), M.walnut, x, 0.84, z, f);
-  for (const x of [-0.6, 0.6]) for (const z of [-0.33, 0.33]) mesh(boxG(0.08, 0.74, 0.08), M.walnut, x, 0.37, z, f);
-  const rods = [-0.5, -0.36, -0.2, -0.07, 0.07, 0.2, 0.36, 0.5];
+  const L = 2.74, D = 1.525, f = new THREE.Group(); f.position.set(19.4, 0, 8.0); scene.add(f);
+  const field = canvasTex(1024, 570, (g, w, h) => { g.fillStyle = "#2f7a3f"; g.fillRect(0, 0, w, h); for (let i = 0; i < 10; i++) { g.fillStyle = i % 2 ? "rgba(255,255,255,.04)" : "rgba(0,0,0,.04)"; g.fillRect((w / 10) * i, 0, w / 10, h); }
+    g.strokeStyle = "#fff"; g.lineWidth = 5; g.strokeRect(10, 10, w - 20, h - 20); g.beginPath(); g.moveTo(w / 2, 10); g.lineTo(w / 2, h - 10); g.stroke(); g.beginPath(); g.arc(w / 2, h / 2, 64, 0, 7); g.stroke();
+    for (const x of [10, w - 130]) g.strokeRect(x, h / 2 - 110, 120, 220); });
+  mesh(boxG(L - 0.1, 0.06, D - 0.1), new THREE.MeshStandardMaterial({ map: field, roughness: 0.8 }), 0, 0.74, 0, f);
+  for (const [w, d, x, z] of [[L, 0.05, 0, D / 2 - 0.02], [L, 0.05, 0, -D / 2 + 0.02], [0.05, D, L / 2 - 0.02, 0], [0.05, D, -L / 2 + 0.02, 0]]) mesh(boxG(w, 0.24, d), M.walnut, x, 0.84, z, f);
+  for (const x of [-L / 2 + 0.12, L / 2 - 0.12]) for (const z of [-D / 2 + 0.1, D / 2 - 0.1]) mesh(boxG(0.12, 0.74, 0.12), M.walnut, x, 0.37, z, f);
+  for (const x of [-L / 2 - 0.02, L / 2 + 0.02]) mesh(boxG(0.06, 0.12, 0.34), M.black, x, 0.8, 0, f); // the goals
+  const step = (L - 0.4) / 7, rods = Array.from({ length: 8 }, (_, i) => -L / 2 + 0.2 + step * i);
   rods.forEach((x, i) => {
-    const r = mesh(cyl(0.008, 0.008, 1.1, 8), M.steel, x, 0.85, 0, f); r.rotation.x = Math.PI / 2;
-    mesh(cyl(0.018, 0.018, 0.12, 10), M.black, x, 0.85, i % 2 ? 0.58 : -0.58, f).rotation.x = Math.PI / 2;
-    const n = [1, 2, 5, 3, 3, 5, 2, 1][i], team = (i === 0 || i === 1 || i === 3 || i === 5) ? "#c23a3a" : "#2e5fb0";
-    for (let k2 = 0; k2 < n; k2++) { const z = n === 1 ? 0 : -0.25 + (0.5 / (n - 1)) * k2; mesh(boxG(0.025, 0.09, 0.03), team, x, 0.81, z, f); mesh(sph(0.016, 10, 8), "#e9c9a6", x, 0.87, z, f); }
+    const r = mesh(cyl(0.012, 0.012, D + 0.5, 8), M.steel, x, 0.9, 0, f); r.rotation.x = Math.PI / 2;
+    mesh(cyl(0.03, 0.03, 0.18, 10), M.black, x, 0.9, (i % 2 ? 1 : -1) * (D / 2 + 0.2), f).rotation.x = Math.PI / 2;
+    const n = [1, 2, 5, 3, 3, 5, 2, 1][i], team = (i === 0 || i === 1 || i === 3 || i === 5) ? "#c23a3a" : "#2e5fb0", span = D - 0.45;
+    for (let k2 = 0; k2 < n; k2++) { const z = n === 1 ? 0 : -span / 2 + (span / (n - 1)) * k2; mesh(boxG(0.04, 0.13, 0.05), team, x, 0.84, z, f); mesh(sph(0.026, 12, 8), "#e9c9a6", x, 0.93, z, f); }
   });
 }
 
@@ -475,7 +478,7 @@ const clockHands = { hour: hand(0.11, 0.014), minute: hand(0.17, 0.009) };
   const SPOTS = {
     coffee: [{ x: 18.85, z: 1.3, face: Math.PI * 0.95 }, { x: 20.05, z: 1.4, face: Math.PI * 1.04 }],
     sofa: [{ x: 6.48, z: 15.0, face: Math.PI }, { x: 7.34, z: 15.0, face: Math.PI }],
-    games: [{ x: 19.4, z: 8.62, face: Math.PI }, { x: 19.4, z: 7.38, face: 0 }, { x: 17.7, z: 4.7, face: Math.PI / 2 }, { x: 21.1, z: 4.7, face: -Math.PI / 2 }],
+    games: [{ x: 19.4, z: 9.25, face: Math.PI }, { x: 19.4, z: 6.75, face: 0 }, { x: 17.7, z: 4.7, face: Math.PI / 2 }, { x: 21.1, z: 4.7, face: -Math.PI / 2 }],
     window: [{ x: 7.8, z: 2.5, face: Math.PI }, { x: 12.0, z: 2.5, face: Math.PI }],
     coachWindow: [{ x: 3.3, z: 2.9, face: -0.5, via: [[3.2, 4.4]] }],
     door: [{ x: 0.9, z: 10.1, face: Math.PI / 2 }],

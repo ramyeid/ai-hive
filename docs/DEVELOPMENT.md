@@ -32,6 +32,9 @@ backend/
     access.py, terminal.py, costs.py, chats.py, board.py
   tests/                      with fakes/ (a fake Claude and a fake OpenAI-style API)
 frontend/src/               the single-page app (vanilla JS, no build step), served at /static
+  office3d.js                 the Office (three.js, loaded only when the Office is opened)
+  office/                     its avatars and animations (Microsoft Rocketbox, MIT: see office/NOTICE.md)
+  vendor/three/               three.js r169 and the add-ons it uses (MIT)
 integrations/slack/         the Slack app manifest
 scripts/                    install.sh, start.sh, stop.sh
 assets/                     logos and icons, served at /assets

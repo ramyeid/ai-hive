@@ -5,8 +5,8 @@ running it in the background or on a server.
 
 ## Navigation
 
-- **Sidebar**: Home, Board, Reviews and Activity; the Orchestrator, Team and Coach sections (each can be folded away);
-  Knowledge; Settings and Terminal. On a phone it becomes a bar at the bottom.
+- **Sidebar**: Home, Board, Reviews, Activity and Finance; the Orchestrator, Team and Coach sections (each can be folded away);
+  Knowledge; Office, Settings and Terminal. On a phone it becomes a bar at the bottom.
 - **⌘K / Ctrl+K**: jump to any task, agent or page.
 - **/**: ask the Orchestrator from any page.
 
@@ -21,6 +21,8 @@ running it in the background or on a server.
 | **Code review** | The branch's diff with line comments, request changes or approve. See [Usage](USAGE.md#reviewing-the-code-yourself). |
 | **Agent chat** | Talk to an agent. Tool calls are folded into one line per run; approval requests are pinned above the message box (Enter allows, Esc denies); `#` suggests task IDs. The side panel shows the task it's on, this conversation's cost and its earlier tasks. |
 | **Activity** | Every status change and who made it, by day, with filters; and every past conversation, which you can read or continue. |
+| **Finance** | What the team spent, per day or per month and per task, with each task's share, tokens and who worked on it. Filter by date range, agent, project, model or task; export the lines as CSV. Turns that weren't on a task (questions, planning) are counted separately. |
+| **Office** | The team in a 3D office, full screen. Agents sit at their desks when working and take breaks (coffee, the sofa, foosball, table tennis) when idle; a bubble shows who needs you. Click someone to chat in a side panel, HR to add a Tech Lead, Dev or Reviewer, Finance for today's and this month's spending. Scroll or pinch to zoom, drag to pan; ☰ shows the sidebar. Meant for larger screens. |
 | **Knowledge** | The Tech Lead's notes per repository and service, with how much has changed in git since each was written. |
 | **Improvements** | The Coach's proposals: the exact change, why, and the tasks behind it. Approve, edit or reject. |
 | **Team history** | Every change to the team's instructions, with diffs, the team as it was at any point, and undo. |
@@ -46,7 +48,7 @@ page. They're for you only: agents work from the task file, never from past conv
 
 ## Cost
 
-Each task shows its cost from spec to review, by model and agent. Every agent turn is charged to the task it worked
+Each task shows its cost from spec to review, by model and agent; the **Finance** page adds it up over time. Every agent turn is charged to the task it worked
 on. Claude costs are Claude Code's own figures (an estimate with a subscription login). Other providers report
 tokens only: enter each model's price in **Settings → Models & keys**.
 

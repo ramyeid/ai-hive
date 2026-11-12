@@ -57,14 +57,25 @@ next. Nothing is pushed to your remote.
 - **Team history**: every change to the team's instructions is a commit you can diff, inspect or undo.
 
 **Console and Slack**
-- **Web console**: Home (what needs you), a kanban board, chats with every agent, code review, cost per task, activity and a browser terminal.
+- **Web console**: Home (what needs you), a kanban board, chats with every agent, code review, activity and a browser terminal.
+- **Finance**: what the team spent per task, per day and per month, filtered by date, agent, project and model, with a CSV export.
+- **The Office**: the team as people in a 3D office: who is at their desk working, who is on a break, who needs you. Click someone to chat with them, HR to hire, Finance for today's spending.
 - **Slack**: talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in its own thread.
-- **Runs locally or on a server** behind a VPN, with optional password sign-in; light and dark themes; works on phones.
+- **Runs locally or on a server** behind a VPN, with optional password sign-in; light and dark themes; works on phones (the Office is for larger screens).
 - **Model choice per agent**: Claude (through Claude Code), OpenAI, DeepSeek, Qwen or Kimi.
+
+<p align="center">
+  <img src="docs/images/office.jpg" alt="The Office: the team at their desks, in the lounge and at the games" width="900">
+</p>
 
 <p align="center">
   <img src="docs/images/board.png" alt="The board" width="49%">
   <img src="docs/images/code-review.png" alt="Code review" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/images/finance.png" alt="Finance: spending per task, per day and per month" width="49%">
+  <img src="docs/images/settings.png" alt="Settings: the team, their models and approvals" width="49%">
 </p>
 
 ## Quick start
@@ -87,7 +98,7 @@ by email."* See [Installation](docs/INSTALL.md) for servers, Slack and other AI 
 |---|---|
 | [Installation](docs/INSTALL.md) | Requirements, install, updates, running on a server, Slack, AI providers, uninstall |
 | [Usage](docs/USAGE.md) | A task from start to finish, code review, the Coach, several agents per role, the terminal |
-| [Console](docs/CONSOLE.md) | Every page of the console, approvals, costs, the browser terminal |
+| [Console](docs/CONSOLE.md) | Every page of the console, the Office, Finance, approvals, the browser terminal |
 | [Development](docs/DEVELOPMENT.md) | Repository layout, architecture, tests, adding an AI provider |
 | [`TEAM.md`](team/TEAM.md) | The process every agent follows |
 | [`PREFERENCES.md`](team/PREFERENCES.md) | How you want things built |
