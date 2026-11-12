@@ -732,6 +732,11 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .agent-group > header .muted { font-size: 0.82rem; }
 .agent-group .add-agent { margin-left: auto; display: flex; gap: 6px; }
 .agent-row { padding: 10px 16px; border-top: 1px solid var(--rule); }
+/* every control sits on the row's first line, whatever note sits under the name or the model */
+.agent-row { align-items: start; }
+.agent-row > .avatar { margin-top: 5px; }
+.agent-row .who { margin-top: 3px; }
+.agent-row > span:last-child:has(button) { display: flex; align-items: center; min-height: 37px; }
 .agent-row:first-of-type { border-top: 0; }
 .agent-row .who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .agent-row .who small { color: var(--muted); font-size: 0.76rem; }
