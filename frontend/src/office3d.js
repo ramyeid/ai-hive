@@ -531,7 +531,8 @@ function route(from, to) {
 
 // ---- the people -----------------------------------------------------------------------------------------------
 const FEMALE = new Set("laila layla leila yara yasmine yasmin nour noor sara sarah mariam maryam salma hana hanna farah dina reem rana mona aya malak jana lina nada heba amira rania noha dalia habiba fatma fatima esraa menna shahd jasmine jessica emma olivia sophia mia ava amelia zeinab nadia samira rasha ghada huda iman eman asmaa basma doaa lamia lamis marwa mai may nermeen nesma rehab sally shaimaa sherine yomna youmna".split(" "));
-const POOL = { f: ["Female_Adult_15", "Female_Adult_14", "Female_Adult_09"], m: ["Male_Adult_08", "Male_Adult_07", "Male_Adult_13", "Male_Adult_14", "Male_Adult_03"] };
+const POOL = { f: ["Female_Adult_15", "Female_Adult_14", "Female_Adult_09", "Female_Adult_02", "Female_Adult_07", "Female_Adult_11", "Female_Adult_06"],
+  m: ["Male_Adult_08", "Male_Adult_07", "Male_Adult_13", "Male_Adult_14", "Male_Adult_03", "Male_Adult_12", "Male_Adult_20"] };
 const hashOf = (s) => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 const genderOf = (name) => (FEMALE.has(String(name).split(/\s+/)[0].toLowerCase()) ? "f" : "m");
 
