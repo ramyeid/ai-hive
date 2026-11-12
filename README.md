@@ -84,8 +84,8 @@ next. Nothing is pushed to your remote.
 Requirements: [Claude Code](https://code.claude.com) (logged in), Python 3, git and [uv](https://docs.astral.sh/uv/), on macOS or Linux.
 
 ```bash
-git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive-ai-squad
-cd ~/hive-ai-squad
+git clone https://github.com/ramyeid/ai-hive.git ~/ai-hive
+cd ~/ai-hive
 bash scripts/install.sh
 bash scripts/start.sh      # opens http://127.0.0.1:8420
 ```

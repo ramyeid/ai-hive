@@ -15,8 +15,8 @@
 ## Install
 
 ```bash
-git clone git@github.com:ramyeid/hive-ai-squad.git ~/hive-ai-squad
-cd ~/hive-ai-squad
+git clone https://github.com/ramyeid/ai-hive.git ~/ai-hive
+cd ~/ai-hive
 bash scripts/install.sh
 ```
 
@@ -143,7 +143,7 @@ To restore from the console: **Settings → Backup → Restore**, upload a backu
 Hive stopped:
 
 ```bash
-git clone <Hive's repository> && cd hive-ai-squad   # on a new machine
+git clone https://github.com/ramyeid/ai-hive.git && cd ai-hive   # on a new machine
 bash scripts/restore.sh s3://my-bucket/hive         # the newest backup there (or a file, or a folder)
 bash scripts/start.sh --background                  # with the same environment as before
 ```
