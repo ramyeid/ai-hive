@@ -15,6 +15,8 @@ Conventions are what the project's existing code does; read it and match it. The
 
 Consistency beats cleverness: the whole codebase should look like one author wrote it. New code is highly inspired by the task's **Reference Implementations** (same patterns and style, not copy-paste; shared logic is reused, never duplicated) and follows **Conventions to Follow**.
 
+New code is built like its **siblings**, the existing pieces of the same kind. A new entity, collection, repository or model inherits the base class its siblings use, uses the same model type (pydantic `BaseModel` where the project uses it, not a `dataclass`) and is registered the same way (e.g. its entry in the entity-type enum, its property on the repository). A new app or service has the same files as a sibling app, set up the same way (e.g. Dockerfile, CI entries, how `server.py` declares its routes), and none they don't have (no README if they have none). Before writing a generic helper (concurrency, retries, parsing), search the project's shared packages for one.
+
 ### Reuse first
 Before anything new is built, check whether the project already does it or nearly does. Extending existing code (an extra parameter, a small refactor) beats a parallel copy. A near-duplicate is a defect: the Tech Lead looks for it in the spec (**Existing Code to Reuse**, checked by the gate), the dev before writing code, the reviewer on every review.
 

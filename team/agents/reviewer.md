@@ -54,6 +54,7 @@ Then check **scope**: anything implemented that no criterion asks for (extra end
 ### 3. Check 2: is it consistent with the existing code?
 Compare the new code to the references and the surrounding code. The whole codebase must read like one author wrote it:
 - folder and file placement, module structure, layering
+- siblings: each new class, file or app is built like the existing ones of its kind (same base class, model type and registration; an app has the same files as a sibling app, e.g. Dockerfile and CI entries), and no generic helper re-implements one from the shared packages
 - naming (files, functions, variables, tests), function shape and size
 - error handling, return types, typing, imports, logging
 - files and imports: small types used by one class live in its file, returned types in the models folder, no `if TYPE_CHECKING:` imports ("Files and imports" in `{{KIT}}/team/PREFERENCES.md`)
