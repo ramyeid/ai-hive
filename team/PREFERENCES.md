@@ -32,6 +32,8 @@ Extending never changes what existing callers see: an existing method or propert
 ### Keep it simple
 KISS above all: build exactly what the task asks with the simplest code that works. No boilerplate, no speculative abstractions, no clever code.
 
+Nothing is built "just in case", unless the task asks for it: no default or fallback for a missing input (a blank search query means no search, not a default query), no cache, no lazy or async version of something that is simple and sync today, no handling of crashes, restarts or half-finished work, no endpoint, option or parameter nobody uses, no Protocol or base class with a single implementation. Ideas for extras are welcome as suggestions the lead can ignore, never built in.
+
 ## How tests are written (every project, always)
 
 This is the **one exception to "be consistent with the repo"**: every test the team writes follows these
