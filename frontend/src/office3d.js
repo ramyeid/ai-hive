@@ -802,7 +802,11 @@ function spotOf(id, place) {
   const [k, i] = place.split(":"); const s = W.R.SPOTS[k]?.[+i || 0];
   return s && { ...s, kind: k === "games" ? (+i >= 2 ? "pingpong" : "foosball") : k };
 }
+// Each agent's face is given by the console (settings), so it's the same here as next to its name everywhere else.
+const faceOf = (id) => H.state.settings?.agents?.[id]?.face || "";
 function avatarFor(id, used) {
+  const face = faceOf(id);
+  if (face) return [face, face.startsWith("Female") ? "f" : "m"];
   const g = genderOf(H.personOf(id)), pool = POOL[g];
   const start = hashOf(id) % pool.length;
   for (let k = 0; k < pool.length; k++) { const a = pool[(start + k) % pool.length]; if (!used.has(a)) { used.add(a); return [a, g]; } }
@@ -818,6 +822,7 @@ function refresh() {
   for (const id of ids) {
     const w = where.get(id);
     let p = W.people.get(id);
+    if (p && faceOf(id) && p.avatar !== faceOf(id)) { p.show(false); W.people.delete(id); W.places.delete(id); p = null; }   // renamed: a new face
     if (!p && w.place !== "off") { const [a, g] = avatarFor(id, used); p = new Person(id, a, g); W.people.set(id, p); }
     if (!p) continue;
     const before = W.places.get(id), target = w.place === "door" ? { ...W.R.SPOTS.door[0] } : w.place === "off" ? null : spotOf(id, w.place);

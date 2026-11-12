@@ -105,6 +105,23 @@ def run():
         check(store.load_settings()["agents"]["dev"]["role"] == "dev", "renaming keeps the role")
         c.put("/api/agents/dev/config", json={"provider": "claude", "model": ""}, headers=H)
         check(store.load_settings()["agents"]["dev"]["name"] == "Kareem", "changing the model keeps the name")
+
+        # Faces: one for each agent from the Office's people, matching the name, kept, different while there are enough.
+        agents = store.load_settings()["agents"]
+        faces = [a["face"] for a in agents.values()]
+        check(all(a["face"] in store.FACES[store.gender_of(a["name"])] for a in agents.values()),
+              "every agent has a face that goes with its name")
+        check(len(set(faces)) == len(faces), f"no two agents share a face ({', '.join(faces)})")
+        check(c.get("/api/state", headers=H).json()["settings"]["agents"]["dev"]["face"] == agents["dev"]["face"],
+              "the console gets each agent's face")
+        kept = agents["dev"]["face"]
+        c.put("/api/agents/dev/name", json={"name": "Kareem Adel"}, headers=H)
+        check(store.load_settings()["agents"]["dev"]["face"] == kept, "a new name of the same gender keeps the face")
+        c.put("/api/agents/dev/name", json={"name": "Laila"}, headers=H)
+        face = store.load_settings()["agents"]["dev"]["face"]
+        check(face in store.FACES["f"] and face not in [a["face"] for k, a in store.load_settings()["agents"].items() if k != "dev"],
+              "renamed to a woman's name, dev gets a woman's face no one else has")
+        c.put("/api/agents/dev/name", json={"name": "Kareem"}, headers=H)
         c.post("/api/agents/dev/start", json={}, headers=H)
         for _ in range(200):
             if "Kareem" in str(FakeClient.last_options.system_prompt):

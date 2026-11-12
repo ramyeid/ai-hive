@@ -342,7 +342,9 @@ async function render(quiet = false) {
   }
   highlightNav(r);
   renderCrumb(r);
-  document.getElementById("ask-pill").hidden = r.page === "agent" || !state.agents.orchestrator;   // in a chat, the composer is right there
+  const pill = document.getElementById("ask-pill");
+  pill.hidden = r.page === "agent" || !state.agents.orchestrator;   // in a chat, the composer is right there
+  if (!pill.hidden) pill.querySelector(".avatar").outerHTML = avatar("orchestrator");
   closeRail();
 }
 
@@ -378,9 +380,16 @@ function busyWith(name) {
   return (state.tasks || []).find((t) => ["in-dev", "in-review", "draft", "blocked"].includes(t.status) && t.assignee === name);
 }
 
+// An agent's face (one of the Office's people, given in settings) in a ring of its role's colour; the initial
+// if there's no face or it doesn't load.
 function avatar(name, cls = "") {
-  return `<span class="avatar ${roleOf(name)} ${cls}" aria-hidden="true">${esc((personOf(name) || "?").slice(0, 1).toUpperCase())}</span>`;
+  const face = state.settings?.agents?.[name]?.face;
+  return `<span class="avatar ${roleOf(name)} ${face ? "face" : ""} ${cls}" aria-hidden="true">${esc((personOf(name) || "?").slice(0, 1).toUpperCase())}${
+    face ? `<img src="/static/office/faces/${esc(face)}.webp" alt="" decoding="async">` : ""}</span>`;
 }
+document.addEventListener("error", (e) => {
+  if (e.target.matches?.(".avatar.face > img")) { e.target.parentElement.classList.remove("face"); e.target.remove(); }
+}, true);
 
 function railAgent(name) {
   const st = state.agents[name]?.status || "stopped";

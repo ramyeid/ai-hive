@@ -402,6 +402,8 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .agent-head .title { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 2px; }
 .agent-head h1 { font-size: 1.3rem; display: flex; align-items: center; gap: 10px; }
 .avatar.big { width: 40px; height: 40px; border-radius: 10px; font-size: 1.05rem; }
+.avatar.face { position: relative; border-radius: 50% !important; color: transparent; overflow: hidden; }   /* round whatever size a page gives it */
+.avatar.face > img { position: absolute; inset: 8%; width: 84%; height: 84%; border-radius: 50%; object-fit: cover; background: #dfe6e2; }
 .state-pill { padding: 1px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: var(--sunken); color: var(--muted); }
 .state-pill.idle { background: var(--dev-soft); color: var(--dev); }
 .state-pill.working, .state-pill.starting { background: var(--brand-soft); color: var(--brand); }

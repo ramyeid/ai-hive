@@ -33,7 +33,8 @@ backend/
   tests/                      with fakes/ (a fake Claude and a fake OpenAI-style API)
 frontend/src/               the single-page app (vanilla JS, no build step), served at /static
   office3d.js                 the Office (three.js, loaded only when the Office is opened)
-  office/                     its avatars and animations (Microsoft Rocketbox, MIT: see office/NOTICE.md)
+  office/                     its people and animations (Microsoft Rocketbox, MIT: see office/NOTICE.md), and
+                                faces/: their portraits, each agent's picture in the console (store.FACES)
   vendor/three/               three.js r169 and the add-ons it uses (MIT)
 integrations/slack/         the Slack app manifest
 scripts/                    install.sh, start.sh, stop.sh

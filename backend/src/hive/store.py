@@ -27,6 +27,18 @@ NAMES = """Kareem Hossam Aliaa Zeinab Tarek Nour Yasmine Rania Hany Sherif Amr L
 Ramy Nadine Maher Samir Hala Mona Farida Hazem Sameh Reem Lina Ziad Shady Nada Hoda Waleed
 Bassem Hesham Malak Jana Tamer Wael Ayman Sherine Dalia Ghada Rasha Heba Nabil Adham Seif
 Yasser Khaled Marwan Nader Rana Lama Karma Ola Mai Hadeer Nesma Mazen Ehab Yara""".split()
+# Each agent's face: one of the people in the Office (frontend/src/office/people), shown as its portrait
+# (office/faces) wherever the console shows the agent. Picked from the name (a woman's name gets a woman's
+# face), kept once given, and different for each agent while there are faces left.
+FACES = {"f": ["Female_Adult_15", "Female_Adult_14", "Female_Adult_09", "Female_Adult_02", "Female_Adult_07",
+               "Female_Adult_11", "Female_Adult_06"],
+         "m": ["Male_Adult_08", "Male_Adult_07", "Male_Adult_13", "Male_Adult_14", "Male_Adult_03",
+               "Male_Adult_12", "Male_Adult_20"]}
+FEMALE = set("""laila layla leila yara yasmine yasmin nour noor sara sarah mariam maryam salma hana hanna farah dina reem
+rana mona aya malak jana lina nada heba amira rania noha dalia habiba fatma fatima esraa menna shahd jasmine
+jessica emma olivia sophia mia ava amelia zeinab nadia samira rasha ghada huda iman eman asmaa basma doaa
+lamia lamis marwa mai may nermeen nesma rehab sally shaimaa sherine yomna youmna aliaa alaa nadine hala farida
+hoda lama karma ola hadeer""".split())
 DEFAULT_SETTINGS = {
     "workspace": str(Path.home()),
     "permission_mode": {},   # agent id -> default | acceptEdits
@@ -82,7 +94,8 @@ def load_settings() -> dict:
     settings = {**DEFAULT_SETTINGS, **saved}
     agents = saved.get("agents") or DEFAULT_SETTINGS["agents"]
     settings["agents"] = {aid: {"role": a.get("role") or role_of(aid), "name": a.get("name", ""),
-                                "provider": a.get("provider", "claude"), "model": a.get("model", "")}
+                                "provider": a.get("provider", "claude"), "model": a.get("model", ""),
+                                "face": a.get("face", "")}
                           for aid, a in agents.items()}
     settings["permission_mode"] = {aid: saved.get("permission_mode", {}).get(aid, "default")
                                    for aid in settings["agents"]}
@@ -96,9 +109,24 @@ def load_settings() -> dict:
     unnamed = [a for a in settings["agents"].values() if not a["name"]]
     for agent in unnamed:   # first run, or agents from before names existed: name them once
         agent["name"] = pick_name(settings["agents"])
-    if unnamed:
+    faceless = [aid for aid, a in settings["agents"].items() if a["face"] not in FACES[gender_of(a["name"])]]
+    for aid in faceless:    # agents from before faces existed, or renamed to a name of the other gender
+        settings["agents"][aid]["face"] = pick_face(settings["agents"], aid)
+    if unnamed or faceless:
         _write_json(SETTINGS, settings)
     return settings
+
+
+def gender_of(name: str) -> str:
+    return "f" if (name.split() or [""])[0].lower() in FEMALE else "m"
+
+
+def pick_face(agents: dict, agent_id: str) -> str:
+    """A face for this agent's name that no other agent has, or, when they're all taken, the least used one."""
+    pool = FACES[gender_of(agents[agent_id]["name"])]
+    used = [a.get("face") for aid, a in agents.items() if aid != agent_id]
+    free = [f for f in pool if f not in used]
+    return random.choice(free) if free else min(pool, key=used.count)
 
 
 def pick_name(agents: dict) -> str:
@@ -115,6 +143,8 @@ def rename_agent(agent_id: str, name: str) -> None:
     if any(a["name"].lower() == name.lower() for aid, a in settings["agents"].items() if aid != agent_id):
         raise ValueError(f"Another agent is already called {name}.")
     settings["agents"][agent_id]["name"] = name
+    if settings["agents"][agent_id]["face"] not in FACES[gender_of(name)]:
+        settings["agents"][agent_id]["face"] = pick_face(settings["agents"], agent_id)
     _write_json(SETTINGS, settings)
 
 
@@ -187,7 +217,8 @@ def add_agent(role: str) -> str:
     settings = load_settings()
     taken = set(settings["agents"])
     agent_id = role if role not in taken else next(f"{role}-{n}" for n in range(2, 100) if f"{role}-{n}" not in taken)
-    settings["agents"][agent_id] = {"role": role, "name": pick_name(settings["agents"]), "provider": "claude", "model": ""}
+    settings["agents"][agent_id] = {"role": role, "name": pick_name(settings["agents"]), "provider": "claude", "model": "", "face": ""}
+    settings["agents"][agent_id]["face"] = pick_face(settings["agents"], agent_id)
     settings["permission_mode"][agent_id] = "default"
     _write_json(SETTINGS, settings)
     return agent_id
