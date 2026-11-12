@@ -60,6 +60,7 @@ next. Nothing is pushed to your remote.
 - **Web console**: Home (what needs you), a kanban board, chats with every agent, code review, activity and a browser terminal.
 - **Finance**: what the team spent per task, per day and per month, filtered by date, agent, project and model, with a CSV export.
 - **The Office**: the team as people in a 3D office: who is at their desk working, who is on a break, who needs you. Click someone to chat with them, HR to hire, Finance for today's spending.
+- **A face for every agent**: each agent is one of the Office's 14 people (7 women, 7 men), matched to its name, and that face is shown next to it everywhere in the console.
 - **Slack**: talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in its own thread.
 - **Runs locally or on a server** behind a VPN, with optional password sign-in; light and dark themes; works on phones (the Office is for larger screens).
 - **Model choice per agent**: Claude (through Claude Code), OpenAI, DeepSeek, Qwen or Kimi.

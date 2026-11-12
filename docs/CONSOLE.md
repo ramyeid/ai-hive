@@ -7,6 +7,8 @@ running it in the background or on a server.
 
 - **Sidebar**: Home, Board, Reviews, Activity and Finance; the Orchestrator, Team and Coach sections (each can be folded away);
   Knowledge; Office, Settings and Terminal. On a phone it becomes a bar at the bottom.
+- **Faces**: every agent has a face, one of the Office's people, in a ring of its role's colour. It matches the agent's
+  name (rename a Dev from Yara to Omar and the face changes with it) and is the same person you see at the agent's desk.
 - **⌘K / Ctrl+K**: jump to any task, agent or page.
 - **/**: ask the Orchestrator from any page.
 
@@ -24,10 +26,10 @@ running it in the background or on a server.
 | **Finance** | What the team spent, per day or per month and per task, with each task's share, tokens and who worked on it. Filter by date range, agent, project, model or task; export the lines as CSV. Turns that weren't on a task (questions, planning) are counted separately. |
 | **Office** | The team in a 3D office, full screen. Agents sit at their desks when working and take breaks (coffee, the sofa, foosball, table tennis) when idle; a bubble shows who needs you. Click someone to chat in a side panel, HR to add a Tech Lead, Dev or Reviewer, Finance for today's and this month's spending. Scroll or pinch to zoom, drag to pan; ☰ shows the sidebar. Meant for larger screens. |
 | **Knowledge** | The Tech Lead's notes per repository and service, with how much has changed in git since each was written. |
-| **Improvements** | The Coach's proposals: the exact change, why, and the tasks behind it. Approve, edit or reject. |
+| **Improvements** | The Coach's proposals: the exact change, why, and the tasks behind it. Approve, edit or reject. Decided proposals are listed below, each folded to its title line; click one to see it in full. |
 | **Team history** | Every change to the team's instructions, with diffs, the team as it was at any point, and undo. |
 | **Terminal** | Shells on the machine the console runs on, side by side. |
-| **Settings** | Team (agents, their models and approval mode), Models & keys, Integrations (Slack), Access & links, Workspace, Appearance, About. |
+| **Settings** | Team (agents, their names, models and approval mode; add or remove agents), Models & keys, Integrations (Slack), Access & links, Workspace, Backup, Appearance, About. |
 
 ## Approvals
 
