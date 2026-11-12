@@ -239,6 +239,13 @@ main:focus, main:focus-visible { outline: none; }
 .page-head p { margin: 4px 0 0; color: var(--muted); max-width: 68ch; }
 .section { margin-top: 30px; }
 .section > h2 { margin-bottom: 10px; }
+details.proposal > summary { list-style: none; cursor: pointer; }
+details.proposal > summary::-webkit-details-marker { display: none; }
+details.proposal > summary header { margin-bottom: 0; }
+details.proposal[open] > summary header { margin-bottom: 10px; }
+details.proposal > summary h2::before { content: "▸"; display: inline-block; width: 16px; color: var(--muted); font-size: 12px; }
+details.proposal[open] > summary h2::before { content: "▾"; }
+.proposal-when { margin-left: auto; font-size: 13px; }
 .muted { color: var(--muted); }
 .empty { padding: 22px; border: 1px dashed var(--rule); border-radius: var(--radius-m); color: var(--muted); }
 

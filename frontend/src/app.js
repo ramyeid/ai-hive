@@ -72,6 +72,7 @@ const state = {
   drafts: {},         // name -> unsent composer text
   land: {},           // task -> the landing page's plan and the lead's choices (kept across refreshes)
   openTools: new Set(),
+  openProposals: new Set(),
   inboxUnread: 0,
   stream: {},         // name -> {thinking, text, tool}: what the agent is writing right now
   since: {},          // name -> when it started working (ms)
@@ -2779,8 +2780,9 @@ function proposalCard(p) {
       ${diffLines(c.before, c.after)}
       ${pending ? `<textarea class="edit-after" data-index="${i}" rows="${Math.min(18, c.after.split("\n").length + 2)}" hidden aria-label="New text for ${esc(c.file)}">${esc(c.after)}</textarea>` : ""}</div>`).join("");
   const decided = pending ? "" : `<p class="muted">${p.status === "approved" ? "Approved" : "Rejected"} ${esc(p.decided)}${p.note ? `: ${esc(p.note)}` : ""}${p.commit ? ` · <a href="#/team/${esc(p.commit)}">see the change</a>` : ""}</p>`;
-  return `<section class="proposal ${p.status}" id="${esc(p.id)}">
-    <header><h2><span class="muted">${esc(p.id)}</span> ${esc(p.title)}</h2>${statusWord(p.status)}</header>
+  const head = `<header><h2><span class="muted">${esc(p.id)}</span> ${esc(p.title)}</h2>${pending ? "" : `<span class="muted proposal-when">${esc(p.decided)}</span>`}${statusWord(p.status)}</header>`;
+  // a decided proposal is folded to its title line; click it to see the why, the evidence and the change
+  return `${pending ? `<section class="proposal ${p.status}" id="${esc(p.id)}">${head}` : `<details class="proposal ${p.status}" id="${esc(p.id)}" data-proposal="${esc(p.id)}" ${state.openProposals.has(p.id) ? "open" : ""}><summary>${head}</summary>`}
     ${p.tasks.length ? `<p class="muted">Based on ${taskLinks(p.tasks)}</p>` : ""}
     <div class="prose"><h3>Why</h3>${md(p.why)}<h3>Evidence</h3>${md(p.evidence)}</div>
     <h3>Change</h3>${changes}
@@ -2790,7 +2792,7 @@ function proposalCard(p) {
       <button class="btn primary" data-action="approve" data-id="${esc(p.id)}" ${p.problems.length ? "disabled" : ""}>Approve</button>
       <button class="btn" data-action="edit-proposal" data-id="${esc(p.id)}">Edit before approving</button>
       <button class="btn" data-action="reject" data-id="${esc(p.id)}">Reject</button></div>` : ""}
-  </section>`;
+  ${pending ? "</section>" : "</details>"}`;
 }
 
 const statusWord = (s) => `<span class="pill ${s === "approved" ? "dev" : s === "rejected" ? "lead" : "reviewer"}">${s}</span>`;
@@ -2814,7 +2816,7 @@ async function Improvements() {
       <p class="hint">It runs on the Coach's model (Opus, thinking hard), so a review costs more than a normal task. It may ask you questions in its chat before proposing anything.</p></section>
     <section class="section"><h2>Waiting for you <span class="count">${pending.length}</span></h2>
       ${pending.length ? pending.map(proposalCard).join("") : `<p class="muted">No proposals waiting.</p>`}</section>
-    ${decided.length ? `<section class="section"><h2>Decided</h2>${decided.map(proposalCard).join("")}</section>` : ""}`;
+    ${decided.length ? `<section class="section"><h2>Decided <span class="count">${decided.length}</span></h2>${decided.map(proposalCard).join("")}</section>` : ""}`;
 }
 
 async function TeamHistory() {
@@ -3399,6 +3401,11 @@ document.addEventListener("change", async (e) => {
   }
 });
 
+// decided proposals start folded and stay as you left them
+document.addEventListener("toggle", (e) => {
+  const id = e.target.dataset?.proposal;
+  if (id) e.target.open ? state.openProposals.add(id) : state.openProposals.delete(id);
+}, true);
 document.addEventListener("toggle", (e) => {
   const id = e.target.dataset?.tool;
   if (id) e.target.open ? state.openTools.add(id) : state.openTools.delete(id);
