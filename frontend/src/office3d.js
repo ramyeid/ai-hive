@@ -371,17 +371,23 @@ glassRoom(0, 5.0, 4.2, 8.8, ["x", 4.2, 6.9]);
 glassRoom(0, 11.4, 4.4, RD, ["x", 4.4, 12.3]);
 glassRoom(17.0, 11.0, RW, RD, ["x", 17.0, 12.0]);
 glassRoom(9.0, 12.6, 13.4, RD, ["z", 12.6, 11.2]);
-// each room's name on its glass, as frosted vinyl lettering: the name, a thin rule and what the room is for
+// each room's name on its glass, as dark green vinyl lettering: the name, a thin rule and what the room is for
 function glassSign(name, sub, x, z, rotY, w = 1.7) {
   const c = document.createElement("canvas"); c.width = 1024; c.height = 300;
   const g = c.getContext("2d");
-  g.shadowColor = "rgba(15, 25, 20, 0.55)"; g.shadowBlur = 10; g.shadowOffsetY = 2;
-  g.fillStyle = "rgba(255, 255, 255, 0.96)"; g.textBaseline = "alphabetic";
-  let size = 136; do { g.font = `600 ${size}px 'IBM Plex Sans', system-ui, sans-serif`; size -= 4; } while (g.measureText(name).width > 980 && size > 48);
-  g.fillText(name, 18, 150);
-  g.fillRect(20, 186, Math.min(980, g.measureText(name).width * 0.42), 5);
-  g.font = "400 50px 'IBM Plex Sans', system-ui, sans-serif"; if ("letterSpacing" in g) g.letterSpacing = "5px";
-  g.fillText(sub.toUpperCase(), 20, 262);
+  // a strip of frosted film behind the letters, fading out at the ends
+  const fade = g.createLinearGradient(0, 0, 1024, 0);
+  fade.addColorStop(0, "rgba(255,255,255,0)"); fade.addColorStop(0.06, "rgba(255,255,255,0.72)"); fade.addColorStop(0.94, "rgba(255,255,255,0.72)"); fade.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = fade; g.fillRect(0, 22, 1024, 268);
+  g.shadowColor = "rgba(255, 255, 255, 0.55)"; g.shadowBlur = 3; g.shadowOffsetY = 0;   // a thin light edge keeps dark letters readable over dark floors
+  g.fillStyle = "#1e3a2f"; g.textBaseline = "alphabetic";
+  let size = 136; do { g.font = `700 ${size}px 'IBM Plex Sans', system-ui, sans-serif`; size -= 4; } while (g.measureText(name).width > 930 && size > 48);
+  g.fillText(name, 48, 150);
+  g.fillStyle = "#3f7a5f";
+  g.fillRect(50, 186, Math.min(940, g.measureText(name).width * 0.42), 6);
+  g.fillStyle = "#2c4a3d";
+  g.font = "600 52px 'IBM Plex Sans', system-ui, sans-serif"; if ("letterSpacing" in g) g.letterSpacing = "5px";
+  g.fillText(sub.toUpperCase(), 50, 262);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w * 300 / 1024), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, toneMapped: false }));
   m.position.set(x, 1.66, z); m.rotation.y = rotY; m.renderOrder = 4; scene.add(m);
