@@ -41,9 +41,14 @@ file and test naming, assertion library, fixtures and mocks) still follows the p
    the delimiters. Never merge two blocks, never add a fourth: a second action is a second test.
 2. **Given:** the setup, written as calls to **private helper methods with clear names** that say what they
    create, e.g. `_a_task_ready_for_dev()`, `_an_order_with_status("pending")`, `CreatePaidInvoice(amount: 120)`.
-   No raw setup code (building objects field by field, inserting rows, configuring mocks) in the test body.
+   Helper names follow the project's naming style for methods (`BuildCourse(...)` in a C# file, not
+   `_a_course()`). Helpers are generic building blocks reused across the class (`AddCourse(context, course,
+   sections, lessons)`), never one written for a single test; use the file's existing builders first.
+   No raw setup code (building objects field by field, inserting rows, configuring mocks) in the test body;
+   creating the object under test and an empty mock with `new` is fine. When the file's existing tests are clean
+   and organized, set up new tests the way they do, not in an opposite style; the three blocks still apply.
    Helpers live in the test file or class as private members (`_name` in Python, `private` in
-   C#/TypeScript/Java), reused across the tests that need the same state. The given block is never empty:
+   C#/TypeScript/Java). The given block is never empty:
    when the test starts from nothing, a helper says so (`_no_tasks_on_the_board()`).
 3. **When:** exactly one action, the behaviour under test, usually one line that stores its result:
    `result = service.list_orders(status="pending")`.

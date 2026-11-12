@@ -78,7 +78,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    `git commit -m "TASK-012: add rate limiter" --trailer "Agent: $AGENT_ID" --trailer "Task: TASK-012"`
 6. **Unit-test** each acceptance criterion's behaviour, following "How tests are written" in `{{KIT}}/team/PREFERENCES.md`:
    - every test body is exactly three blocks, given / when / then, separated by one empty line each: two empty lines in the body, none inside a block, no given/when/then comments;
-   - the given block only calls private helpers with clear names (`_a_task_ready_for_dev()`, `CreatePaidInvoice(120)`); no raw setup in the test body;
+   - the given block calls private helpers named in the project's style and reused across the class (the file's own builders first), plus at most `new` of the object under test and empty mocks; no other raw setup in the test body;
    - the when block is one action; the then block asserts specific values about that action only;
    - one behaviour per test, named for it.
 
@@ -88,7 +88,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Could it be deleted or made simpler and the criteria still pass? → do that.
    - Is there an abstraction used only once? → inline it.
    - Does it look like the reference code: names, structure, error handling? No → make it match.
-   - Every test: exactly three blocks separated by empty lines (given, when, then), setup only through named private helpers, one action, specific assertions? No → fix it.
+   - Every test: exactly three blocks separated by empty lines (given, when, then), setup through generic named helpers in the project's style (like the file's existing tests when they are clean), one action, specific assertions? No → fix it.
    - Is any logic duplicated from elsewhere? → reuse it.
    - Does the diff add a password, key or token in plain text, or copy a file that holds one? → remove it, take it the way the file does elsewhere (e.g. `source: ssm`), and flag the location for the lead (TEAM.md rule 9).
    - Does it break any of the lead's comments on this branch? `claim.py` prints them all, every round on every task
