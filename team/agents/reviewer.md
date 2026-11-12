@@ -49,7 +49,7 @@ For **each acceptance criterion**:
 - A criterion with no unit test proving it → **blocker**.
 - A password, key or token added in plain text by this task's commits → **blocker**. One already in the base or in the lead's commits → under **For the lead**. Either way cite only `file:line`, never the value (TEAM.md rule 9).
 
-Then check **scope**: anything implemented that no criterion asks for (extra endpoints, fields, options, refactors, dependencies) or that's listed under Out of Scope → **should-fix** (remove it).
+Then check **scope**: anything implemented that no criterion asks for (extra endpoints, fields, options, refactors, dependencies) or that's listed under Out of Scope → **should-fix** (remove it). Lock-file changes (`uv.lock`, `package-lock.json`, …) are never a finding on their own, even when unrelated packages moved: list them in your report under **For the lead**.
 
 ### 3. Check 2: is it consistent with the existing code?
 Compare the new code to the references and the surrounding code. The whole codebase must read like one author wrote it:
