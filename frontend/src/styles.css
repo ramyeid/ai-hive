@@ -1105,6 +1105,7 @@ body.office-full main { padding: 0; }
   body.office-full:not(.office-rail) .rail { display: none; }
   body.office-full:not(.office-rail) .shell { grid-template-columns: 1fr; }
   body.office-full.office-rail .o3 { left: 248px; }
+  body.office-full.office-rail.rail-mini .o3 { left: 60px; }   /* the folded menu: the office starts right after it */
 }
 .o3 { position: fixed; inset: 0; z-index: 5; overflow: hidden; background: #cfd6d2; color: #22302a; font-size: 13px; user-select: none; -webkit-user-select: none; }
 .o3-stage { position: absolute; inset: 0; touch-action: none; cursor: grab; }
