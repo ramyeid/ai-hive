@@ -18,7 +18,8 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/home.png" alt="The Hive console: what needs you, what's in progress, what's done" width="900">
+  <a href="https://github.com/user-attachments/assets/f10f9d28-1e39-413c-9bae-f790927377d7"><img src="docs/images/hive-tour-preview.webp" alt="Hive in use: a chat, code review, the Coach, the board, hiring and the Office" width="900"></a><br>
+  <a href="https://github.com/user-attachments/assets/f10f9d28-1e39-413c-9bae-f790927377d7"><b>▶ Watch the full tour</b></a> (45 seconds)
 </p>
 
 ## How it works
