@@ -87,6 +87,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
    - Which acceptance criterion or convention needs it? None → delete it.
    - Could it be deleted or made simpler and the criteria still pass? → do that.
    - Is there an abstraction used only once? → inline it.
+   - Does it change an existing method or property (name, return type, sync/async, a parameter it ignores) that no criterion asks to change? → put it back and add the behaviour in a subclass or a new function.
    - Does it look like the reference code: names, structure, error handling? No → make it match.
    - Is each new class, file or app built like its siblings (same base class, model type and registration; an app with the same files as a sibling app, e.g. Dockerfile and CI entries)? Is any generic helper already in the shared packages? → fix it.
    - Every test: exactly three blocks separated by empty lines (given, when, then), setup through generic named helpers in the project's style (like the file's existing tests when they are clean), one action, specific assertions? No → fix it.

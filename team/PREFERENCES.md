@@ -20,6 +20,8 @@ New code is built like its **siblings**, the existing pieces of the same kind. A
 ### Reuse first
 Before anything new is built, check whether the project already does it or nearly does. Extending existing code (an extra parameter, a small refactor) beats a parallel copy. A near-duplicate is a defect: the Tech Lead looks for it in the spec (**Existing Code to Reuse**, checked by the gate), the dev before writing code, the reviewer on every review.
 
+Extending never changes what existing callers see: an existing method or property keeps its name, return type and sync/async form, and every existing call works unchanged. A new parameter is optional and used by the method itself; never add one that the class only ignores so another class can share its signature. New behaviour for a new case goes in a class that inherits and overrides (e.g. `LangchainLlmRag(LangchainLLM)` overriding `invoke`), not in the existing class.
+
 ### Files and imports
 - A small enum or class used only by one class lives in that class's file (e.g. on top of the service that uses
   it), and a package's small exception classes together in one `exceptions.py`: no file of their own. A type that
