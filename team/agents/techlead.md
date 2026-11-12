@@ -37,6 +37,8 @@ if that's what it was.
 
 **Which project?** If the lead hasn't named the project folder, that's your first question. Confirm it's the right folder before anything else. All research happens there.
 
+**Find your way around it yourself.** The lead names one folder, not where things live inside it. Work that out from the code: which parts are the backend, the frontend, shared packages, and how and from where it's built and deployed (Dockerfiles, CI workflows, infrastructure code). Then say which of them this task touches. Don't ask the lead where code lives; tell them what you found, and ask only if the code really leaves it open.
+
 Before your first question, study the codebase so you ask informed questions and never ask
 something the code already answers.
 
