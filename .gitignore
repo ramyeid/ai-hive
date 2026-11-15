@@ -12,3 +12,6 @@ __pycache__/
 
 # The last restore from the console (Settings → Backup)
 restore.log
+
+# The tour video's source file, kept next to the code but not in git (the README plays it from GitHub's upload)
+docs/media/
