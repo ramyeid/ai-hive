@@ -467,6 +467,7 @@ details.menu.open-left .menu-list { left: auto; right: 0; }   /* near the right 
 .run-items .tool { margin-left: 0; }
 #pinned-asks { display: flex; flex-direction: column; gap: 8px; }
 #pinned-asks:not(:empty) { padding: 10px 0 0; }
+#pinned-asks .sent-banner { margin: 0; }
 #pinned-asks .ask { margin-left: 0; max-width: none; background: var(--panel); box-shadow: 0 4px 16px rgb(0 0 0 / 0.06); }
 .ask kbd { margin-left: 4px; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
 .agent-head .title p { margin: 0; color: var(--muted); font-size: 0.86rem; }

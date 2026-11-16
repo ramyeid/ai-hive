@@ -66,6 +66,7 @@ const STATUS_TEXT = { stopped: "Stopped", starting: "Starting…", idle: "Ready"
 
 const state = {
   agents: {},         // name -> {status, session_id, pending, error}
+  handedFromChat: {}, // task -> the dev you handed it to from the Tech Lead's chat (its banner says so)
   settings: null,
   kit: "",
   live: {},           // name -> events of the current session
@@ -343,7 +344,7 @@ function onEvent(event) {
   }
   if (event.kind === "board") {
     clearTimeout(boardTimer);
-    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task"]); refreshCounts().then(() => { if (route().page === "office") officeRefresh(); }); }, 300);
+    boardTimer = setTimeout(() => { refreshIf(["overview", "tasks", "task"]); refreshCounts().then(() => { const r = route(); if (r.page === "office") officeRefresh(); if (r.page === "agent") renderTranscriptInto(r.id); }); }, 300);
     return;
   }
   if (event.kind === "delta") {
@@ -1068,10 +1069,27 @@ function renderTranscriptInto(name) {
   const pinned = document.getElementById("pinned-asks");
   if (pinned) {
     const reqs = (state.live[name] || []).filter((e) => e.kind === "permission" && (ag.pending || []).some((p) => p.id === e.id));
-    pinned.innerHTML = reqs.map((e, i) => askCard(e, name, i === 0)).join("");
+    pinned.innerHTML = reqs.map((e, i) => askCard(e, name, i === 0)).join("") + readyBanners(name);
   }
   renderLive(name, atBottom);
 }
+
+// Once you approve a spec, the Tech Lead's chat offers to hand the task to a developer right there, as the code
+// review does with the reviewer: for each task this conversation is about that is ready for a dev.
+function readyBanners(name) {
+  if (roleOf(name) !== "techlead") return "";
+  const said = (state.live[name] || []).map((e) => e.text || "").join("\n");
+  return (state.tasks || []).filter((t) => said.includes(t.id) && (t.status === "ready-for-dev" || state.handedFromChat[t.id])).map((t) => {
+    const handed = state.handedFromChat[t.id];
+    if (handed) return readyBanner(`${t.id} is with ${personOf(handed)}`, `${personOf(handed)} is on it now.`,
+      `<a class="btn small primary" href="#/agents/${esc(handed)}">Go to ${esc(personOf(handed))}'s chat</a>`);
+    const buttons = handButtons(t, 3);
+    return readyBanner(`${t.id} is approved and ready for a dev`, buttons ? "Who builds it?" : "There's no developer on the team yet: add one in Settings → Team.",
+      `${buttons}<a class="btn small" href="#/tasks/${esc(t.id)}">Open the task</a>`);
+  }).join("");
+}
+const readyBanner = (title, next, buttons) => `<section class="sent-banner ready-banner" role="status"><span class="tick" aria-hidden="true">✓</span>
+  <div><b>${esc(title)}.</b> <span class="muted">${esc(next)}</span></div><div class="btn-row">${buttons}</div></section>`;
 
 const nearBottom = (box) => box.scrollHeight - box.scrollTop - box.clientHeight < 120;
 
@@ -3258,6 +3276,7 @@ const actions = {
     const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/hand/${el.dataset.agent}`, { method: "POST" }));
     if (!done) return;
     if (state.reviewSent?.task === el.dataset.task) state.reviewSent.handed = el.dataset.agent;   // the banner says who's on it
+    else if (el.closest(".ready-banner")) state.handedFromChat[el.dataset.task] = el.dataset.agent;   // so does the Tech Lead's
     else toast(done.message);
     refreshCounts(); render(true);
   },
