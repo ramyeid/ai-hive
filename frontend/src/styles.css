@@ -393,6 +393,24 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prose tbody tr { cursor: default; }
 .prose input[type=checkbox] { margin: 0 8px 0 0; accent-color: var(--dev); }
 .prose li:has(> input[type=checkbox]) { list-style: none; margin-left: -1.3em; }
+
+/* pictures the team draws: screenshots, mockups and diagrams, side by side when they're on one line */
+.prose:has(figure.visual) { max-width: min(1180px, 100%); }
+.prose .visual-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin: 0.8em 0; }
+.prose figure.visual { margin: 0.8em 0; border: 1px solid var(--rule); border-radius: var(--radius-s); overflow: hidden; background: var(--panel); min-width: 0; }
+.prose .visual-row figure.visual { margin: 0; }
+.prose figure.visual figcaption { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--rule);
+  font-size: 0.82rem; font-weight: 600; background: var(--sunken); }
+.prose figure.visual figcaption span { flex: 1; }
+.prose figure.visual figcaption a { font-weight: 400; color: var(--muted); }
+.prose figure.visual.proposed { border-color: #2f8f5b; }
+.prose figure.visual.proposed figcaption { background: #e6f4ea; color: #14532d; }
+.prose figure.visual > img { display: block; width: 100%; height: auto; }
+.prose figure.visual .mock { --scale: 0.5; position: relative; aspect-ratio: 1280 / 800; overflow: hidden; background: #fff; }
+.prose figure.visual .mock iframe { position: absolute; left: 0; top: 0; width: 1280px; height: 800px; border: 0; transform: scale(var(--scale)); transform-origin: 0 0; }
+.prose figure.diagram { padding: 14px; text-align: center; background: #fff; }
+.prose figure.diagram svg { max-width: 100%; height: auto; }
+.prose figure.diagram pre { text-align: left; }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 1.4em 0; }
 
 /* ---- agent chat ---------------------------------------------------------- */

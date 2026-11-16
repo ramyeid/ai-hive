@@ -162,6 +162,35 @@ decision the lead saw. Most items are decisions; only 0, 1 and 14 always go to t
 - Don't re-ask anything already answered (here, in an earlier task of the branch, in PREFERENCES), and don't ask what the code answers: state it as a decision instead ("Users already have `email` unique: I'll rely on that").
 - If the lead says "you decide", propose one concrete option, and log it as a confirmed answer only once they accept it.
 
+**Show it, don't only say it.** What's easier to see than to read, draw: the lead decides faster from a picture,
+and the dev and reviewer build and check against the same picture. Put the pictures in the round where they matter
+(usually the first), above the questions they frame. Use `python3 {{KIT}}/team/tools/visual.py dir <task id in
+lowercase>` for the folder; the console shows what you save there.
+- **A screen changes** (new or changed page, component, dialog, state): show it **as it is now** and **as it would
+  be**, on one line so the console puts them side by side:
+  `![Now](visuals/task-012/now.png) ![Proposed](visuals/task-012/proposed.html)`
+  - *Now:* if the app runs (find how in its README, package.json or docker-compose, start it if it isn't running,
+    and stop what you started when you're done), screenshot the page:
+    `python3 {{KIT}}/team/tools/visual.py shot <url> <folder>/now.png` (add `--wait-for <selector>` for a page that
+    loads its data). If it can't run (it needs a login you don't have, services that aren't there) or there's no
+    browser (the tool exits with code 3), rebuild the page as it is today as a mockup from its code, save it as
+    `now.html`, and caption it `Now (rebuilt from the code)`. Never present a rebuilt screen as a screenshot.
+  - *Proposed:* a mockup, `proposed.html`: one self-contained page for a 1280 × 800 window, in the app's own look
+    (its colours, fonts, spacing and components, copied from its code), with the same content as *Now* plus the
+    change. Outline what's new in green (`outline: 2px solid #2bb673`) with a small "new" label, so the change is
+    obvious at a glance. Inline CSS only: no links to files, fonts or scripts elsewhere (the console shows it
+    sandboxed, offline). Then `python3 {{KIT}}/team/tools/visual.py preview <folder>/proposed.html` makes the
+    picture the chat shows; "open full size" opens the mockup itself. One mockup per screen or state that changes
+    (empty, error, loading too, when they're part of the change).
+- **How the parts connect changes** (a new endpoint, service, queue, table or data flow; something moves or goes):
+  draw it **before** and **after**, as two ```mermaid flowcharts one right after the other (the console puts them
+  side by side), each with a title (`---` / `title: Now` / `---`). Use the same names as the code. In *After*,
+  mark what's new with `class <node> added` and what goes with `class <node> removed`; the console colours them.
+- Text stays for what text does best: decisions, rules, exact values. Don't draw what one sentence says.
+
+These pictures are part of the spec: Phase 3 copies them into it, and they change as the answers change (update
+the mockup when the lead picks another option, and show it again).
+
 ## Phase 3 — Write the spec
 
 Fill every section of the template:
@@ -170,6 +199,7 @@ Fill every section of the template:
 - **Reference Implementations:** a table row per reference: `path:start-end` (the lines that show the pattern) · why it's similar · which patterns to follow (structure, naming, error handling, response models, test style…). Describe patterns, not code to paste. Paths are relative to the project folder (or absolute for another project) and must exist — this is checked.
 - **Conventions to Follow:** concrete yes/no rules extracted from the references: naming, file placement, layering, error handling, logging, typing, tests (framework, location, naming; the shape of every test is fixed by "How tests are written" in `{{KIT}}/team/PREFERENCES.md`, whatever the existing tests do), allowed dependencies. Add "No new patterns or dependencies beyond those listed."
 - **Technical Notes:** your research for the dev: files and places to change (with line ranges), registrations, config, test setup and commands.
+- **Pictures:** the final *Now* / *Proposed* screens and *Now* / *After* diagrams from the interview, at the top of Technical Notes under `### What changes`, as the lead last saw and approved them. The dev builds to them; the reviewer checks against them.
 - **Out of Scope**, **Clarifications** (complete log).
 
 ## Phase 4 — Self-audit (do this silently before the readback)

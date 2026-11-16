@@ -10,6 +10,7 @@
 | git | Each feature gets its own branch and worktree |
 | [uv](https://docs.astral.sh/uv/) | For the console. macOS: `brew install uv`. Linux: `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | [GitHub CLI](https://cli.github.com) (optional) | Logged in (`gh auth login`), so the Coach can read your pull requests |
+| [Playwright](https://playwright.dev) (optional) | So the Tech Lead can screenshot your app's screens as they are today: `pip install playwright && python3 -m playwright install chromium` (or Playwright for Node). Without it, it rebuilds the screen from the code as a mockup. |
 | [code-server](https://github.com/coder/code-server) (optional) | To open code reviews in VS Code in the browser. macOS: `brew install code-server`. Linux: `curl -fsSL https://code-server.dev/install.sh \| sh` |
 
 ## Install

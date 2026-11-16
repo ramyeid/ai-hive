@@ -16,11 +16,11 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Form, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, backup, board, chats, costs, editor, ops, store, team, terminal
+from . import access, backup, board, chats, costs, editor, ops, store, team, terminal, visuals
 from .agents import ORCHESTRATOR_KEY, TEAM_ACTION, AgentManager
 from .slack import SlackBridge
 from .engines import PROVIDERS
@@ -328,6 +328,15 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         if not found:
             raise HTTPException(404, f"No knowledge file {repo}/{name}.")
         return found
+
+    @app.get("/api/visuals/{rel:path}")
+    async def visual(rel: str):
+        """A screenshot, mockup or diagram the team drew (data/visuals/), for the chats and specs that show it."""
+        found = visuals.find(rel)
+        if not found:
+            raise HTTPException(404, f"No picture visuals/{rel}.")
+        path, kind, headers = found
+        return FileResponse(path, media_type=kind, headers=headers)
 
     # ---- VS Code in the browser (code-server), see editor.py --------------------------
 

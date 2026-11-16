@@ -18,6 +18,7 @@ team/                       everything about the team (the Coach proposes change
     lead_review.py              the lead's code review (diffs, comments, rounds)
     coach.py                    the Coach's evidence and proposals
     orchestrate.py              the Orchestrator's controls (through the console)
+    visual.py                   the Tech Lead's pictures: screenshots and mockup previews (data/visuals/)
   tests/
 backend/
   pyproject.toml, uv.lock
@@ -29,6 +30,7 @@ backend/
     slack.py                    the Slack integration (Socket Mode)
     team.py                     proposals and the team's history (git)
     store.py                    settings and sessions; where every folder is
+    visuals.py                  serves the team's pictures (data/visuals/), mockups sandboxed
     access.py, terminal.py, costs.py, chats.py, board.py
   tests/                      with fakes/ (a fake Claude and a fake OpenAI-style API)
 frontend/src/               the single-page app (vanilla JS, no build step), served at /static
@@ -36,11 +38,12 @@ frontend/src/               the single-page app (vanilla JS, no build step), ser
   office/                     its people and animations (Microsoft Rocketbox, MIT: see office/NOTICE.md), and
                                 faces/: their portraits, each agent's picture in the console (store.FACES)
   vendor/three/               three.js r169 and the add-ons it uses (MIT)
+  vendor/mermaid/             Mermaid 11.4.1 (MIT), loaded only when a message or spec has a diagram
 integrations/slack/         the Slack app manifest
 scripts/                    install.sh, start.sh, stop.sh
 assets/                     logos and icons, served at /assets
 docs/
-data/                       local only, never committed: tasks/, knowledge/, coach/, console/ (settings, sessions)
+data/                       local only, never committed: tasks/, knowledge/, coach/, visuals/, console/ (settings, sessions)
 ```
 
 ## Running the tests

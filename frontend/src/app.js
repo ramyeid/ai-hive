@@ -98,7 +98,103 @@ function listsOnTheirOwn(text) {
     return out;
   }).join("\n");
 }
-const md = (text) => DOMPurify.sanitize(marked.parse(listsOnTheirOwn(text), { gfm: true, breaks: false }));
+const md = (text) => visualsIn(DOMPurify.sanitize(marked.parse(listsOnTheirOwn(text), { gfm: true, breaks: false })));
+
+// ---- Pictures the team draws: screenshots, mockups and diagrams (data/visuals/, see backend visuals.py) ----
+// In a message or a spec:
+//   ![Now](visuals/orders-csv/now.png)            a screenshot (or any picture)
+//   ![Proposed](visuals/orders-csv/proposed.html) a mockup: shown as its preview (proposed.png, made by
+//                                                 team/tools/visual.py), or live in a sandboxed frame if there's none
+//   ```mermaid ... ```                            a diagram (`class X added` / `class X removed` colour the change)
+// Pictures on one line, and diagrams one after the other, sit side by side; "open full size" opens the original.
+const visualUrl = (rel) => `/api/visuals/${rel.replace(/^visuals\//, "").split("/").map(encodeURIComponent).join("/")}?token=${encodeURIComponent(TOKEN)}`;
+const diagrams = new Map();   // a diagram's source -> its drawing, so a re-render (a chat streaming) doesn't redraw it
+function visualsIn(html) {
+  if (!/src="visuals\/|language-mermaid/.test(html)) return html;
+  const t = document.createElement("template");
+  t.innerHTML = html;
+  for (const img of t.content.querySelectorAll('img[src^="visuals/"]')) {
+    const rel = img.getAttribute("src"), alt = img.getAttribute("alt") || "";
+    if (rel.split("/").some((part) => part === ".." || part === ".")) continue;
+    const mock = /\.html?$/i.test(rel), url = visualUrl(rel);
+    const fig = document.createElement("figure");
+    fig.className = `visual${/^(proposed|after|new|target|mockup)\b/i.test(alt) ? " proposed" : ""}`;
+    fig.innerHTML = `<figcaption><span>${esc(alt)}</span><a href="${esc(url)}" target="_blank" rel="noopener">open full size ↗</a></figcaption>`
+      + (mock ? `<img src="${esc(visualUrl(rel.replace(/\.html?$/i, ".png")))}" alt="${esc(alt)}" loading="lazy" data-mock="${esc(url)}">`
+        : `<img src="${esc(url)}" alt="${esc(alt)}" loading="lazy">`);
+    img.replaceWith(fig);
+  }
+  for (const p of t.content.querySelectorAll("p:has(> figure.visual)")) {
+    if ([...p.childNodes].some((n) => n.nodeName !== "FIGURE" && n.nodeName !== "BR" && n.textContent.trim())) continue;
+    const row = document.createElement("div");
+    row.className = "visual-row";
+    row.append(...p.querySelectorAll(":scope > figure"));
+    p.replaceWith(row);
+  }
+  for (const code of t.content.querySelectorAll("pre > code.language-mermaid")) {
+    const src = code.textContent.trim(), drawn = diagrams.get(src);
+    const fig = document.createElement("figure");
+    fig.className = "visual diagram";
+    fig.dataset.src = src;
+    if (drawn) fig.dataset.drawn = "1";
+    fig.innerHTML = drawn || `<p class="muted">Drawing the diagram…</p>`;
+    code.parentElement.replaceWith(fig);
+  }
+  for (const fig of t.content.querySelectorAll("figure.diagram")) {   // diagrams one after the other: side by side
+    if (fig.parentElement?.classList.contains("visual-row") || !fig.nextElementSibling?.matches("figure.diagram")) continue;
+    const row = document.createElement("div");
+    row.className = "visual-row";
+    fig.before(row);
+    while (row.nextElementSibling?.matches("figure.diagram")) row.append(row.nextElementSibling);
+  }
+  return t.innerHTML;
+}
+// A mockup without its preview picture: show the mockup itself, live, in a sandboxed frame.
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (!img.matches?.("figure.visual img[data-mock]")) return;
+  const box = document.createElement("div");
+  box.className = "mock";
+  box.innerHTML = `<iframe sandbox="allow-scripts" src="${esc(img.dataset.mock)}" title="${esc(img.alt)}"></iframe>`;
+  img.replaceWith(box);
+  fitMock(box);
+}, true);
+// A mockup is drawn for a 1280 × 800 window; scale it down to the space it has.
+const mockSizes = new ResizeObserver((entries) => entries.forEach((e) => e.target.style.setProperty("--scale", e.contentRect.width / 1280)));
+const fitMock = (box) => mockSizes.observe(box);
+let mermaidLoaded = null, drawing = false, diagramSeq = 0;
+const loadMermaid = () => mermaidLoaded ||= new Promise((ok, fail) => {
+  const s = document.createElement("script");
+  s.src = "/static/vendor/mermaid/mermaid.min.js";
+  s.onload = () => { window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral", fontFamily: "inherit" }); ok(window.mermaid); };
+  s.onerror = fail;
+  document.head.append(s);
+});
+// The colours for what a change adds and removes, available in every flowchart.
+const withChangeColours = (src) => /^\s*(flowchart|graph)\b/.test(src.replace(/^---[\s\S]*?---\s*/, ""))
+  ? `${src}\nclassDef added fill:#e6f4ea,stroke:#1f7a45,color:#14532d,stroke-width:2px\nclassDef removed fill:#fdecec,stroke:#b42318,color:#7a271a,stroke-dasharray:5 4` : src;
+async function drawDiagrams() {
+  if (drawing) return;
+  drawing = true;
+  try {
+    let fig;
+    while ((fig = document.querySelector("figure.diagram:not([data-drawn])"))) {
+      fig.dataset.drawn = "1";
+      const src = fig.dataset.src;
+      let svg = diagrams.get(src);
+      if (!svg) {
+        try { svg = (await (await loadMermaid()).render(`diagram-${++diagramSeq}`, withChangeColours(src))).svg; }
+        catch { svg = `<p class="muted">Couldn't draw this diagram:</p><pre>${esc(src)}</pre>`; }
+        diagrams.set(src, svg);
+      }
+      for (const same of document.querySelectorAll("figure.diagram")) if (same.dataset.src === src) { same.dataset.drawn = "1"; same.innerHTML = svg; }
+    }
+  } finally { drawing = false; }
+}
+new MutationObserver(() => {
+  if (document.querySelector("figure.diagram:not([data-drawn])")) drawDiagrams();
+  document.querySelectorAll(".mock:not([data-fit])").forEach((box) => { box.dataset.fit = "1"; fitMock(box); });
+}).observe(document.documentElement, { childList: true, subtree: true });
 
 async function api(path, { method = "GET", body } = {}, retried = false) {
   const res = await fetch(path, {

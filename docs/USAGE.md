@@ -5,7 +5,7 @@
 | Step | Who | What happens |
 |---|---|---|
 | 1. Describe it | You → Tech Lead | *"In ~/code/my-api, users need to reset their password by email."* |
-| 2. Spec | Tech Lead | Studies the project and its notes on it, looks for code to reuse, proposes the base branch, and asks you questions in rounds (with suggested answers) until nothing is open. |
+| 2. Spec | Tech Lead | Studies the project and its notes on it, looks for code to reuse, proposes the base branch, and asks you questions in rounds (with suggested answers) until nothing is open. When a screen changes, it shows it as it is now and as it would be (a screenshot next to a mockup); when the architecture changes, a diagram before and after. |
 | 3. Approve | You | Say *"approved"*. A readiness check runs: the task becomes **Ready for dev**, or goes back to Draft with the reasons. |
 | 4. Hand it on | You or the Orchestrator | Pick a developer (Home, Board, Slack, or ask the Orchestrator). |
 | 5. Build | Dev | Claims the task, works on `feature-<title>` in its own worktree, writes the code and unit tests, reviews its own diff, and sets **Ready for review**. |
