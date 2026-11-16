@@ -176,6 +176,16 @@ def public_settings() -> dict:
     return settings
 
 
+class FreshStaticFiles(StaticFiles):
+    """The console's own files, which a browser must check again each time (a cheap 304 when unchanged): after an
+    update, the page runs the new code at once instead of a copy the browser kept."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | None = None) -> FastAPI:
     access.check_config()
     manager = manager or AgentManager()
@@ -258,7 +268,7 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         html = (FRONTEND / "index.html").read_text(encoding="utf-8")
         return html.replace("__TOKEN__", TOKEN)
 
-    app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+    app.mount("/static", FreshStaticFiles(directory=FRONTEND), name="static")
     app.mount("/assets", StaticFiles(directory=ASSETS), name="assets")
 
     # ---- state & live events -------------------------------------------------------
