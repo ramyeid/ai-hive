@@ -37,7 +37,7 @@ next. Nothing is pushed to your remote.
 ## Features
 
 **The team**
-- **Tech Lead**: studies the codebase, looks for code to reuse, and interviews you until the spec has no open questions.
+- **Tech Lead**: studies the codebase, looks for code to reuse, and interviews you until the spec has no open questions. It shows what changes: the screen as it is next to a mockup of the proposal, and the architecture before and after as diagrams.
 - **Developers**: build exactly what the spec asks, consistent with the existing code, with unit tests.
 - **Reviewers**: check that the requirements are met and that the code fits what already exists.
 - **Coach**: reviews how past tasks went (your corrections, review rounds, pull-request comments) and proposes small, evidence-based changes to the team's instructions for your approval.
