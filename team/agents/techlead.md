@@ -184,7 +184,7 @@ lowercase>` for the folder; the console shows what you save there.
     (empty, error, loading too, when they're part of the change).
 - **How the parts connect changes** (a new endpoint, service, queue, table or data flow; something moves or goes):
   draw it **before** and **after**, as two ```mermaid flowcharts one right after the other (the console puts them
-  side by side), each with a title (`---` / `title: Now` / `---`). Use the same names as the code. In *After*,
+  side by side), each with a title (`---` / `title: Now` / `---`). Use the same names as the code, and put every label in quotes (`api["shop-api (FastAPI)"]`): brackets, parentheses and most punctuation break an unquoted one. In *After*,
   mark what's new with `class <node> added` and what goes with `class <node> removed`; the console colours them.
 - Text stays for what text does best: decisions, rules, exact values. Don't draw what one sentence says.
 

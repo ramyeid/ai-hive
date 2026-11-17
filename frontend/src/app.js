@@ -167,13 +167,34 @@ let mermaidLoaded = null, drawing = false, diagramSeq = 0;
 const loadMermaid = () => mermaidLoaded ||= new Promise((ok, fail) => {
   const s = document.createElement("script");
   s.src = "/static/vendor/mermaid/mermaid.min.js";
-  s.onload = () => { window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral", fontFamily: "inherit" }); ok(window.mermaid); };
+  s.onload = () => { window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "neutral", fontFamily: "inherit", suppressErrorRendering: true }); ok(window.mermaid); };
   s.onerror = fail;
   document.head.append(s);
 });
 // The colours for what a change adds and removes, available in every flowchart.
 const withChangeColours = (src) => /^\s*(flowchart|graph)\b/.test(src.replace(/^---[\s\S]*?---\s*/, ""))
   ? `${src}\nclassDef added fill:#e6f4ea,stroke:#1f7a45,color:#14532d,stroke-width:2px\nclassDef removed fill:#fdecec,stroke:#b42318,color:#7a271a,stroke-dasharray:5 4` : src;
+// A flowchart label with brackets, parentheses or other punctuation must be quoted (a["shop-web (React)"]); agents
+// often forget. Quote the labels that aren't, so the diagram still draws.
+const SHAPES = { "[[": "]]", "[(": ")]", "((": "))", "[": "]", "(": ")", "{": "}" };
+function quoteLabels(src) {
+  // each node between the arrows of a line, like a[shop-web (React)]
+  return src.split("\n").map((line) => line.split(/(\s*(?:-->|---|-\.->|==>|--\s[^-]*?-->|\|[^|]*\|)\s*)/).map((part) => {
+    const m = part.match(/^(\s*[\w-]+)(\[\[|\[\(|\(\(|\[|\(|\{)(.*)(\]\]|\)\]|\)\)|\]|\)|\})(\s*)$/);
+    if (!m || SHAPES[m[2]] !== m[4] || m[3].startsWith('"') || !/[^\w\s<>\/.,:-]/.test(m[3])) return part;
+    return `${m[1]}${m[2]}"${m[3].replace(/"/g, "'")}"${m[4]}${m[5]}`;
+  }).join("")).join("\n");
+}
+async function drawDiagram(src) {
+  const mermaid = await loadMermaid();
+  for (const text of [src, quoteLabels(src)]) {
+    if (!(await mermaid.parse(withChangeColours(text), { suppressErrors: true }))) continue;
+    const id = `diagram-${++diagramSeq}`;
+    try { return (await mermaid.render(id, withChangeColours(text))).svg; }
+    catch { document.getElementById(`d${id}`)?.remove(); document.getElementById(id)?.remove(); }   // what Mermaid leaves behind
+  }
+  return `<p class="muted">This diagram has a mistake in it, so here it is as written:</p><pre>${esc(src)}</pre>`;
+}
 async function drawDiagrams() {
   if (drawing) return;
   drawing = true;
@@ -184,8 +205,7 @@ async function drawDiagrams() {
       const src = fig.dataset.src;
       let svg = diagrams.get(src);
       if (!svg) {
-        try { svg = (await (await loadMermaid()).render(`diagram-${++diagramSeq}`, withChangeColours(src))).svg; }
-        catch { svg = `<p class="muted">Couldn't draw this diagram:</p><pre>${esc(src)}</pre>`; }
+        svg = await drawDiagram(src);
         diagrams.set(src, svg);
       }
       for (const same of document.querySelectorAll("figure.diagram")) if (same.dataset.src === src) { same.dataset.drawn = "1"; same.innerHTML = svg; }
