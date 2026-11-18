@@ -652,7 +652,7 @@ function fit(instant) {
   const [w, h] = viewSize(), phone = w < 720;
   W.Tto.set(phone ? 11 : 11.2, 0, phone ? 6.5 : 7.8);
   W.zoomTo = phone ? 1.5 : Math.min(1.25, Math.max(0.7, (w / h) / 1.6));
-  if (chatOpen()) panPx(-Math.min(440, w) / 2, 0);
+  if (chatOpen()) panPx(-chatWidth() / 2, 0);
   if (instant) { W.T.copy(W.Tto); W.zoom = W.zoomTo; }
 }
 
@@ -676,10 +676,49 @@ export async function OfficePage() {
       <button class="btn small" data-o3-hire="techlead">Tech Lead</button><button class="btn small" data-o3-hire="dev">Dev</button><button class="btn small" data-o3-hire="reviewer">Reviewer</button></div>
     <div class="o3-hire o3-fin" id="o3-fin" hidden></div>
     <aside class="o3-chat" id="o3-chat" hidden><header><span id="o3-chat-who"></span><a class="btn small" id="o3-chat-full" href="#/">Open full page</a><button class="o3-x" id="o3-chat-close" aria-label="Close the chat">✕</button></header>
-      <iframe id="o3-chat-frame" title="Chat"></iframe></aside>
+      <iframe id="o3-chat-frame" title="Chat"></iframe>
+      <div class="o3-chat-grip" id="o3-chat-grip" role="separator" aria-orientation="vertical" aria-label="Resize the chat" tabindex="0" title="Drag to resize the chat (double-click: back to the usual size)"></div></aside>
   </div>`;
 }
 const chatOpen = () => !document.getElementById("o3-chat")?.hidden;
+
+// The chat panel's width: drag its right edge (or use the arrow keys on it), remembered on this browser.
+const CHAT_W = 440;
+const chatMax = () => Math.max(320, (document.getElementById("o3")?.clientWidth || innerWidth) - 240);   // always leave some office
+function chatWidth() {
+  const [w] = viewSize();
+  if (w < 720) return w;   // a phone: the chat takes the screen
+  return Math.min(document.getElementById("o3-chat")?.getBoundingClientRect().width || savedChatWidth(), w);
+}
+function savedChatWidth() { try { return Number(localStorage.getItem("officeChatWidth")) || CHAT_W; } catch { return CHAT_W; } }
+function setChatWidth(px, save = true) {
+  const panel = document.getElementById("o3-chat"), before = panel.getBoundingClientRect().width;
+  const width = Math.round(Math.min(chatMax(), Math.max(320, px)));
+  panel.style.width = `${width}px`;
+  if (!panel.hidden && before) panPx(-(width - before) / 2, 0);   // the person stays centred in what's left
+  if (save) try { localStorage.setItem("officeChatWidth", String(width)); } catch { /* this visit only */ }
+}
+function setupChatGrip() {
+  const panel = document.getElementById("o3-chat"), grip = document.getElementById("o3-chat-grip");
+  if (savedChatWidth() !== CHAT_W) panel.style.width = `${Math.min(chatMax(), savedChatWidth())}px`;
+  grip.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    panel.classList.add("resizing");   // the chat is a page of its own: stop it swallowing the drag
+    const left = panel.getBoundingClientRect().left;
+    const move = (ev) => setChatWidth(ev.clientX - left, false);
+    const up = () => { grip.removeEventListener("pointermove", move); panel.classList.remove("resizing"); setChatWidth(panel.getBoundingClientRect().width); };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up, { once: true });
+    grip.addEventListener("pointercancel", up, { once: true });
+  });
+  grip.addEventListener("dblclick", () => setChatWidth(CHAT_W));
+  grip.addEventListener("keydown", (e) => {
+    const step = e.shiftKey ? 120 : 40, w = panel.getBoundingClientRect().width;
+    if (e.key === "ArrowRight") setChatWidth(w + step); else if (e.key === "ArrowLeft") setChatWidth(w - step); else return;
+    e.preventDefault();
+  });
+}
 
 export function mountOffice() {
   const stage = document.getElementById("o3-stage");
@@ -977,6 +1016,7 @@ function wire(stage) {
     try { localStorage.setItem("officeRail", on ? "1" : ""); } catch { /* this visit only */ }
   });
   document.getElementById("o3-chat-close").addEventListener("click", closeChat);
+  setupChatGrip();
   addEventListener("keydown", function esc(e) { if (!root.isConnected) { removeEventListener("keydown", esc); return; } if (e.key === "Escape") { if (chatOpen()) closeChat(); hire.hidden = true; document.getElementById("o3-fin").hidden = true; } });
 }
 // The person closest to where you clicked or hovered (their name tag or their body on screen).
@@ -1027,8 +1067,8 @@ function openChat(id) {
   // keep the person in view, to the right of the panel
   const [w] = viewSize(), p = W.people.get(id), s = W.seatOf.get(id);
   const at = p?.visible ? p.G.position : s ? new THREE.Vector3(s.x, 0, s.z) : null;
-  if (at) { v3.copy(at).project(W.camera); const x = (v3.x + 1) / 2 * w, want = w < 720 ? w / 2 : Math.min(440, w * 0.45) + (w - Math.min(440, w * 0.45)) / 2; panPx(want - x, 0); }
-  else if (!was) panPx(-Math.min(440, w) / 2, 0);
+  if (at) { v3.copy(at).project(W.camera); const x = (v3.x + 1) / 2 * w, cw = chatWidth(), want = w < 720 ? w / 2 : cw + (w - cw) / 2; panPx(want - x, 0); }
+  else if (!was) panPx(-chatWidth() / 2, 0);
 }
 function closeChat() {
   const panel = document.getElementById("o3-chat");
