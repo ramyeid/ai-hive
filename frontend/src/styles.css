@@ -152,7 +152,7 @@ code, pre { font-family: var(--mono); font-size: 0.86em; }
 .rail-section[data-section="orchestrator"] .rail-agent { background: var(--orchestrator-soft); border: 1px solid color-mix(in srgb, var(--orchestrator) 25%, transparent); }
 .rail-agent .who { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
 .rail-agent .who small { color: var(--muted); font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.avatar { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--role); color: var(--on-role); font-weight: 600; font-size: 0.78rem; }
+.avatar { position: relative; flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--role); color: var(--on-role); font-weight: 600; font-size: 0.78rem; }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--rule); display: inline-block; }
 .dot.idle { background: color-mix(in srgb, var(--dev) 60%, transparent); }
 .dot.working, .dot.starting { background: var(--dev); box-shadow: 0 0 0 3px color-mix(in srgb, var(--dev) 22%, transparent); animation: pulse 1.4s ease-in-out infinite; }
@@ -420,8 +420,17 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .agent-head .title { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 2px; }
 .agent-head h1 { font-size: 1.3rem; display: flex; align-items: center; gap: 10px; }
 .avatar.big { width: 40px; height: 40px; border-radius: 10px; font-size: 1.05rem; }
-.avatar.face { position: relative; border-radius: 50% !important; color: transparent; overflow: hidden; }   /* round whatever size a page gives it */
+.avatar.face { border-radius: 50% !important; color: transparent; }   /* round whatever size a page gives it */
 .avatar.face > img { position: absolute; inset: 8%; width: 84%; height: 84%; border-radius: 50%; object-fit: cover; background: #dfe6e2; }
+/* the role's icon on the avatar's corner, mostly off the face; whole pixels throughout so the icon sits dead centre */
+.avatar:has(> .role-badge) { margin-right: 4px; }
+.role-badge { position: absolute; right: -6px; bottom: -5px; display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; background: var(--role); color: var(--on-role); box-shadow: 0 0 0 1.5px var(--panel); }
+.role-badge svg { display: block; width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.avatar.big > .role-badge { right: -7px; bottom: -6px; width: 20px; height: 20px; }
+.avatar.big > .role-badge svg { width: 12px; height: 12px; }
+/* too small to carry one (task cards, lists): the name is beside it there */
+.need .k .avatar > .role-badge, .bcard .foot .avatar > .role-badge, .kv.people .avatar > .role-badge, .fin-table .avatar > .role-badge { display: none; }
+.need .k .avatar, .bcard .foot .avatar, .kv.people .avatar, .fin-table .avatar { margin-right: 0; }
 .state-pill { padding: 1px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: var(--sunken); color: var(--muted); }
 .state-pill.idle { background: var(--dev-soft); color: var(--dev); }
 .state-pill.working, .state-pill.starting { background: var(--brand-soft); color: var(--brand); }

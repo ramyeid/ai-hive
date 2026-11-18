@@ -499,10 +499,21 @@ function busyWith(name) {
 
 // An agent's face (one of the Office's people, given in settings) in a ring of its role's colour; the initial
 // if there's no face or it doesn't load.
+// A small badge on its corner says what the agent does, so the faces read even with the sidebar folded.
+// Each icon is nudged so its weight, not just its outline, sits in the middle of the circle (a hub is heavy at the
+// bottom, a magnifier at the top left), or it looks off centre at this size.
+const ROLE_ICONS = {
+  orchestrator: '<g transform="translate(0 -0.8)"><circle cx="8" cy="9.4" r="2"/><circle cx="8" cy="3.4" r="1.2"/><circle cx="13.2" cy="12.4" r="1.2"/><circle cx="2.8" cy="12.4" r="1.2"/><path d="M8 7.4V4.6M9.75 10.37l2.4 1.4M6.25 10.37l-2.4 1.4"/></g>',   // a hub: the team, through it
+  techlead: '<path d="M1.8 4.2 5.8 2.6l4.4 1.6 4-1.6v9.2l-4 1.6-4.4-1.6-4 1.6z"/><path d="M5.8 2.6v9.2M10.2 4.2v9.2"/>',   // a map: where and how to build
+  dev: '<path d="M5.2 4.6 1.8 8l3.4 3.4M10.8 4.6 14.2 8l-3.4 3.4M9.2 3 6.8 13"/>',   // code
+  reviewer: '<g transform="translate(0.4 0.4)"><circle cx="6.8" cy="6.8" r="4.6"/><path d="M10.2 10.2 14 14M4.7 6.9l1.5 1.5 2.6-2.7"/></g>',   // a magnifier with a tick
+  coach: '<g transform="translate(0.2 -1.6)"><circle cx="5.9" cy="10" r="3.6"/><path d="M5.9 6.4H14v3H9.4"/><circle cx="5.9" cy="10" r="0.9"/></g>',   // a whistle
+};
 function avatar(name, cls = "") {
-  const face = state.settings?.agents?.[name]?.face;
+  const face = state.settings?.agents?.[name]?.face, icon = ROLE_ICONS[roleOf(name)];
   return `<span class="avatar ${roleOf(name)} ${face ? "face" : ""} ${cls}" aria-hidden="true">${esc((personOf(name) || "?").slice(0, 1).toUpperCase())}${
-    face ? `<img src="/static/office/faces/${esc(face)}.webp" alt="" decoding="async">` : ""}</span>`;
+    face ? `<img src="/static/office/faces/${esc(face)}.webp" alt="" decoding="async">` : ""}${
+    icon ? `<span class="role-badge"><svg viewBox="0 0 16 16">${icon}</svg></span>` : ""}</span>`;
 }
 document.addEventListener("error", (e) => {
   if (e.target.matches?.(".avatar.face > img")) { e.target.parentElement.classList.remove("face"); e.target.remove(); }
