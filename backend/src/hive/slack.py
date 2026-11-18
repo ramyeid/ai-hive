@@ -5,7 +5,7 @@
   whoever answered there.
 - When an agent asks to run something, the request comes with Allow / Deny buttons (the console shows it too;
   whichever you answer first counts).
-- Each task gets a thread: hand-offs are posted in it, with buttons for what's next ("Review the diff",
+- Each task gets a thread: hand-offs are posted in it, with buttons for what's next ("Review the code",
   "Hand to Wael (Reviewer)"). Nothing is handed on unless you tap.
 
 It uses Socket Mode: the console connects out to Slack, so it works the same on your laptop or on a server behind
@@ -525,7 +525,7 @@ class SlackBridge:
         to = entry.get("to", "")
         who = lambda a: ops.label(a) if a else "Someone"   # noqa: E731
         link = ops.links(t["id"])
-        review = [_link("Review the diff", link["review"])] if t["from_commit"] else []
+        review = [_link("Review the code", link["review"])] if t["from_commit"] else []
         hands = ([_button(f"Hand to {ops.label(a)}", f"hand|{t['id']}|{a}", "primary" if i == 0 else "")
                   for i, a in enumerate(ops.candidates(self.manager, t)[:3])] if t["status"] == to else [])
         if to == "draft":
@@ -535,7 +535,7 @@ class SlackBridge:
         if to == "in-dev":
             return f"{who(t['dev'])} is building it.", []
         if to == "ready-for-review":
-            return f"{who(t['dev'])} finished: *ready for review*. Review the diff yourself, or hand it to a reviewer.", review + hands
+            return f"{who(t['dev'])} finished: *ready for review*. Review the code yourself, or hand it to a reviewer.", review + hands
         if to == "in-review":
             return f"{who(t['reviewer'])} is reviewing it.", []
         if to == "changes-requested":

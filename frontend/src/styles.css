@@ -429,8 +429,8 @@ td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .avatar.big > .role-badge { right: -7px; bottom: -6px; width: 20px; height: 20px; }
 .avatar.big > .role-badge svg { width: 12px; height: 12px; }
 /* too small to carry one (task cards, lists): the name is beside it there */
-.need .k .avatar > .role-badge, .bcard .foot .avatar > .role-badge, .kv.people .avatar > .role-badge, .fin-table .avatar > .role-badge { display: none; }
-.need .k .avatar, .bcard .foot .avatar, .kv.people .avatar, .fin-table .avatar { margin-right: 0; }
+.bcard .foot .avatar > .role-badge, .kv.people .avatar > .role-badge, .fin-table .avatar > .role-badge { display: none; }
+.bcard .foot .avatar, .kv.people .avatar, .fin-table .avatar { margin-right: 0; }
 .state-pill { padding: 1px 9px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; background: var(--sunken); color: var(--muted); }
 .state-pill.idle { background: var(--dev-soft); color: var(--dev); }
 .state-pill.working, .state-pill.starting { background: var(--brand-soft); color: var(--brand); }
@@ -476,7 +476,7 @@ details.menu.open-left .menu-list { left: auto; right: 0; }   /* near the right 
 .run-items .tool { margin-left: 0; }
 #pinned-asks { display: flex; flex-direction: column; gap: 8px; }
 #pinned-asks:not(:empty) { padding: 10px 0 0; }
-#pinned-asks .sent-banner { margin: 0; }
+#pinned-asks .next-step { box-shadow: 0 4px 16px rgb(0 0 0 / 0.06); }
 #pinned-asks .ask { margin-left: 0; max-width: none; background: var(--panel); box-shadow: 0 4px 16px rgb(0 0 0 / 0.06); }
 .ask kbd { margin-left: 4px; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
 .agent-head .title p { margin: 0; color: var(--muted); font-size: 0.86rem; }
@@ -701,17 +701,31 @@ details:not([open]) > .tree-dir::before { transform: rotate(-90deg); }
 
 /* ---- home -------------------------------------------------------------- */
 .needs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 22px; }
-.need { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--rule); border-left: 4px solid var(--brand); border-radius: 10px; background: var(--panel); }
-.need .k { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.82rem; font-weight: 500; }
-.need .k .avatar { width: 20px; height: 20px; font-size: 0.68rem; border-radius: 5px; }
-.need .t { font-weight: 600; line-height: 1.35; }
-.need .t a { text-decoration: none; }
-.need .t code { font-weight: 500; overflow-wrap: anywhere; }
-.need .said { color: var(--ink-2, var(--muted)); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
-.need .btn-row { margin-top: auto; }
-.need.approval, .need.blocked { border-left-color: var(--attention); }
-.need.rework, .need.dev { border-left-color: var(--honey); }
-.need.coach { border-left-color: var(--coach); }
+/* the one "next step" card (Home, chats, code review): whose turn (face), the task, why, one button, at most a link */
+.next-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 13px 15px; border: 1px solid var(--rule); border-left: 4px solid var(--brand); border-radius: 10px; background: var(--panel); }
+.next-step.ns-ask { border-left-color: var(--attention); }
+.next-step .ns-face { grid-row: span 2; display: block; margin-top: 1px; text-decoration: none; }
+.next-step .ns-face .avatar { width: 30px; height: 30px; }
+.ns-tick { display: grid !important; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); font-weight: 700; }
+.ns-title { font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.ns-title a { color: var(--brand); text-decoration: underline; text-underline-offset: 2px; }
+.ns-said { color: var(--muted); font-size: 0.86rem; line-height: 1.45; overflow-wrap: anywhere; }
+.ns-said code { font-size: 0.8rem; }
+.ns-acts { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 8px; }
+.next-step.ns-card { align-content: start; }
+.next-step.ns-card .ns-acts { margin-top: auto; padding-top: 8px; }
+.next-step.ns-bar { grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
+.next-step.ns-bar .ns-face { grid-row: auto; }
+.next-step.ns-bar .ns-acts { grid-column: 3; margin: 0; }
+@media (max-width: 720px) { .next-step.ns-bar { grid-template-columns: auto minmax(0, 1fr); } .next-step.ns-bar .ns-acts { grid-column: 2; margin-top: 6px; } }
+/* in pink cards the button is pink too: you're the one being waited on */
+.next-step.ns-ask .btn.primary, .ask .btn.primary, .bcard.blocked .btn.primary { background: var(--attention); border-color: var(--attention); color: #fff; }
+/* the secondary step: a link, not another button */
+.act-link { padding: 0; border: 0; background: none; color: var(--ink); font: inherit; font-size: 0.86rem; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
+.act-link:hover { text-decoration-color: currentColor; }
+.act-or { color: var(--muted); font-size: 0.86rem; }
+.act-or .act-link { font-size: inherit; }
+.btn-row .act-link, .bcard .act-link { align-self: center; }
 .home-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; }
 .card-box { padding: 14px 16px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); }
 .card-box > h2 { font-size: 0.82rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
@@ -942,12 +956,7 @@ table.plain .right { text-align: right; white-space: nowrap; }
 .hide-viewed .tree li:has(> details):not(:has(.tree-file:not(.viewed))) { display: none; }
 
 /* after you submit a review */
-.sent-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; padding: 12px 16px; border: 1px solid var(--brand); border-radius: var(--radius-m); background: var(--brand-soft); }
-.sent-banner .tick { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--panel); font-weight: 700; }
-.sent-banner.rework { border-color: var(--reviewer); background: var(--reviewer-soft); }
-.sent-banner.rework .tick { background: var(--reviewer); color: var(--on-role); }
-.sent-banner > div:first-of-type { flex: 1; min-width: 220px; }
-.sent-banner .btn-row { margin: 0; }
+.section > .next-step.ns-bar, .page-head + .next-step.ns-bar { margin: 0 0 16px; }
 
 /* Reviews: every feature branch, like a list of pull requests */
 .rv-tabs { margin-bottom: 14px; }

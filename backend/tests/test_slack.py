@@ -92,7 +92,7 @@ class SlackTest(unittest.IsolatedAsyncioTestCase):
         root, update = web.posted[-2], web.posted[-1]
         self.assertIn("TASK-001", root["text"])
         self.assertEqual(update["thread_ts"], root["ts"])
-        self.assertEqual(self._buttons(update), ["Review the diff", "Hand to " + bridge_label("reviewer")])
+        self.assertEqual(self._buttons(update), ["Review the code", "Hand to " + bridge_label("reviewer")])
 
     async def test_tapping_hand_gives_the_task_to_that_agent(self):
         bridge, web = await self._a_bridge()

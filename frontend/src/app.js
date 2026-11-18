@@ -715,12 +715,32 @@ function handCandidates(t) {
   return [];
 }
 
-function handButtons(t, max = 2, firstPrimary = true) {
-  return handCandidates(t).slice(0, max).map((n, i) =>
-    `<button class="btn small ${firstPrimary && i === 0 ? "primary" : ""}" data-action="hand" data-task="${esc(t.id)}" data-agent="${n}">Hand ${t.status === "changes-requested" ? "back " : ""}to ${esc(personOf(n))}</button>`).join("");
+// Handing a task on, the same everywhere: one button for the best person ("Hand to Dina", "Hand back to Dina"),
+// and the others, when you can choose, as quiet links after it ("or Omar, Sara").
+function handChoice(t, max = 3, size = "small") {
+  const [first, ...rest] = handCandidates(t).slice(0, max);
+  if (!first) return "";
+  const hand = (n, cls, label) => `<button class="${cls}" data-action="hand" data-task="${esc(t.id)}" data-agent="${n}">${label}</button>`;
+  return hand(first, `btn ${size} primary`, `Hand ${t.status === "changes-requested" ? "back " : ""}to ${esc(personOf(first))}`)
+    + (rest.length ? `<span class="act-or">or ${rest.map((n) => hand(n, "act-link", esc(personOf(n)))).join(", ")}</span>` : "");
 }
 
-const reviewLink = (t, primary = false) => t.from_commit ? `<a class="btn small ${primary ? "primary" : ""}" href="${reviewHref(t.id)}">Review the diff</a>` : "";
+// "Review the code": a link next to the step, or the step itself when there's nothing to hand on.
+const reviewLink = (t, primary = false, size = "small") => !t.from_commit ? ""
+  : `<a class="${primary ? `btn ${size} primary` : "act-link"}" href="${reviewHref(t.id)}">Review the code</a>`;
+
+// The one "next step" card, on Home, above a chat's message box and on the code review: whose turn it is (their
+// face, which opens their chat), the task, one line of why, one button, at most a link. Pink when someone is
+// waiting on your answer, green for the next step; "ns-bar" lays it out in one line.
+function nextStep({ tone = "ns-next", who = "", task = null, title = "", said = "", button = "", link = "", layout = "ns-card" }) {
+  const face = who && state.agents[who] ? `<a class="ns-face" href="#/agents/${esc(who)}" title="Open ${esc(personOf(who))}'s chat">${avatar(who)}</a>`
+    : `<span class="ns-face ns-tick" aria-hidden="true">✓</span>`;
+  const head = task ? `<a href="#/tasks/${esc(task.id)}">${esc(task.id)}</a> ${esc(title || task.title)}` : esc(title);
+  return `<article class="next-step ${tone} ${layout}" role="status">${face}<div class="ns-text"><div class="ns-title">${head}</div>${said ? `<div class="ns-said">${said}</div>` : ""}</div>${
+    button || link ? `<div class="ns-acts">${button}${link}</div>` : ""}</article>`;
+}
+const chatLink = (who) => `<a class="act-link" href="#/agents/${esc(who)}">Open ${esc(personOf(who))}'s chat</a>`;
+const answerButton = (who, size = "small") => `<a class="btn ${size} primary" href="#/agents/${esc(who)}">Answer ${esc(personOf(who))}</a>`;
 
 function greeting() {
   const h = new Date().getHours();
@@ -733,46 +753,37 @@ async function Overview() {
   const cards = [];
   for (const [name, ag] of Object.entries(state.agents)) {
     for (const p of ag.pending || []) {
-      cards.push(`<article class="need approval">
-        <div class="k">${avatar(name)} Approval · ${esc(nameOf(name))}</div>
-        <div class="t"><code>${esc(toolArg(p.tool, p.input).slice(0, 140))}</code></div>
-        <div class="btn-row"><button class="btn small primary" data-action="allow" data-decision="allow" data-agent="${name}" data-pid="${esc(p.id)}">Allow</button>
-          <button class="btn small" data-action="allow" data-decision="deny" data-agent="${name}" data-pid="${esc(p.id)}">Deny</button>
-          <a class="btn small" href="#/agents/${name}">Open chat</a></div></article>`);
+      cards.push(nextStep({ tone: "ns-ask", who: name, title: `${personOf(name)} wants to ${p.tool === "Bash" ? "run a command" : p.tool === "Team action" ? "do this" : `use ${p.tool}`}`,
+        said: `<code>${esc(toolArg(p.tool, p.input).slice(0, 140))}</code>`,
+        button: `<button class="btn small primary" data-action="allow" data-decision="allow" data-agent="${name}" data-pid="${esc(p.id)}">Allow</button>`,
+        link: `<button class="act-link" data-action="allow" data-decision="deny" data-agent="${name}" data-pid="${esc(p.id)}">Deny</button>` }));
     }
   }
   const tasksById = Object.fromEntries(tasks.map((t) => [t.id, t]));
   for (const [name, ag] of stoppedForYou()) {
     const w = ag.waiting_for_lead, t = tasksById[w.task];
-    cards.push(`<article class="need blocked">
-      <div class="k">${avatar(name)} Waiting for you · ${esc(nameOf(name))} stopped ${ago(w.since)}</div>
-      <div class="t">${t ? `<a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">· ${esc(t.project_name)}</span>` : ""}</div>
-      <div class="said">${esc(plainLine(w.text) || "It stopped without saying why.").slice(0, 280)}</div>
-      <div class="btn-row"><a class="btn small primary" href="#/agents/${name}">Answer</a>
-        ${t ? `<a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>` : ""}</div></article>`);
+    cards.push(nextStep({ tone: "ns-ask", who: name, task: t || null, title: t ? "" : `${personOf(name)} is waiting for you`,
+      said: `${esc(personOf(name))} stopped ${esc(ago(w.since))}: ${esc((plainLine(w.text) || "it didn't say why.").slice(0, 240))}`, button: answerButton(name) }));
   }
-  const card = (t, kind, label, who, buttons) => `<article class="need ${kind}">
-      <div class="k">${who ? avatar(who) : ""} ${esc(label)}</div>
-      <div class="t"><a href="#/tasks/${esc(t.id)}">${esc(t.id)}</a> ${esc(t.title)} <span class="muted">· ${esc(t.project_name)}</span></div>
-      <div class="btn-row">${buttons}</div></article>`;
+  const project = (t) => ` <span class="muted">· ${esc(t.project_name)}</span>`;
   for (const t of tasks.filter((x) => x.status === "blocked" && !stoppedOn(x.id))) {
     const who = t.blocked_by || t.assignee;
-    cards.push(card(t, "blocked", `Blocked · ${who ? nameOf(who) : "needs you"}`, who,
-      `${who ? `<a class="btn small primary" href="#/agents/${who}">Answer</a>` : ""}<a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>`));
+    cards.push(nextStep({ tone: "ns-ask", who, task: t, said: (who ? `${esc(personOf(who))} is waiting on your answer` : "Blocked: it needs you") + project(t),
+      button: who ? answerButton(who) : "" }));
   }
   for (const t of tasks.filter((x) => x.status === "ready-for-review")) {
-    cards.push(card(t, "review", `Ready for review${t.dev ? ` · ${nameOf(t.dev)} finished it` : ""}`, t.dev, reviewLink(t, true) + handButtons(t, 2, false)));
+    cards.push(nextStep({ who: handCandidates(t)[0] || t.dev, task: t, said: `${t.dev ? `${esc(personOf(t.dev))} finished it, ready for review` : "Ready for review"}${project(t)}`,
+      button: handChoice(t, 2), link: reviewLink(t) }));
   }
   for (const t of tasks.filter((x) => x.status === "changes-requested" && !stoppedOn(x.id) && !state.agents[x.dev]?.status?.match(/working|waiting/))) {
-    cards.push(card(t, "rework", "Sent back for changes", t.dev, handButtons(t, 1) + reviewLink(t)));
+    cards.push(nextStep({ who: t.dev, task: t, said: `The review asked for changes${project(t)}`, button: handChoice(t, 1), link: reviewLink(t) }));
   }
   for (const t of tasks.filter((x) => x.status === "ready-for-dev")) {
-    cards.push(card(t, "dev", "Ready for a dev: who builds it?", "", handButtons(t, 3)));
+    cards.push(nextStep({ who: handCandidates(t)[0], task: t, said: `Approved, ready for a dev${project(t)}`, button: handChoice(t, 3) }));
   }
   if (state.improvements) {
-    cards.push(`<article class="need coach"><div class="k">${state.agents.coach ? avatar("coach") : ""} The Coach</div>
-      <div class="t">${state.improvements} proposed improvement${state.improvements > 1 ? "s" : ""} to the team's instructions</div>
-      <div class="btn-row"><a class="btn small primary" href="#/improvements">See proposals</a></div></article>`);
+    cards.push(nextStep({ who: state.agents.coach ? "coach" : "", title: `${state.improvements} proposed improvement${state.improvements > 1 ? "s" : ""}`,
+      said: `${state.agents.coach ? esc(personOf("coach")) : "The Coach"} proposed changes to the team's instructions`, button: `<a class="btn small primary" href="#/improvements">See proposals</a>` }));
   }
   const working = Object.values(state.agents).filter((a) => ["working", "waiting"].includes(a.status)).length;
   const moving = tasks.filter((t) => ["draft", "in-dev", "in-review"].includes(t.status));
@@ -810,10 +821,9 @@ function boardCard(t) {
   const who = t.status === "blocked" ? (t.blocked_by || t.assignee) : t.assignee || (t.status === "done" ? t.dev : "");
   const tag = t.status === "blocked" ? `<span class="tag bad">Blocked</span>` : t.status === "changes-requested" ? `<span class="tag warn">Rework</span>` : "";
   const devBusy = ["working", "waiting"].includes(state.agents[t.dev]?.status);
-  const actions = t.status === "blocked" ? (who ? `<a class="btn small primary" href="#/agents/${who}">Answer</a>` : "")
-    : t.status === "ready-for-review" ? reviewLink(t, true) + handButtons(t, 1, false)
-    : t.status === "ready-for-dev" ? handButtons(t, 1)
-    : t.status === "changes-requested" && !devBusy ? handButtons(t, 1)
+  // one button at most, as on Home: the card itself opens the task
+  const actions = t.status === "blocked" ? (who ? answerButton(who) : "")
+    : ["ready-for-review", "ready-for-dev"].includes(t.status) || (t.status === "changes-requested" && !devBusy) ? handChoice(t, 1)
     : t.status === "done" ? reviewLink(t) : "";
   return `<article class="bcard ${t.status === "blocked" ? "blocked" : ""}">
     <a class="cover" href="#/tasks/${esc(t.id)}" aria-label="${esc(t.id)} ${esc(t.title)}"></a>
@@ -932,14 +942,14 @@ async function TaskDetail(r) {
   else if (tab === "reviews") {
     const rev = await api(`/api/tasks/${encodeURIComponent(t.id)}/review?mode=since`).catch(() => ({ rounds: [] }));
     body = (rev.rounds.length ? rev.rounds.slice().reverse().map((x) => roundCard(x, rev.dev)).join("") : `<p class="muted">You haven't reviewed this code yet.</p>`)
-      + `<p><a class="btn primary" href="${reviewHref(t.id)}">Open the code review${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a></p>`;
+      + `<p><a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a></p>`;
   } else body = `<article class="prose">${md(t.markdown)}</article>`;
   return `<div class="task-head"><div class="title"><small>${esc(t.id)} · ${esc(t.project_name)}</small><h1>${esc(t.title)}</h1>
       <p class="muted">${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div>
       <div class="btn-row">
-        ${t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : ""}
-        ${handButtons(t, 2, !t.from_commit)}
-        ${holder && !handCandidates(t).includes(t.assignee) ? `<a class="btn" href="#/agents/${t.assignee}">${t.status === "blocked" ? "Answer" : "Open chat with"} ${esc(personOf(t.assignee))}</a>` : ""}
+        ${handCandidates(t).length ? handChoice(t, 2, "") + (t.from_commit ? `<a class="act-link" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : "")
+          : t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : ""}
+        ${holder && !handCandidates(t).includes(t.assignee) ? (t.status === "blocked" ? answerButton(t.assignee, "") : chatLink(t.assignee)) : ""}
         <details class="menu"><summary class="btn" aria-label="More">⋯</summary><div class="menu-list">
           <button data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button>
           ${agentIds().filter((n) => ["techlead", "dev", "reviewer"].includes(roleOf(n))).map((n) => `<button data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">Draft a message to ${esc(nameOf(n))}</button>`).join("")}
@@ -1049,7 +1059,7 @@ function renderChatSide(name) {
   const earlier = (state.tasks || []).filter((x) => x[field] === name && x.id !== t?.id).sort((a, b) => b.updated.localeCompare(a.updated)).slice(0, 5);
   side.innerHTML = SIDE_HEAD + `${t ? `<section class="side-box"><h3>Task</h3><a class="side-title" href="#/tasks/${esc(t.id)}"><b>${esc(t.id)}</b> ${esc(t.title)}</a>
       <dl class="kv"><dt>Status</dt><dd>${statusPill(t.status)}</dd>${t.branch ? `<dt>Branch</dt><dd><code>${esc(t.branch)}</code></dd>` : ""}${t.base ? `<dt>Base</dt><dd><code>${esc(t.base)}</code></dd>` : ""}</dl>
-      <div class="btn-row"><a class="btn small" href="#/tasks/${esc(t.id)}">Open task</a>${t.from_commit ? `<a class="btn small" href="${reviewHref(t.id)}">Diff</a>` : ""}</div></section>`
+      ${t.from_commit ? `<p>${reviewLink(t)}</p>` : ""}</section>`
       : `<section class="side-box"><h3>Task</h3><p class="muted">Not on a task right now.</p></section>`}
     ${convo}
     ${earlier.length ? `<section class="side-box"><h3>Earlier tasks</h3><ul class="side-list">${earlier.map((x) =>
@@ -1114,24 +1124,20 @@ function readyBanners(name) {
   if (roleOf(name) !== "techlead") return "";
   return (state.tasks || []).filter((t) => said.includes(t.id) && (t.status === "ready-for-dev" || state.handedFromChat[`techlead:${t.id}`])).map((t) => {
     const handed = state.handedFromChat[`techlead:${t.id}`];
-    if (handed) return readyBanner(`${t.id} is with ${personOf(handed)}`, `${personOf(handed)} is on it now.`,
-      `<a class="btn small primary" href="#/agents/${esc(handed)}">Go to ${esc(personOf(handed))}'s chat</a>`);
-    const buttons = handButtons(t, 3);
-    return readyBanner(`${t.id} is approved and ready for a dev`, buttons ? "Who builds it?" : "There's no developer on the team yet: add one in Settings → Team.",
-      `${buttons}<a class="btn small" href="#/tasks/${esc(t.id)}">Open the task</a>`);
+    if (handed) return nextStep({ layout: "ns-bar", who: handed, task: t, said: `${esc(personOf(handed))} has it and is on it now.`, link: chatLink(handed) });
+    const button = handChoice(t, 3);
+    return nextStep({ layout: "ns-bar", who: handCandidates(t)[0], task: t, button, link: button ? "" : `<a class="act-link" href="#/settings">Add a developer</a>`,
+      said: button ? "Approved, ready for a dev. Who builds it?" : "Approved, but there's no developer on the team yet." });
   }).join("");
 }
-const readyBanner = (title, next, buttons, kind = "") => `<section class="sent-banner ready-banner ${kind}" role="status"><span class="tick" aria-hidden="true">${kind === "rework" ? "↩" : "✓"}</span>
-  <div><b>${esc(title)}.</b> <span class="muted">${esc(next)}</span></div><div class="btn-row">${buttons}</div></section>`;
 
 function reworkBanners(said) {
   return (state.tasks || []).filter((t) => said.includes(t.id) && (t.status === "changes-requested" || state.handedFromChat[`reviewer:${t.id}`])).map((t) => {
     const dev = state.handedFromChat[`reviewer:${t.id}`];
-    if (dev) return readyBanner(`${t.id} is back with ${personOf(dev)}`, `${personOf(dev)} is fixing what the review found.`,
-      `<a class="btn small primary" href="#/agents/${esc(dev)}">Go to ${esc(personOf(dev))}'s chat</a>`);
-    const buttons = handButtons(t, 1);
-    return readyBanner(`${t.id} needs changes`, buttons ? "Send the review back to the dev who built it?" : "The dev who built it isn't on the team any more: hand it to another one from the task.",
-      `${buttons}${reviewLink(t)}<a class="btn small" href="#/tasks/${esc(t.id)}">Open the task</a>`, "rework");
+    if (dev) return nextStep({ layout: "ns-bar", who: dev, task: t, said: `Back with ${esc(personOf(dev))}, who is fixing what the review found.`, link: chatLink(dev) });
+    const button = handChoice(t, 1);
+    return nextStep({ layout: "ns-bar", who: t.dev, task: t, button, link: reviewLink(t),
+      said: button ? "The review asked for changes. Send them back to the dev who built it?" : "The review asked for changes, but the dev who built it isn't on the team any more: hand it on from the task." });
   }).join("");
 }
 
@@ -2558,7 +2564,7 @@ async function Land(r, quiet) {
     <div class="page-head"><div><h1>Pull request: ${esc(p.tasks[0]?.title || p.branch)}</h1>
       <p><code>${esc(p.branch)}</code> onto <code>${esc(p.onto)}</code> · ${esc(p.tasks.map((x) => x.id).join(", "))}${p.fresh ? "" : ` · <span class="muted"><span class="spinner" aria-hidden="true"></span>checking GitHub…</span>`}</p></div></div>
     ${p.not_ready ? `<p class="notice">${esc(p.not_ready)}</p>` : ""}
-    ${p.record.merged_at ? `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span><div><b>Merged on GitHub.</b> <span class="muted">Hive removed ${esc((p.record.removed || []).join(" and ") || "nothing")}.</span></div></section>` : ""}
+    ${p.record.merged_at ? nextStep({ layout: "ns-bar", title: "Merged on GitHub", said: `Hive removed ${esc((p.record.removed || []).join(" and ") || "nothing")}.` }) : ""}
     ${error}
     ${p.record.merged_at ? `<p>Pull request: <a href="${esc(pr)}" target="_blank" rel="noopener">${esc(pr)}</a></p>` : `<ol class="land-steps">
     <li class="section land-step"><h2>Commits</h2>
@@ -2643,14 +2649,12 @@ function sentBanner(s, d) {
     if (s.handed) next = `Final review requested: ${personOf(s.handed)} is on it now.`;
     else if (d.status === "ready-for-review" && reviewer) {
       next = "The reviewer has the last word before it's done.";
-      button = `<button class="btn small primary" data-action="hand" data-task="${esc(d.task)}" data-agent="${reviewer}">Request final review from ${esc(personOf(reviewer))}</button>`;
+      button = `<button class="btn small primary" data-action="hand" data-task="${esc(d.task)}" data-agent="${reviewer}">Hand to ${esc(personOf(reviewer))}</button>`;
     } else if (d.status === "in-review") next = `${d.reviewer ? nameOf(d.reviewer) : "The reviewer"} is reviewing it now.`;
     else if (d.status === "done") next = "It's done.";
     else next = `${dev} is still on it; it goes to the reviewer when ${dev} hands it on.`;
   }
-  return `<section class="sent-banner" role="status"><span class="tick" aria-hidden="true">✓</span>
-    <div><b>${esc(title)}.</b> <span class="muted">${esc(next)}</span></div>
-    <div class="btn-row">${button}${chat ? `<a class="btn small ${button ? "" : "primary"}" href="#/agents/${esc(chat)}">Go to ${esc(personOf(chat))}'s chat</a>` : ""}<a class="btn small" href="#/tasks">Back to Board</a></div></section>`;
+  return nextStep({ layout: "ns-bar", who: button ? reviewer : chat, title, said: esc(next), button, link: !button && chat ? chatLink(chat) : "" });
 }
 
 // Up to three lines ending at this one, on the same side, as the comment's code context.
@@ -3344,7 +3348,11 @@ const actions = {
     const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/hand/${el.dataset.agent}`, { method: "POST" }));
     if (!done) return;
     if (state.reviewSent?.task === el.dataset.task) state.reviewSent.handed = el.dataset.agent;   // the banner says who's on it
-    else if (el.closest(".ready-banner")) state.handedFromChat[`${roleOf(route().id)}:${el.dataset.task}`] = el.dataset.agent;   // so does the Tech Lead's or Reviewer's chat
+    else if (el.closest("#pinned-asks")) {   // so does the Tech Lead's or Reviewer's chat, for a little while
+      const key = `${roleOf(route().id)}:${el.dataset.task}`, chat = route().id;
+      state.handedFromChat[key] = el.dataset.agent;
+      setTimeout(() => { delete state.handedFromChat[key]; if (route().page === "agent" && route().id === chat) renderTranscriptInto(chat); }, 12000);
+    }
     else toast(done.message);
     refreshCounts(); render(true);
   },

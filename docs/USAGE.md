@@ -93,7 +93,7 @@ Ask the Orchestrator, in the console (press **/** anywhere) or in Slack:
 Every action waits for your **Allow**. In Slack:
 - message the app to reach the Orchestrator, or start with a name (*"Nabil: …"*) to talk to that agent;
 - approval requests come with **Allow / Deny** buttons;
-- each task gets a thread with every hand-off and buttons for what's next (**Review the diff**, **Hand to …**).
+- each task gets a thread with every hand-off and buttons for what's next (**Review the code**, **Hand to …**).
 
 ## Several agents per role
 
