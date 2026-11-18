@@ -9,7 +9,7 @@
 | 3. Approve | You | Say *"approved"*. A readiness check runs: the task becomes **Ready for dev**, or goes back to Draft with the reasons. |
 | 4. Hand it on | You or the Orchestrator | Pick a developer: right in the Tech Lead's chat once you've approved (**Hand to …**), or from Home, the Board, Slack, or the Orchestrator. |
 | 5. Build | Dev | Claims the task, works on `feature-<title>` in its own worktree, writes the code and unit tests, reviews its own diff, and sets **Ready for review**. |
-| 6. Review | Reviewer | Checks the requirements and consistency with the existing code: **Done**, or **Changes requested** back to the same developer. |
+| 6. Review | Reviewer | Checks the requirements and consistency with the existing code: **Done**, or **Changes requested** back to the same developer: **Hand back to …** in the Reviewer's chat sends it. |
 | 7. Your review | You (optional) | Read the diff and comment, at any point (see below). |
 | 8. Merge | You | Push and merge the branch as usual. The team never pushes. |
 
