@@ -2262,7 +2262,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
   return `<details class="review-file ${f.viewed ? "is-viewed" : ""}" id="file-${index}" data-index="${index}" data-path="${esc(f.path)}" ${changed > 400 || f.viewed ? "" : "open"}>
-    <summary><code class="path" title="${esc(f.path)}"><bdi>${esc(f.path)}</bdi></code>${label ? ` <span class="muted file-label">${esc(label)}</span>` : ""}
+    <summary><code class="path" title="${esc(f.path)}"><bdi>${esc(f.path)}</bdi></code><button class="copy-path" data-action="copy-path" data-path="${esc(f.path)}" title="Copy the file's path" aria-label="Copy the path of ${esc(f.path)}"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg></button>${label ? ` <span class="muted file-label">${esc(label)}</span>` : ""}
       ${f.changed_since_viewed ? `<span class="pill warn changed-since">Changed since you viewed it</span>` : ""}
       <span class="counts"><span class="plus">+${f.additions}</span> <span class="minus">−${f.deletions}</span></span>
       <button class="viewed-toggle" data-action="mark-viewed" aria-pressed="${!!f.viewed}" title="Mark as viewed: it folds away until the dev changes it"><span class="box" aria-hidden="true"></span>Viewed</button></summary>
@@ -2335,7 +2335,7 @@ function reviewTreeShown() {
 
 // The file at the top of the screen is highlighted in the tree while you scroll the diff. A file you jumped to
 // stays highlighted until you scroll yourself (the last files can't scroll up to the top).
-let treeFrame = 0, jumpedTo = null;
+let treeFrame = 0, jumpedTo = null, jumpToken = 0;
 addEventListener("scroll", () => {
   if (treeFrame || !document.querySelector(".review-tree")) return;
   treeFrame = requestAnimationFrame(() => {
@@ -2806,12 +2806,36 @@ const reviewActions = {
     document.querySelector(".review-body")?.classList.toggle("tree-folded", !show);
     document.querySelector(".tree-toggle")?.setAttribute("aria-pressed", String(show));
   },
+  // Files off screen aren't laid out (content-visibility), so their heights are estimates until the page gets there:
+  // a smooth scroll aims at where the file *was* and lands short or past it. Jump at once, then keep re-aiming
+  // for a few frames while the files in between take their real size, until the file sits still under the top bar.
   "jump-file": (el) => {
     const file = document.getElementById(`file-${el.dataset.index}`);
     if (!file) return;
     file.open = true;
     jumpedTo = file;
-    file.scrollIntoView({ block: "start", behavior: "smooth" });
+    const token = ++jumpToken;
+    let still = 0, frames = 0;
+    const aim = () => {
+      if (token !== jumpToken || jumpedTo !== file) return;   // another jump, or you scrolled yourself
+      const off = file.getBoundingClientRect().top - (document.querySelector(".topbar")?.offsetHeight || 52) - 8;
+      if (Math.abs(off) > 1) { scrollBy(0, off); still = 0; } else still++;
+      if (still < 3 && ++frames < 40) requestAnimationFrame(aim);
+    };
+    aim();
+  },
+  "copy-path": async (el) => {
+    const path = el.dataset.path;
+    try {
+      await navigator.clipboard.writeText(path);
+    } catch {   // no clipboard API (plain http on a server): the old way
+      const t = Object.assign(document.createElement("textarea"), { value: path });
+      document.body.append(t); t.select(); document.execCommand("copy"); t.remove();
+    }
+    el.classList.add("copied");
+    el.title = "Copied";
+    clearTimeout(el._copied);
+    el._copied = setTimeout(() => { el.classList.remove("copied"); el.title = "Copy the file's path"; }, 1500);
   },
   "tree-fold": (el) => {
     // Only the top folders change; the ones inside keep their state but are hidden with them (one change, not hundreds).
