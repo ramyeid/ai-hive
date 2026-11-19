@@ -203,50 +203,31 @@ def diff(task_id: str, mode: str = "feature") -> dict:
         result["describes"] = "There's no code yet: the branch is created when a dev claims the task."
         return result
     rng, result["describes"] = _range(meta, mode if mode in MODES else "feature", last)
-    worktree = meta.get("worktree", "")
-    if meta.get("status") in LIVE and worktree and Path(worktree).is_dir():
-        # The dev is still at it and commits when done: show its worktree as it is now, uncommitted work included.
-        patch = _live_patch(worktree, rng)
-        if patch is not None:
-            result["live"] = True
-            result["describes"] += ", with the dev's work in progress (what's in their folder now, not committed yet)"
-            result["range"], result["files"] = rng, _with_viewed(meta, parse_diff(patch))
-            return result
     done = _git(meta["project"], "diff", "--no-color", "--no-ext-diff", "-M", "-U3", rng)
     if done.returncode != 0:
         raise ReviewError(f"git diff {rng} failed: {done.stderr.strip()}")
     result["range"], result["files"] = rng, _with_viewed(meta, parse_diff(done.stdout))
+    if not result["files"]:
+        result["empty_reason"] = _why_empty(meta, rng)
     return result
 
 
-LIVE = ("in-dev", "changes-requested")   # the dev may have work in its worktree it hasn't committed yet
-UNTRACKED_LIMIT = 1_000_000   # bytes: a bigger new file is listed, not shown
-
-
-def _live_patch(worktree: str, rng: str) -> str | None:
-    """The range's starting point against the worktree's files as they are: committed, uncommitted and new files.
-    None when it can't be worked out (then the committed diff is shown)."""
-    start = rng.split("..")[0].rstrip(".")
-    if "..." in rng:   # base...branch: from where the branch left the base
-        found = _git(worktree, "merge-base", start, "HEAD")
-        if found.returncode != 0:
-            return None
-        start = found.stdout.strip()
-    tracked = _git(worktree, "diff", "--no-color", "--no-ext-diff", "-M", "-U3", start)
-    if tracked.returncode != 0:
-        return None
-    parts = [tracked.stdout]
-    new = _git(worktree, "ls-files", "--others", "--exclude-standard", "-z").stdout.split("\0")
-    for path in [p for p in new if p][:200]:
-        file = Path(worktree) / path
-        if not file.is_file():
-            continue
-        if file.stat().st_size > UNTRACKED_LIMIT:
-            parts.append(f"diff --git a/{path} b/{path}\nnew file mode 100644\nBinary files /dev/null and b/{path} differ\n")
-            continue
-        added = _git(worktree, "diff", "--no-color", "--no-index", "-U3", "--", "/dev/null", path)
-        parts.append(added.stdout.replace("a/dev/null b/", "a/" + path + " b/", 1) if added.stdout else "")
-    return "".join(p if p.endswith("\n") or not p else p + "\n" for p in parts)
+def _why_empty(meta: dict, rng: str) -> str:
+    """Why a branch shows nothing to review, in words the lead can act on."""
+    project, branch, base = meta["project"], meta.get("branch", ""), meta.get("base") or "main"
+    if ".." in rng and "..." not in rng:
+        return "Nothing changed since your last review."
+    reason = f"The branch {branch} has no commits that aren't already in {base}"
+    if _git(project, "merge-base", "--is-ancestor", branch, base_ref(meta)).returncode == 0 and \
+            _git(project, "rev-list", "--count", f"{meta.get('from_commit') or base}..{branch}").stdout.strip() not in ("", "0"):
+        reason = f"Everything on {branch} is already in {base}: it was merged"
+    folder = meta.get("worktree", "")
+    if folder and Path(folder).is_dir():
+        dirty = [l for l in _git(folder, "status", "--porcelain").stdout.splitlines() if l.strip()]
+        if dirty:
+            return (f"{reason}. The dev left {len(dirty)} file{'s' if len(dirty) != 1 else ''} changed but not committed in "
+                    f"{folder}: ask them to commit their work.")
+    return reason + "."
 
 
 SOURCE_LIMIT = 2_000_000   # bytes: a bigger file isn't expanded

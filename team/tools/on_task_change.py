@@ -60,6 +60,31 @@ def recipient(meta: dict, status: str) -> str | None:
     return ROUTING.get(status)
 
 
+def _git(folder: str, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", folder, *args], capture_output=True, text=True, timeout=30)
+
+
+def uncommitted(meta: dict) -> list[str]:
+    """What stops a task from being reviewed: files left uncommitted in its worktree, or no commits since it started.
+    Empty when it can't tell (no folder, not a git repository)."""
+    branch, start = meta.get("branch", ""), meta.get("from_commit", "")
+    folder = meta.get("worktree", "") or meta.get("project", "")
+    if not branch or not folder or not Path(folder).is_dir():
+        return []
+    problems = []
+    on = _git(folder, "rev-parse", "--abbrev-ref", "HEAD")
+    if on.returncode == 0 and on.stdout.strip() == branch:
+        dirty = [l[3:] for l in _git(folder, "status", "--porcelain").stdout.splitlines() if l.strip()]
+        if dirty:
+            shown = ", ".join(dirty[:5]) + (f" and {len(dirty) - 5} more" if len(dirty) > 5 else "")
+            problems.append(f"{len(dirty)} file{'s are' if len(dirty) != 1 else ' is'} changed but not committed in {folder}: {shown}.")
+    if start:
+        count = _git(folder, "rev-list", "--count", f"{start}..{branch}")
+        if count.returncode == 0 and count.stdout.strip() == "0":
+            problems.append(f"The branch {branch} has no commits since this task started ({start[:7]}).")
+    return problems
+
+
 def process(path: Path, actor: str | None = None) -> int:
     """Handle a task file that may have changed status. Returns 2 if the change was refused.
     actor: who made the change, when it isn't $AGENT_ID (the console passes "lead" for the lead's review)."""
@@ -82,6 +107,19 @@ def process(path: Path, actor: str | None = None) -> int:
             print(f"BLOCKED: {tid} was put back to `draft` — it does not meet the "
                   "Definition of Ready. Resolve these with the lead, then try again:\n"
                   + "\n".join(f"  - {p}" for p in problems), file=sys.stderr)
+            return 2
+
+    # Nothing reaches review that the lead can't see: the work must be committed on the task's branch.
+    if status == "ready-for-review" and actor != "lead":
+        problems = uncommitted(meta)
+        if problems:
+            back = previous if previous in ("in-dev", "changes-requested") else "in-dev"
+            text = path.read_text(encoding="utf-8")
+            path.write_text(re.sub(r"^status:\s*ready-for-review", f"status: {back}", text, count=1, flags=re.M), encoding="utf-8")
+            print(f"BLOCKED: {tid} was put back to `{back}`: there's nothing for the reviewer or the lead to see yet.\n"
+                  + "\n".join(f"  - {p}" for p in problems)
+                  + "\nCommit your work (with the task's trailers), then set `ready-for-review` again. If this task needed "
+                    "no code change, set it to `blocked` and tell the lead why.", file=sys.stderr)
             return 2
 
     # Record who blocked it: the agent that made the change, else whoever held the task before.

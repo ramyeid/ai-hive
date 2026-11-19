@@ -107,6 +107,7 @@ The reviewer makes sure of two things: the business requirements are met, and yo
      branch" when there are any.
    - **Notes for the lead:** suggestions, inconsistencies found, out-of-scope ideas (not implemented).
 
+   Commit everything first: `git status` in your folder must be clean (a file you created needs `git add`). The reviewer and the lead see only commits, so a hand-off with uncommitted work is refused and the task goes back to you.
    Then set `status: ready-for-review`, **as the very last thing you do**. That notifies the reviewer and ends your part: in the console you then start on a fresh conversation, so everything the reviewer needs must already be in the task file.
 
 ## On changes-requested

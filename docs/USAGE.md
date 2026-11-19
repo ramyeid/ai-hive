@@ -24,9 +24,14 @@ rewriting a finished branch doesn't bother it. New branches start from the base 
 `origin`, and never changes your local branches), so they include what you merged there.
 
 **Cancelling.** On the task's page, **⋯ → Cancel this task**, with an optional reason (or ask the Orchestrator). Whoever
-is on it stops and is told why, the task leaves the board, Home and Reviews, and its ticket hears about it; its
-branch and worktree stay. **Reopen** brings it back: ready for a dev if its spec was approved, otherwise a draft.
-The list view's status filter has **Cancelled**.
+is on it stops and is told why, the task moves to the board's **Cancelled** column and leaves Home and Reviews, and
+its ticket hears about it; its branch and worktree stay. **Reopen** brings it back: ready for a dev if its spec was
+approved, otherwise a draft.
+
+**Handing over to review.** A dev can only set a task to ready for review once its work is committed on the
+task's branch: with files left uncommitted, or no commits at all, the task goes back to the dev with the list of
+files. If a review still shows nothing, the page says why (nothing committed, already merged, or files left
+uncommitted in the dev's folder).
 
 **Routing.** New work goes to any agent of the role. Rework goes back to the developer who built it, and a
 re-review to the same reviewer.

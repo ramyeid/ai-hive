@@ -816,6 +816,7 @@ const COLUMNS = [
   { key: "ready-for-review", label: "Ready for review", sub: "waiting for you", statuses: ["ready-for-review"] },
   { key: "in-review", label: "In review", sub: "Reviewer", statuses: ["in-review"] },
   { key: "done", label: "Done", sub: "newest first", statuses: ["done"] },
+  { key: "cancelled", label: "Cancelled", sub: "stopped by you", statuses: ["cancelled"] },
 ];
 
 function boardCard(t) {
@@ -2450,8 +2451,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
   };
   f.hunks.forEach((h, k) => {
     markHunk(h.lines);
-    // work in progress isn't a commit, so its unchanged lines can't be fetched to expand: just the hunk's header
-    rows.push(...(gaps[k] && !reviewCtx?.live ? gapRows(f, gaps[k], layout, cols) : [`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`]));
+    rows.push(...(gaps[k] ? gapRows(f, gaps[k], layout, cols) : [`<tr class="hunk"><td colspan="${cols}">${esc(h.header)}</td></tr>`]));
     if (layout === "split") {
       for (const p of pairUp(h.lines)) {
         if (p.ctx) {   // an unchanged line is commented on as the new code, like in the unified view
@@ -2473,7 +2473,7 @@ function diffFile(f, drafts, shown, posted = new Map(), dev = "", layout = "unif
       comments([lineKey(f.path, side, line)]);
     }
   });
-  if (f.hunks.length && gaps.length && f.status !== "added" && !reviewCtx?.live) rows.push(...gapRows(f, gaps[gaps.length - 1], layout, cols));
+  if (f.hunks.length && gaps.length && f.status !== "added") rows.push(...gapRows(f, gaps[gaps.length - 1], layout, cols));
   const changed = f.additions + f.deletions;
   const label = { added: "new file", deleted: "deleted", renamed: `renamed from ${f.old_path}` }[f.status] || "";
   return `<details class="review-file ${f.viewed ? "is-viewed" : ""}" id="file-${index}" data-index="${index}" data-path="${esc(f.path)}" ${changed > 400 || f.viewed ? "" : "open"}>
@@ -2588,7 +2588,7 @@ async function CodeReview(r) {
   const shown = new Set();
   const posted = placePosted(d.files, d.rounds, d.head);
   const layout = reviewLayout();
-  reviewCtx = { task: d.task, head: d.head, files: d.files, drafts, posted, dev: d.dev, layout, live: !!d.live };
+  reviewCtx = { task: d.task, head: d.head, files: d.files, drafts, posted, dev: d.dev, layout };
   const files = d.files.map((f, i) => diffFile(f, drafts, shown, posted, d.dev, layout, i)).join("");
   const treeOn = reviewTreeShown() && d.files.length > 0;
   const treeStrip = `<button class="tree-strip" data-action="review-tree" aria-label="Show the files" title="Show the files">
@@ -2628,7 +2628,7 @@ async function CodeReview(r) {
       ${earlier ? `<p class="muted">Every review you've submitted on this branch, newest first, with ${esc(dev || "the dev")}'s replies. Your comments also show on their lines in the other tabs.</p>${rounds}` : `<p class="muted">Showing ${esc(d.describes.replace(/`/g, ""))}${d.files.length ? `: ${plural(d.files.length, "file")}, <span class="plus">+${adds}</span> <span class="minus">−${dels}</span>` : ""}. Hover a line and press <b>+</b> to comment on it.</p>
 
       ${files ? `<div class="review-body ${treeOn ? "with-tree" : "tree-folded"} ${hideViewed() ? "hide-viewed" : ""}">${fileTree(d.files, drafts)}${treeStrip}<div class="review-diffs">${files}</div></div>`
-        : `<div class="empty">${d.live ? `Nothing yet: ${esc(d.dev ? personOf(d.dev) : "the dev")} hasn't changed any files on this branch.` : d.head ? "No changes in this view." : esc(d.describes)}</div>`}`}
+        : `<div class="empty">${d.head ? esc(d.empty_reason || "No changes in this view.") : esc(d.describes)}</div>`}`}
     </section>
     ${earlier ? "" : `<section class="section review-submit" id="review-submit"><h2>Your review</h2>
       ${elsewhere.length ? `<div class="drafts">${elsewhere.map((c) => draftCard(c, { where: true })).join("")}</div>` : ""}
