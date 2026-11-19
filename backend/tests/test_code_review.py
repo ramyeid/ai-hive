@@ -33,6 +33,32 @@ class CodeReviewTest(unittest.TestCase):
         self.assertEqual([(f["path"], f["additions"], f["deletions"]) for f in review["files"]], [("app.py", 1, 1)])
         self.assertEqual(review["range"], "main...feature-total")
 
+    def test_while_the_dev_works_it_shows_their_uncommitted_work_too(self):
+        client = self._a_console()
+        task = self._a_task_with_code("in-dev")
+        project = self._root / "shop"
+        worktree = self._root / "shop-wt"
+        _git(project, "checkout", "-q", "main")
+        _git(project, "worktree", "add", "-q", str(worktree), "feature-total")
+        (worktree / "app.py").write_text("def total():\n    return 3\n")        # changed, not committed
+        (worktree / "tax.py").write_text("RATE = 14\n")                        # new, not even added
+        task.write_text(task.read_text().replace("reviewer: reviewer\n", f"reviewer: reviewer\nworktree: {worktree}\n"))
+
+        review = client.get("/api/tasks/TASK-001/review", headers=HEADERS).json()
+
+        self.assertTrue(review["live"])
+        self.assertIn("work in progress", review["describes"])
+        files = {f["path"]: f for f in review["files"]}
+        self.assertEqual(sorted(files), ["app.py", "tax.py"])
+        self.assertEqual([l["s"] for l in files["app.py"]["hunks"][0]["lines"] if l["t"] == "+"], ["    return 3"])
+        self.assertEqual(files["tax.py"]["status"], "added")
+
+    def test_once_handed_over_it_shows_only_what_was_committed(self):
+        client = self._a_console()
+        self._a_task_with_code("ready-for-review")
+
+        self.assertNotIn("live", client.get("/api/tasks/TASK-001/review", headers=HEADERS).json())
+
     def test_a_comment_stays_a_draft_until_the_review_is_submitted(self):
         client = self._a_console()
         self._a_task_with_code("ready-for-review")
