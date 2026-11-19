@@ -14,7 +14,7 @@ import secrets
 import uuid
 from pathlib import Path
 
-from . import board, chats, store
+from . import board, chats, connectors, store
 from .engines import PROVIDERS, make_engine
 from .engines.base import AgentEngine, EngineConfig
 from .store import KIT, TEAM
@@ -167,6 +167,7 @@ class AgentRunner:
         instructions += (f"\n\n## Your identity\n{f'Your name is {display}. ' if display else ''}"
                          f"Your agent ID is `{self.name}` (role: {self.role}). It's in the "
                          "`AGENT_ID` environment variable, which the team's tools use for your inbox and claims.")
+        instructions += connectors.instructions_for(self.role, provider.engine)   # Figma, ClickUp…, attached files
         if provider.engine == "claude":
             model = model or default_claude_model
         api_key, base_url, _ = store.provider_credentials(provider)
@@ -180,6 +181,7 @@ class AgentRunner:
             workspace=Path(settings["workspace"]), kit=KIT, session_id=self.session_id,
             resume=bool(resume), permission_mode=settings["permission_mode"].get(self.name, "default"),
             api_key=api_key, base_url=base_url, effort=effort,
+            mcp_servers=connectors.mcp_for(self.role) if provider.engine == "claude" else None,
             env={"CONSOLE_API": f"http://127.0.0.1:{os.environ.get('PORT', '8420')}",
                  "CONSOLE_ORCHESTRATOR_KEY": ORCHESTRATOR_KEY} if self.role == "orchestrator" else None)
         engine = make_engine(config, self, **self.engine_options)

@@ -66,6 +66,7 @@ const STATUS_TEXT = { stopped: "Stopped", starting: "Starting…", idle: "Ready"
 
 const state = {
   agents: {},         // name -> {status, session_id, pending, error}
+  attachments: {},    // agent -> files attached in its composer, not sent yet
   handedFromChat: {}, // "techlead:TASK" / "reviewer:TASK" -> the dev you handed it to from that chat (its banner says so)
   settings: null,
   kit: "",
@@ -1011,7 +1012,8 @@ async function AgentChat(r) {
     <div id="pinned-asks"></div>
     <form class="composer" id="composer">
       <div class="quick">${a.quick.map((q) => `<button type="button" class="chip-btn" data-action="quick" data-text="${esc(q)}">${esc(q)}</button>`).join("")}</div>
-      <div class="compose-box"><textarea id="composer-text" rows="2" aria-label="Message ${esc(nameOf(name))}"
+      <div class="attach-list" id="attach-list" hidden></div>
+      <div class="compose-box"><label class="attach-btn" title="Attach files: Excel, CSV, PDF, Word, slides, pictures (or drop them here, or paste)"><input type="file" id="attach-input" multiple hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 5 5.8 9.7a1.3 1.3 0 0 0 1.9 1.9l5-5a2.6 2.6 0 0 0-3.7-3.7L4 7.9a3.9 3.9 0 0 0 5.5 5.5l4-4"/></svg><span class="sr-only">Attach files</span></label><textarea id="composer-text" rows="2" aria-label="Message ${esc(nameOf(name))}"
         placeholder="${roleOf(name) === "techlead" ? "Describe what you need, and in which project folder." : `Message ${esc(personOf(name))}… (Enter to send, Shift+Enter for a new line, # for a task)`}">${esc(state.drafts[name] || "")}</textarea>
         <button class="btn primary" type="submit" id="send">Send</button></div>
       <ul class="suggest" id="task-suggest" hidden></ul>
@@ -1408,7 +1410,7 @@ function transcriptHTML(events, { pending = [], agent = "", pinned = false } = {
         <div class="run-items">${e.tools.map((t) => toolItem(t, results)).join("")}</div></details>`;
     }
     switch (e.kind) {
-      case "user": return `<div class="msg user">${esc(e.text)}</div>`;
+      case "user": return `<div class="msg user">${userMessage(e.text)}</div>`;
       case "text": return `<div class="msg agent prose">${md(e.text)}</div>`;
       case "thinking": return `<details class="thinking"><summary>Thought process</summary><div class="thought">${esc(e.text)}</div></details>`;
       case "system": return `<div class="msg system">${esc(e.text.replace(/\.$/, ""))}, ${ago(e.ts)}</div>`;
@@ -1614,14 +1616,18 @@ async function Settings(r) {
   await loadState();
   if (r.id === "slack") { location.replace("#/settings/integrations/slack"); return null; }   // old link
   const section = SETTINGS_SECTIONS.some(([k]) => k === r.id) ? r.id : "team";
-  const [live, bk] = await Promise.all([api("/api/slack").catch(() => ({})), api("/api/backup").catch(() => null)]);
+  const [live, bk, conn] = await Promise.all([api("/api/slack").catch(() => ({})), api("/api/backup").catch(() => null), api("/api/connectors").catch(() => null)]);
   state.backup = bk;
+  if (conn) state.connectors = conn;
+  if (r.sub !== "mcp") state.mcpDraft = null;
   const keys = state.settings.providers.filter((p) => p.engine !== "claude" && p.has_key).length;
   const hint = { team: `${agentIds().length} agents`, models: keys ? `${keys} key${keys > 1 ? "s" : ""}` : "",
     integrations: integrationsDot(live), backup: backupHint(bk) };
   const nav = SETTINGS_SECTIONS.map(([k, label]) => `<a href="#/settings/${k}" ${k === section ? 'aria-current="page"' : ""}>${label}<small>${hint[k] || ""}</small></a>`).join("");
   const body = section === "integrations" && r.sub === "slack" ? await slackSection(live)
     : section === "integrations" && r.sub === "editor" ? await editorSection()
+    : section === "integrations" && r.sub === "mcp" && state.connectors ? mcpSection()
+    : section === "integrations" && CONNECTOR_INFO[r.sub] && state.connectors?.[r.sub] ? connectorSection(r.sub)
     : await { team: teamSection, models: modelsSection, integrations: integrationsSection, access: accessSection, workspace: workspaceSection,
       backup: backupSection, appearance: appearanceSection, about: aboutSection }[section](live);
   return `<div class="settings-grid"><nav class="settings-nav" aria-label="Settings">${nav}</nav><div class="settings-body">${body}</div></div>`;
@@ -1629,22 +1635,48 @@ async function Settings(r) {
 
 const settingsHead = (title, text) => `<div class="page-head"><div><h1>${title}</h1>${text ? `<p>${text}</p>` : ""}</div></div>`;
 
-// The apps Hive connects to. Slack today; each new one gets a card here and its own page.
+const CONNECTOR_INFO = {
+  figma: { icon: "F", bg: "#1e1e1e", text: "Agents read a design from its link (frames, text, colours, spacing) and show the frame next to their mockups.",
+    steps: `<li>In Figma: your avatar → <b>Settings</b> → <b>Security</b> → <b>Personal access tokens</b> → <b>Generate new token</b>.</li>
+      <li>Give it <b>File content: Read-only</b> (and <b>Current user: Read</b>, for the test below), and copy it (<code>figd_…</code>).</li>
+      <li>Paste it below. The token can read every file its account can open, so use an account that sees the team's designs.</li>`,
+    can: ["Read a frame's layers from its link: layout, sizes, spacing, text, colours", "Show the frame as a picture in a chat or spec, next to a screenshot of today's screen",
+      "Reviewer: a screen that doesn't match the linked design is a finding", "Read-only: Hive never changes your Figma files"] },
+  clickup: { icon: "C", bg: "#7b68ee", text: "Start a task from a ClickUp ticket. Hive comments back and moves the ticket as the task moves.",
+    steps: `<li>In ClickUp: your avatar → <b>Settings</b> → <b>Apps</b> → <b>API Token</b> → <b>Generate</b>, and copy it (<code>pk_…</code>).</li>
+      <li>Paste it below. Comments Hive posts will be from this account.</li>`,
+    can: ["Read a ticket from its link: description, checklists, subtasks, attachments, comments", "The Tech Lead writes the spec from it and links the task to it",
+      "Hive comments on the ticket as the task moves, and moves it if you set that up above", "Agents can comment and change its status when you ask them to"] },
+  jira: { icon: "J", bg: "#0c66e4", text: "The same for Jira issues: read the issue, comment back, move its status as the task moves.",
+    steps: `<li>Go to <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener">id.atlassian.com → Security → API tokens</a> → <b>Create API token</b>, and copy it.</li>
+      <li>Enter your Jira site (<code>yourcompany.atlassian.net</code>), the email of that Atlassian account and the token. Comments Hive posts will be from this account. (Jira Cloud.)</li>`,
+    can: ["Read an issue from its key or link: description, subtasks, attachments, comments", "The Tech Lead writes the spec from it and links the task to it",
+      "Hive comments on the issue as the task moves, and moves it if you set that up above", "Agents can comment and move it when you ask them to"] },
+  sentry: { icon: "S", bg: "#362d59", text: "“Fix this error”: the dev pulls the stack trace, breadcrumbs and release from the issue link.",
+    steps: `<li>In Sentry: <b>Settings</b> → <b>Account</b> → <b>Personal Tokens</b> (or <b>Developer Settings</b> → <b>Organization Tokens</b>) → <b>Create New Token</b> with <code>event:read</code>, <code>project:read</code> and <code>org:read</code>.</li>
+      <li>Paste it below. On self-hosted Sentry, also enter its address.</li>`,
+    can: ["Read an issue from its link: how often, for whom, release and environment", "The latest event's stack trace (your code marked), breadcrumbs and request",
+      "Read-only: Hive never resolves or changes issues"] },
+  mcp: { icon: "+", bg: "var(--sunken)", text: "Any MCP server, for agents running on Claude: a database, Notion, Linear, your own tools." },
+};
+// The apps Hive connects to: each gets a card here and its own page.
 const INTEGRATIONS = [
   { id: "slack", name: "Slack", icon: "slack", text: "Talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in a thread." },
   { id: "editor", name: "Editor", icon: "editor", text: "Open the branch you're reviewing in VS Code, in the browser like GitHub's . key, or in your desktop editor." },
+  ...["figma", "clickup", "jira", "sentry", "mcp"].map((id) => ({ id, connector: true, name: id === "mcp" ? "Other tools (MCP)" : { figma: "Figma", clickup: "ClickUp", jira: "Jira", sentry: "Sentry" }[id], text: CONNECTOR_INFO[id].text })),
 ];
 
 function integrationsSection(live) {
   const status = (id) => id === "slack"
     ? (live.connected ? `<span class="slack-status on"><span class="dot"></span>Connected</span>` : live.error ? `<span class="slack-status bad"><span class="dot"></span>Error</span>` : `<span class="slack-status"><span class="dot"></span>Not connected</span>`)
+    : CONNECTOR_INFO[id] ? connectorStatus(id)
     : id === "editor" ? (editorOn() ? `<span class="slack-status on"><span class="dot"></span>${editorPrefs().app === "browser" ? "In the browser" : esc(editorName()) + (editorPrefs().where === "ssh" ? ` over SSH (${esc(editorPrefs().host)})` : "")}</span>` : `<span class="slack-status"><span class="dot"></span>Off</span>`)
     : "";
-  return settingsHead("Integrations", "The apps Hive works with. More will appear here.")
+  return settingsHead("Integrations", "The apps Hive and its agents work with.")
     + `<div class="integrations">${INTEGRATIONS.map((i) => `<a class="integration" href="#/settings/integrations/${i.id}">
-        <span class="int-icon ${i.icon}" aria-hidden="true">${i.id === "editor" ? VSCODE_ICON : i.name.slice(0, 1)}</span>
+        <span class="int-icon ${i.icon || ""}" aria-hidden="true" ${i.connector ? `style="background:${CONNECTOR_INFO[i.id].bg};color:${i.id === "mcp" ? "var(--ink)" : "#fff"}"` : ""}>${i.id === "editor" ? VSCODE_ICON : i.connector ? CONNECTOR_INFO[i.id].icon : i.name.slice(0, 1)}</span>
         <span class="int-body"><b>${esc(i.name)}</b>${status(i.id)}<small>${esc(i.text)}</small></span>
-        <span class="btn small">${(i.id === "slack" && live.connected) || (i.id === "editor" && editorOn()) ? "Manage" : "Set up"}</span></a>`).join("")}</div>`;
+        <span class="btn small">${(i.id === "slack" && live.connected) || (i.id === "editor" && editorOn()) || (i.connector && connectorOn(i.id)) ? "Manage" : "Set up"}</span></a>`).join("")}</div>`;
 }
 
 async function modelsSection() {
@@ -1898,10 +1930,148 @@ function slackNotifications() {
     </form></section>`;
 }
 
+// ---- connectors: the apps the agents can use (Figma, ClickUp, Jira, Sentry, other MCP servers) ---------------------
+// The tokens stay on the server (connectors.py); the agents use them through the team's tools.
+const TICKET_STATUSES = [["in-dev", "A dev starts building it"], ["ready-for-review", "Ready for review"], ["changes-requested", "Sent back for changes"],
+  ["done", "Done (the review approved it)"], ["blocked", "Blocked"]];
+
+const connectorStatus = (cid) => {
+  const c = state.connectors?.[cid];
+  if (cid === "mcp") { const n = c?.servers.length || 0; return n ? `<span class="slack-status on"><span class="dot"></span>${n} server${n > 1 ? "s" : ""}</span>` : `<span class="slack-status"><span class="dot"></span>None yet</span>`; }
+  if (!c?.connected) return `<span class="slack-status"><span class="dot"></span>Not connected</span>`;
+  if (c.error) return `<span class="slack-status bad" title="${esc(c.error)}"><span class="dot"></span>Couldn't connect</span>`;
+  return c.checked ? `<span class="slack-status on"><span class="dot"></span>Connected</span>` : `<span class="slack-status"><span class="dot"></span>Saved, not checked yet</span>`;
+};
+const connectorOn = (cid) => cid === "mcp" ? !!state.connectors?.mcp?.servers.length : !!state.connectors?.[cid]?.connected;
+const connectorBad = (cid) => cid !== "mcp" && !!state.connectors?.[cid]?.connected && !!state.connectors[cid].error;
+
+const roleBoxes = (chosen, name = "roles") => `<div class="role-checks">${Object.keys(ROLES).map((r) =>
+  `<label class="role-check"><input type="checkbox" name="${name}" value="${r}" ${chosen.includes(r) ? "checked" : ""}> ${esc(ROLES[r].name)}</label>`).join("")}</div>`;
+
+function connectorSection(cid) {
+  const c = state.connectors[cid], info = CONNECTOR_INFO[cid];
+  const field = (key, f) => {
+    const id = `cn-${key}`;
+    const note = f.from_env ? `Using <code>${esc(f.env)}</code> from the server's environment.` : f.secret ? (f.set ? `Saved, ends in ${esc(f.hint)}.` : "") : "";
+    return `<label for="${id}">${esc(f.label)}</label>
+      <input type="${f.secret ? "password" : "text"}" id="${id}" name="${key}" autocomplete="off" spellcheck="false" ${f.from_env ? "disabled" : ""}
+        value="${f.secret ? "" : esc(f.value || "")}" placeholder="${f.secret && f.set ? "Paste a new one to replace it" : esc(f.placeholder)}">
+      ${note ? `<p class="hint">${note}</p>` : ""}`;
+  };
+  const opts = c.options || {}, move = opts.move || {};
+  const tickets = c.tickets ? `<section class="section"><h2>As tasks move</h2>
+      <p class="muted" style="max-width:68ch">A task made from a ticket keeps its link in the task's <code>ticket:</code> field. Each time the task moves, Hive can tell the ticket.</p>
+      <label class="check"><input type="checkbox" name="comment" ${opts.comment !== false ? "checked" : ""}> Comment on the ticket (“TASK-012 is now ready for review”, with a link to it)</label>
+      <p class="muted" style="margin:14px 0 6px">And move the ticket to one of its statuses, typed as ${esc(c.name)} names them. Leave a line empty to leave the ticket where it is.</p>
+      <div class="status-map">${TICKET_STATUSES.map(([s, label]) => `<label for="mv-${s}">${esc(label)}</label>
+        <input type="text" id="mv-${s}" data-move="${s}" value="${esc(move[s] || "")}" placeholder="${esc({ "in-dev": "in progress", "ready-for-review": "in review", done: cid === "jira" ? "Done" : "complete" }[s] || "")}" spellcheck="false">`).join("")}</div>
+    </section>` : "";
+  return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › ${esc(c.name)}</p>` + settingsHead(esc(c.name), "") + `
+    <p>${connectorStatus(cid)}${c.connected && (c.checked || c.error) ? ` <span class="muted">· ${esc(c.checked || c.error)}</span>` : ""}
+      ${c.connected ? `<button type="button" class="btn small" data-action="connector-test" data-cid="${cid}">Test again</button>` : ""}</p>
+    <p class="muted" style="max-width:68ch">${esc(info.text)}</p>
+    <form class="form" id="connector-form" data-cid="${cid}">
+      <details ${c.connected ? "" : "open"}><summary>How to connect it</summary><ol class="setup-steps">${info.steps}</ol></details>
+      ${Object.entries(c.fields).map(([k, f]) => field(k, f)).join("")}
+      <p class="hint">Kept on this server in <code>data/console/settings.json</code>, like your other keys, and never shown again here.</p>
+      <section class="section"><h2>Who can use it</h2>${roleBoxes(c.roles)}
+        <p class="hint">The agents of these roles are told about it when they start a conversation, and its tools refuse the others.</p></section>
+      ${tickets}
+      <section class="section"><h2>What they can do</h2><ul class="can-list">${info.can.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></section>
+      <div class="btn-row"><button class="btn primary">${c.connected ? "Save and test" : "Connect"}</button>
+        ${c.connected && !Object.values(c.fields).some((f) => f.from_env) ? `<button type="button" class="btn danger" data-action="connector-disconnect" data-cid="${cid}">Disconnect</button>` : ""}</div>
+      <p class="hint">Running agents pick a change up in their next conversation.</p>
+    </form>`;
+}
+
+// Other tools: MCP servers Claude Code starts (a command) or reaches (an address), for the roles you pick.
+function mcpSection() {
+  const servers = state.mcpDraft || (state.mcpDraft = structuredClone(state.connectors.mcp.servers));
+  const pairs = (obj) => Object.entries(obj || {}).map(([k, v]) => `${k}=${v}`).join("\n");
+  const row = (s, i) => `<fieldset class="mcp-server" data-i="${i}"><legend>${esc(s.name || "New server")}</legend>
+      <div class="mcp-grid">
+        <label>Name<input type="text" name="name" value="${esc(s.name || "")}" placeholder="notion" spellcheck="false"></label>
+        <label>How it runs<select name="type"><option value="stdio" ${s.type !== "http" ? "selected" : ""}>A command on this server</option><option value="http" ${s.type === "http" ? "selected" : ""}>An address (HTTP)</option></select></label>
+      </div>
+      <label class="${s.type === "http" ? "hidden" : ""}" data-for="stdio">Command<input type="text" name="command" value="${esc(s.command || "")}" placeholder="npx -y @notionhq/notion-mcp-server" spellcheck="false"></label>
+      <label class="${s.type === "http" ? "" : "hidden"}" data-for="http">Address<input type="text" name="url" value="${esc(s.url || "")}" placeholder="https://mcp.example.com/mcp" spellcheck="false"></label>
+      <label>${s.type === "http" ? "Headers" : "Environment"} <span class="muted">(one NAME=value per line; saved values aren't shown: leave them empty to keep them)</span>
+        <textarea name="pairs" rows="2" spellcheck="false" placeholder="${s.type === "http" ? "Authorization=Bearer …" : "NOTION_TOKEN=ntn_…"}">${esc(pairs(s.type === "http" ? s.headers : s.env))}</textarea></label>
+      <div><span class="mcp-label">Who can use it</span>${roleBoxes(s.roles || [], `roles-${i}`)}</div>
+      <button type="button" class="act-link" data-action="mcp-remove" data-i="${i}">Remove this server</button></fieldset>`;
+  return `<p class="sub-crumb"><a href="#/settings/integrations">Integrations</a> › Other tools</p>` + settingsHead("Other tools (MCP)", "") + `
+    <p class="muted" style="max-width:68ch">Any <a href="https://modelcontextprotocol.io/examples" target="_blank" rel="noopener">MCP server</a>: a database, Notion, Linear, your own tools. Agents running on Claude get its tools (named <code>mcp__&lt;name&gt;__…</code>), and ask you before using them like any other tool. Agents on other models don't see them.</p>
+    <form class="form" id="mcp-form">${servers.map(row).join("") || `<p class="muted">No servers yet.</p>`}
+      <div class="btn-row"><button type="button" class="btn" data-action="mcp-add">Add a server</button><button class="btn primary">Save</button></div>
+      <p class="hint">A command runs on this server, as Hive's user, so install what it needs there. Running agents pick a change up in their next conversation.</p>
+    </form>`;
+}
+function readMcpForm() {
+  return [...document.querySelectorAll(".mcp-server")].map((fs) => {
+    const v = (n) => fs.querySelector(`[name="${n}"]`).value.trim(), type = v("type");
+    const pairs = Object.fromEntries(fs.querySelector('[name="pairs"]').value.split("\n").map((l) => l.trim()).filter(Boolean)
+      .map((l) => [l.split("=")[0].trim(), l.includes("=") ? l.slice(l.indexOf("=") + 1).trim() : ""]));
+    return { name: v("name"), type, command: v("command"), url: v("url"), [type === "http" ? "headers" : "env"]: pairs,
+      roles: [...fs.querySelectorAll('input[type="checkbox"]:checked')].map((x) => x.value) };
+  });
+}
+
+// ---- files you attach in a chat ----------------------------------------------------------------------------------
+// They go to data/uploads/ first; the message then ends with one "📎 <path>" line per file, which the agent reads
+// (team/tools/files.py) and the chat shows as chips.
+const FILE_ICONS = { xlsx: ["X", "#1d6f42"], xlsm: ["X", "#1d6f42"], csv: ["X", "#1d6f42"], tsv: ["X", "#1d6f42"], docx: ["W", "#2b579a"],
+  pptx: ["P", "#c43e1c"], pdf: ["PDF", "#b42318"], md: ["M", "#5b6a63"], txt: ["T", "#5b6a63"], json: ["{}", "#5b6a63"] };
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg)$/i;
+const fileSize = (n) => n > 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+function fileChip(name, rel, extra = "", remove = "") {
+  const ext = (name.split(".").pop() || "").toLowerCase(), [letter, bg] = FILE_ICONS[ext] || [ext.slice(0, 3).toUpperCase() || "?", "#5b6a63"];
+  const href = rel ? `/api/uploads/${encodeURI(rel)}?token=${encodeURIComponent(TOKEN)}` : "";
+  const icon = IMAGE_EXT.test(name) && rel ? `<img src="${href}" alt="">` : `<span class="fi" style="background:${bg}">${esc(letter)}</span>`;
+  const body = `${icon}<span class="fn">${esc(name)}</span>${extra ? `<small>${extra}</small>` : ""}`;
+  return `<span class="file-chip">${rel ? `<a href="${href}" target="_blank" rel="noopener">${body}</a>` : body}${remove}</span>`;
+}
+// A message you sent: its text, then its attached files as chips.
+function userMessage(text) {
+  const lines = String(text).split("\n"), files = [];
+  while (lines.length && /^📎 /.test(lines[lines.length - 1].trim())) files.unshift(lines.pop().trim().slice(2).trim());
+  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+  const chips = files.map((p) => { const rel = p.includes("/data/uploads/") ? p.split("/data/uploads/")[1] : ""; return fileChip(p.split("/").pop(), rel); }).join("");
+  return `${esc(lines.join("\n"))}${chips ? `<div class="msg-files">${chips}</div>` : ""}`;
+}
+function renderAttachments(agent) {
+  const box = document.getElementById("attach-list");
+  if (!box) return;
+  const list = state.attachments[agent] || [];
+  box.hidden = !list.length;
+  box.innerHTML = list.map((f, i) => fileChip(f.name, f.rel, f.uploading ? "uploading…" : fileSize(f.size),
+    `<button type="button" class="fx" data-action="attach-remove" data-i="${i}" aria-label="Remove ${esc(f.name)}">✕</button>`)).join("");
+}
+async function attachFiles(agent, files) {
+  const list = state.attachments[agent] ||= [];
+  for (const file of files) {
+    const item = { name: file.name, size: file.size, uploading: true };
+    list.push(item); renderAttachments(agent);
+    try {
+      const res = await fetch("/api/uploads", { method: "POST", body: file,
+        headers: { "x-token": TOKEN, "x-filename": encodeURIComponent(file.name), "content-type": "application/octet-stream" } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Couldn't attach ${file.name}.`);
+      Object.assign(item, data, { uploading: false });
+    } catch (err) {
+      list.splice(list.indexOf(item), 1);
+      toast(err.message, true);
+    }
+    if (route().page === "agent" && route().id === agent) renderAttachments(agent);
+  }
+}
+
 // One dot beside Integrations, whatever is set up: red when one needs attention, green when they're all fine.
 function integrationsDot(live) {
-  const on = [live.connected && "Slack", editorOn() && "Editor"].filter(Boolean);
+  const on = [live.connected && "Slack", editorOn() && "Editor",
+    ...["figma", "clickup", "jira", "sentry", "mcp"].filter((c) => state.connectors && connectorOn(c)).map((c) => state.connectors[c]?.name || "Other tools")].filter(Boolean);
   if (live.error) return `<span class="bad" title="Slack: ${esc(live.error)}">●</span>`;
+  const bad = ["figma", "clickup", "jira", "sentry"].filter(connectorBad);
+  if (bad.length) return `<span class="bad" title="Couldn't connect: ${bad.map((c) => state.connectors[c].name).join(", ")}">●</span>`;
   return on.length ? `<span class="ok" title="On: ${on.join(", ")}">●</span>` : "";
 }
 
@@ -3218,13 +3388,23 @@ const afterRender = {
     text.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); document.getElementById("composer").requestSubmit(); }
     });
-    document.getElementById("composer").addEventListener("submit", async (e) => {
+    const form = document.getElementById("composer");
+    renderAttachments(r.id);
+    document.getElementById("attach-input").addEventListener("change", (e) => { attachFiles(r.id, [...e.target.files]); e.target.value = ""; });
+    form.addEventListener("dragover", (e) => { if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); form.classList.add("dropping"); } });
+    form.addEventListener("dragleave", (e) => { if (!form.contains(e.relatedTarget)) form.classList.remove("dropping"); });
+    form.addEventListener("drop", (e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); form.classList.remove("dropping"); attachFiles(r.id, [...e.dataTransfer.files]); });
+    text.addEventListener("paste", (e) => { const files = [...(e.clipboardData?.files || [])]; if (files.length) { e.preventDefault(); attachFiles(r.id, files); } });
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const value = text.value.trim();
-      if (!value) return;
-      text.value = ""; state.drafts[r.id] = "";
+      const files = state.attachments[r.id] || [];
+      if (files.some((f) => f.uploading)) return toast("Wait for the files to finish attaching.");
+      const typed = text.value.trim();
+      if (!typed && !files.length) return;
+      const value = (typed || `I've attached ${files.length === 1 ? "a file" : `${files.length} files`}.`) + (files.length ? "\n\n" + files.map((f) => `📎 ${f.path}`).join("\n") : "");
+      text.value = ""; state.drafts[r.id] = ""; state.attachments[r.id] = []; renderAttachments(r.id);
       const ok = await act(() => api(`/api/agents/${r.id}/message`, { method: "POST", body: { text: value } }));
-      if (!ok) { text.value = value; state.drafts[r.id] = value; resync(); }
+      if (!ok) { text.value = typed; state.drafts[r.id] = typed; state.attachments[r.id] = files; renderAttachments(r.id); resync(); }
     });
   },
   finance() {
@@ -3276,6 +3456,34 @@ const afterRender = {
       e.preventDefault();
       const saved = await act(() => api("/api/settings/console-url", { method: "PUT", body: { console_url: document.getElementById("console-url").value } }), "Address saved.");
       if (saved) { state.settings = saved; render(true); }
+    });
+    document.getElementById("connector-form")?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target, cid = form.dataset.cid, c = state.connectors[cid];
+      const fields = {};
+      for (const [k, f] of Object.entries(c.fields)) {
+        const input = form.querySelector(`[name="${k}"]`);
+        if (!input.disabled && (!f.secret || input.value.trim())) fields[k] = input.value.trim();
+      }
+      const body = { fields, roles: [...form.querySelectorAll('input[name="roles"]:checked')].map((x) => x.value) };
+      if (c.tickets) body.options = { comment: form.querySelector('[name="comment"]').checked,
+        move: Object.fromEntries([...form.querySelectorAll("[data-move]")].map((x) => [x.dataset.move, x.value.trim()])) };
+      const saved = await act(() => api(`/api/connectors/${cid}`, { method: "PUT", body }));
+      if (!saved) return;
+      state.connectors[cid] = saved;
+      if (!saved.connected) { render(true); return toast("Saved. Fill in every field to connect."); }
+      const button = form.querySelector(".btn.primary"); button.disabled = true; button.textContent = "Testing…";
+      const t = await act(() => api(`/api/connectors/${cid}/test`, { method: "POST" }));
+      await render(true);
+      if (t) toast(t.message, !t.ok);
+    });
+    const mcp = document.getElementById("mcp-form");
+    mcp?.addEventListener("change", (e) => { if (e.target.name === "type") { state.mcpDraft = readMcpForm(); render(true); } });
+    mcp?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const servers = readMcpForm();
+      const saved = await act(() => api("/api/connectors/mcp", { method: "PUT", body: { servers } }), "Saved. Agents on Claude get these tools in their next conversation.");
+      if (saved) { state.connectors.mcp = saved; state.mcpDraft = null; render(true); }
     });
     document.getElementById("slack-form")?.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -3411,6 +3619,33 @@ const actions = {
     if (value !== null && value.trim() && value.trim() !== personOf(name)) await renameAgent(name, value);
   },
   "new-shell": () => openShell(),
+  "connector-disconnect": async (el) => {
+    const name = state.connectors[el.dataset.cid].name;
+    if (!confirm(`Disconnect ${name} and forget its token? Agents stop using it from their next conversation.`)) return;
+    const done = await act(() => api(`/api/connectors/${el.dataset.cid}`, { method: "DELETE" }), `${name} disconnected.`);
+    if (done) render(true);
+  },
+  "connector-test": async (el) => {
+    el.disabled = true; el.textContent = "Testing…";
+    const t = await act(() => api(`/api/connectors/${el.dataset.cid}/test`, { method: "POST" }));
+    await render(true);
+    if (t) toast(t.message, !t.ok);
+  },
+  "mcp-add": () => {
+    state.mcpDraft = readMcpForm();
+    state.mcpDraft.push({ name: "", type: "stdio", command: "", env: {}, roles: ["techlead", "dev"] });
+    render(true);
+  },
+  "mcp-remove": (el) => {
+    state.mcpDraft = readMcpForm();
+    state.mcpDraft.splice(Number(el.dataset.i), 1);
+    render(true);
+  },
+  "attach-remove": (el) => {
+    const list = state.attachments[route().id] || [];
+    list.splice(Number(el.dataset.i), 1);
+    renderAttachments(route().id);
+  },
   "slack-disconnect": async () => {
     if (!confirm("Disconnect Slack and forget its tokens?")) return;
     const saved = await act(() => api("/api/settings/slack", { method: "PUT", body: { bot_token: "", app_token: "" } }), "Slack disconnected.");

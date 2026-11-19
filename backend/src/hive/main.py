@@ -15,12 +15,12 @@ import time
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Form, HTTPException, Request, WebSocket
+from fastapi import Body, FastAPI, Form, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import access, backup, board, chats, costs, editor, ops, store, team, terminal, visuals
+from . import access, backup, board, chats, connectors, costs, editor, ops, store, team, terminal, uploads, visuals
 from .agents import ORCHESTRATOR_KEY, TEAM_ACTION, AgentManager
 from .slack import SlackBridge
 from .engines import PROVIDERS
@@ -808,6 +808,50 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         return public_settings()
+
+    # ---- connectors (Settings → Integrations): Figma, ClickUp, Jira, Sentry, MCP servers; see connectors.py ----
+
+    @app.get("/api/connectors")
+    def connectors_list():
+        return connectors.public()
+
+    @app.put("/api/connectors/{cid}")
+    def connector_save(cid: str, body: dict = Body(...)):
+        try:
+            return connectors.save_mcp(body.get("servers") or []) if cid == "mcp" else connectors.save(cid, body)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+
+    @app.delete("/api/connectors/{cid}")
+    def connector_disconnect(cid: str):
+        if cid not in connectors.CATALOG:
+            raise HTTPException(404, f"Unknown connector: {cid}")
+        return connectors.disconnect(cid)
+
+    @app.post("/api/connectors/{cid}/test")
+    async def connector_test(cid: str):
+        try:
+            ok, message = await connectors.test(cid)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc))
+        return {"ok": ok, "message": message}
+
+    # ---- files you attach in a chat (data/uploads/), see uploads.py ----------------------
+
+    @app.post("/api/uploads")
+    async def upload(request: Request):
+        """A file sent as the request's body, its name in X-Filename (URL-encoded)."""
+        try:
+            return await uploads.receive(request.stream(), request.headers.get("x-filename", "file"))
+        except uploads.UploadError as exc:
+            raise HTTPException(400, str(exc))
+
+    @app.get("/api/uploads/{rel:path}")
+    def uploaded(rel: str):
+        path = uploads.find(rel)
+        if not path:
+            raise HTTPException(404, f"No file uploads/{rel}.")
+        return FileResponse(path, filename=path.name, content_disposition_type="inline")
 
     @app.get("/api/slack")
     async def slack_status():

@@ -40,6 +40,7 @@ class ClaudeCodeEngine(AgentEngine):
             permission_mode=cfg.permission_mode,
             can_use_tool=self._can_use_tool,
             disallowed_tools=["AskUserQuestion"],  # questions come to you as chat text
+            mcp_servers=cfg.mcp_servers or {},     # Settings → Integrations → Other tools
             resume=claude_session,
             include_partial_messages=True,  # stream thinking and replies as they're written
             env={"AGENT_ID": cfg.agent, **(cfg.env or {})},    # the team's tools use it for inbox and claims

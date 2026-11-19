@@ -26,6 +26,20 @@ rewriting a finished branch doesn't bother it. New branches start from the base 
 **Routing.** New work goes to any agent of the role. Rework goes back to the developer who built it, and a
 re-review to the same reviewer.
 
+## Starting from a ticket, a design or an error
+
+With the apps connected (**Settings → Integrations**, see [Installation](INSTALL.md#connect-figma-clickup-jira-sentry-and-other-tools)),
+paste links into a chat and the agents read them:
+
+- *"Build CU-86c2xk1ab"* or a Jira link: the Tech Lead reads the ticket (description, checklists, attachments,
+  comments), writes the spec from it and links the task to it. From then on Hive comments on the ticket as the task
+  moves, and moves it too if you set that up.
+- A Figma link (*"Copy link to selection"* on the frame): the Tech Lead shows the design next to a screenshot of
+  today's screen and writes its exact values into the spec; the dev builds to them; the reviewer flags a screen that
+  doesn't match.
+- A Sentry issue link: the Tech Lead or the dev reads the stack trace, breadcrumbs and release, and starts from there.
+- Files: attach a spreadsheet of prices, a Word brief or a PDF to any message.
+
 ## Reviewing the code yourself
 
 Open a task and press **Review the code** (also in the Dev's and Reviewer's chats).

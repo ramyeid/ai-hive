@@ -1216,3 +1216,40 @@ html.embed main { padding: 10px 14px 0; }
 /* in the Office's chat panel: the chat fills the panel, the composer sits at the bottom whatever is above */
 html.embed .chat-page { height: calc(100vh - 10px); height: calc(100dvh - 10px); }
 html.embed .composer { position: static; padding-bottom: 12px; }
+
+/* ---- connectors (Settings → Integrations → Figma, ClickUp, Jira, Sentry, Other tools) ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hidden { display: none !important; }
+.role-checks { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 6px; }
+.form label.role-check { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px 5px 9px; border: 1px solid var(--rule); border-radius: 20px; background: var(--panel); font-weight: 400; font-size: 0.86rem; cursor: pointer; }
+.form label.role-check:has(input:checked) { border-color: var(--brand); background: var(--brand-soft); }
+.form label.check { display: flex; align-items: center; gap: 8px; font-weight: 400; }
+.status-map { display: grid; grid-template-columns: max-content minmax(0, 260px); gap: 6px 14px; align-items: center; }
+.status-map label { font-weight: 400; font-size: 0.88rem; }
+.can-list { margin: 0; padding-left: 1.2em; } .can-list li + li { margin-top: 4px; }
+.form .section { margin-top: 18px; }
+.mcp-server { display: flex; flex-direction: column; gap: 8px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); }
+.mcp-server legend { padding: 0 6px; font-weight: 600; }
+.mcp-server label { display: flex; flex-direction: column; gap: 4px; font-weight: 500; }
+.mcp-server label .muted { font-weight: 400; font-size: 0.8rem; }
+.mcp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mcp-label { display: block; font-weight: 500; margin-bottom: 2px; }
+.mcp-server .act-link { align-self: flex-start; color: var(--danger); }
+/* files attached in a chat: chips above the message box, and under the message once sent */
+.attach-btn { flex: none; align-self: flex-end; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--rule); border-radius: var(--radius-s); background: var(--panel); color: var(--muted); cursor: pointer; }
+.attach-btn:hover { color: var(--ink); background: var(--sunken); }
+.attach-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.attach-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.attach-list[hidden] { display: none; }
+.composer.dropping .compose-box { outline: 2px dashed var(--brand); outline-offset: 3px; border-radius: var(--radius-m); }
+.file-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 320px; padding: 4px 8px 4px 5px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sunken); font-size: 0.82rem; color: var(--ink); }
+.file-chip > a { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: inherit; text-decoration: none; }
+.file-chip > a:hover .fn { text-decoration: underline; }
+.file-chip .fi { flex: none; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 3px; border-radius: 5px; color: #fff; font: 700 0.62rem/1 var(--mono, monospace); }
+.file-chip img { flex: none; width: 34px; height: 34px; border-radius: 5px; object-fit: cover; background: var(--panel); }
+.file-chip .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip small { flex: none; color: var(--muted); }
+.file-chip .fx { flex: none; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; font-size: 0.8rem; }
+.msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; white-space: normal; }
+.compose-box .attach-btn { border: 0; background: none; }
+.mcp-server label.role-check { flex-direction: row; gap: 7px; font-weight: 400; }

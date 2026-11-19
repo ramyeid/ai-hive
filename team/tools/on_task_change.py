@@ -97,6 +97,13 @@ def process(path: Path, actor: str | None = None) -> int:
     state[tid] = status
     save_state(state)
     log_activity(meta, previous, status, actor)
+    if (meta.get("ticket") or "").strip():   # its ClickUp ticket / Jira issue hears about it, in the background
+        try:
+            subprocess.Popen([sys.executable, str(Path(__file__).with_name("tickets.py")), "sync", str(path),
+                              previous or "new", status], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError:
+            pass
 
     to = recipient(meta, status)
     if to:

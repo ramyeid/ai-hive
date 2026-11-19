@@ -63,6 +63,8 @@ next. Nothing is pushed to your remote.
 - **The Office**: the team as people in a 3D office: who is at their desk working, who is on a break, who needs you. Click someone to chat with them, HR to hire, Finance for today's spending.
 - **A face for every agent**: each agent is one of the Office's 14 people (7 women, 7 men), matched to its name, and that face is shown next to it everywhere in the console.
 - **Slack**: talk to the Orchestrator or any agent, approve requests with buttons, and follow each task in its own thread.
+- **Connected apps**: Figma (agents read a design's layout, spacing and colours from its link, and show the frame next to their mockups), ClickUp and Jira (start a task from a ticket; Hive comments on it and moves it as the task moves), Sentry (fix an error from its stack trace and breadcrumbs), and any MCP server.
+- **Attach files in a chat**: Excel, CSV, Word, slides, PDFs and pictures; a spreadsheet reaches the agent as a table per sheet.
 - **Runs locally or on a server** behind a VPN, with optional password sign-in; light and dark themes; works on phones (the Office is for larger screens).
 - **Model choice per agent**: Claude (through Claude Code), OpenAI, DeepSeek, Qwen or Kimi.
 
@@ -92,13 +94,13 @@ bash scripts/start.sh      # opens http://127.0.0.1:8420
 ```
 
 Open the Tech Lead and describe what you need, for example: *"In ~/code/my-api, users need to reset their password
-by email."* See [Installation](docs/INSTALL.md) for servers, Slack and other AI providers.
+by email."* See [Installation](docs/INSTALL.md) for servers, Slack, connected apps and other AI providers.
 
 ## Documentation
 
 | | |
 |---|---|
-| [Installation](docs/INSTALL.md) | Requirements, install, updates, running on a server, Slack, AI providers, uninstall |
+| [Installation](docs/INSTALL.md) | Requirements, install, updates, running on a server, Slack, Figma / ClickUp / Jira / Sentry / MCP, AI providers, uninstall |
 | [Usage](docs/USAGE.md) | A task from start to finish, code review, the Coach, several agents per role, the terminal |
 | [Console](docs/CONSOLE.md) | Every page of the console, the Office, Finance, approvals, the browser terminal |
 | [Development](docs/DEVELOPMENT.md) | Repository layout, architecture, tests, adding an AI provider |

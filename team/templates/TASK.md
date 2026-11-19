@@ -7,6 +7,7 @@ status: draft
 priority: medium        # low | medium | high | urgent
 branch: BRANCH_NAME             # feature-<title>; shared by every follow-up task on this feature
 follows: FOLLOWS                # set by new_task.py --follow-up: the earlier task whose feature this continues
+ticket:                         # the ClickUp ticket or Jira issue this came from, as its link (no #): Hive comments on it as the task moves
 from_commit:                    # set by claim.py: the branch's commit when the dev started; this task's changes are from_commit..HEAD
 techlead: TECHLEAD_ID                # who wrote the spec
 dev:                     # set by claim.py: the dev building it (rework comes back to them)

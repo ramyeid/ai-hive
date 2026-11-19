@@ -59,6 +59,8 @@ def main() -> None:
                         help="more work on that task's feature: same branch and base, new commits on top")
     parser.add_argument("--new-branch", action="store_true",
                         help="with --follow-up: the earlier branch is already merged, so start a new one from the base")
+    parser.add_argument("--ticket", default="", metavar="LINK",
+                        help="the ClickUp ticket or Jira issue this task comes from: Hive comments on it as the task moves")
     args = parser.parse_args()
     project = Path(args.project).expanduser().resolve()
     if not (project / ".git").exists():
@@ -86,6 +88,7 @@ def main() -> None:
         body = (TEMPLATES / "TASK.md").read_text(encoding="utf-8")
         body = (body.replace("BRANCH_NAME", branch)
                     .replace("FOLLOWS", follows)
+                    .replace("ticket:                        ", f"ticket: {args.ticket.lstrip('#')}" if args.ticket else "ticket:                        ")
                     .replace("TASK-000", tid)
                     .replace("Short imperative title", title)
                     .replace("PROJECT_PATH", str(project))

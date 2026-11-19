@@ -44,6 +44,7 @@ class EngineConfig:
     role: str = ""             # techlead | dev | reviewer | coach
     effort: str = ""           # Claude only: low | medium | high | xhigh | max ("" = the default)
     env: dict | None = None    # extra environment for the agent's commands (the Orchestrator's console key)
+    mcp_servers: dict | None = None   # Claude only: MCP servers from Settings → Integrations, for this agent's role
 
 
 class AgentEngine(ABC):

@@ -173,6 +173,34 @@ The console connects out to Slack (Socket Mode), so no public address is needed.
 console. On a server, the settings can come from `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_USERS` and
 `SLACK_CHANNEL` instead.
 
+## Connect Figma, ClickUp, Jira, Sentry and other tools
+
+In the console, **Settings → Integrations**, each has its own page: how to make its token, where to paste it, a
+**Save and test** that says which account it connected as, and **Who can use it** (the roles whose agents are told
+about it; its tools refuse the others). Tokens are kept in `data/console/settings.json` and never shown again in
+the browser. Agents use them through the team's tools (`team/tools/figma.py`, `clickup.py`, `jira.py`,
+`sentry.py`), so they work on every AI provider; a running agent picks a change up in its next conversation.
+
+| App | What you paste | What the agents do with it |
+|---|---|---|
+| Figma | A personal access token with *File content: read* | Read a frame's layers (layout, spacing, text, colours) from its link; show it next to their mockups. Read-only. |
+| ClickUp | A personal API token (`pk_…`) | Read a ticket with its attachments and comments; comment; change its status |
+| Jira (Cloud) | Your site, email and an API token | The same for Jira issues |
+| Sentry | An auth token (`event:read`, `project:read`, `org:read`); the address if self-hosted | Read an issue: stack trace, breadcrumbs, release. Read-only. |
+
+A task made from a ticket keeps its link in its `ticket:` field. Each time the task moves, Hive comments on the
+ticket ("TASK-012 is now ready for review", with a link to it if **Access & links** has the console's address)
+and, if you fill in **As tasks move** on the app's page, moves the ticket to the status you named. What happened
+is logged in `data/tasks/.inbox/tickets.log`.
+
+**Other tools (MCP)**: any MCP server, started by a command on the server or reached at an address, with its
+environment or headers, for the roles you pick. Only agents running on Claude get them (Claude Code runs them),
+and they ask before using them like any other tool.
+
+The official Figma and ClickUp MCP servers sign in through a browser, which a server can't do; that's why Figma
+and ClickUp use tokens here. On a server, `FIGMA_TOKEN`, `CLICKUP_TOKEN`, `JIRA_SITE` / `JIRA_EMAIL` /
+`JIRA_TOKEN` and `SENTRY_TOKEN` / `SENTRY_URL` in the environment take precedence over Settings.
+
 ## AI providers
 
 Each agent runs on Claude by default, through your Claude Code login. To use another provider, add its API key in
