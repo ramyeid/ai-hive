@@ -38,6 +38,7 @@ def _summary(path: Path) -> dict:
         "techlead": meta.get("techlead", ""), "dev": meta.get("dev", ""), "reviewer": meta.get("reviewer", ""),
         "worktree": meta.get("worktree", ""),
         "follows": meta.get("follows", ""), "from_commit": meta.get("from_commit", ""),
+        "cancelled": meta.get("cancelled", ""), "cancelled_from": meta.get("cancelled_from", ""),   # when the lead cancelled it (the reason is in the spec's ## Cancelled)
         "ready": {"done": sum(t != " " for t in ticks), "total": len(ticks)},
     }
 

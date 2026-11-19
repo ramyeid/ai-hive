@@ -23,6 +23,11 @@ merged that branch: then the follow-up gets a new branch from the base.
 rewriting a finished branch doesn't bother it. New branches start from the base as it is on GitHub (Hive fetches
 `origin`, and never changes your local branches), so they include what you merged there.
 
+**Cancelling.** On the task's page, **⋯ → Cancel this task**, with an optional reason (or ask the Orchestrator). Whoever
+is on it stops and is told why, the task leaves the board, Home and Reviews, and its ticket hears about it; its
+branch and worktree stay. **Reopen** brings it back: ready for a dev if its spec was approved, otherwise a draft.
+The list view's status filter has **Cancelled**.
+
 **Routing.** New work goes to any agent of the role. Rework goes back to the developer who built it, and a
 re-review to the same reviewer.
 

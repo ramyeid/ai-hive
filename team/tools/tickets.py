@@ -26,7 +26,7 @@ from tasklib import INBOX, parse  # noqa: E402
 
 LABELS = {"draft": "in draft", "ready-for-dev": "ready for a developer", "in-dev": "being built",
           "ready-for-review": "ready for review", "in-review": "in review", "changes-requested": "back with the developer for changes",
-          "blocked": "blocked, waiting on an answer", "done": "done"}
+          "blocked": "blocked, waiting on an answer", "done": "done", "cancelled": "cancelled"}
 LOG = INBOX / "tickets.log"
 
 

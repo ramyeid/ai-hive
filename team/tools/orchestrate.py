@@ -11,6 +11,7 @@ hasn't answered within ~100 seconds, this says so and the action happens later, 
   orchestrate.py tell Nabil "message"        pass a message to an agent
   orchestrate.py hand TASK-012 Wael ["note"] give a task to an agent (the console's hand-off prompt + your note)
   orchestrate.py coach [TASK-012,TASK-019 | all | <project>]   start a Coach review (default: since its last one)
+  orchestrate.py cancel TASK-012 ["why"]     cancel a task: whoever is on it stops; branch and worktree stay
 
 Needs CONSOLE_API and CONSOLE_ORCHESTRATOR_KEY, which the console gives the Orchestrator.
 """
@@ -97,6 +98,8 @@ def main(argv: list[str]) -> None:
         act({"action": "tell", "agent": args[0], "text": " ".join(args[1:])})
     elif command == "hand" and len(args) >= 2:
         act({"action": "hand", "task": args[0], "agent": args[1], "text": " ".join(args[2:])})
+    elif command == "cancel" and len(args) >= 1:
+        act({"action": "cancel", "task": args[0], "text": " ".join(args[1:])})
     elif command == "coach":
         act({"action": "coach", "text": " ".join(args)})
     else:

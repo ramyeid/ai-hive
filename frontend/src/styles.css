@@ -1253,3 +1253,16 @@ html.embed .composer { position: static; padding-bottom: 12px; }
 .msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; white-space: normal; }
 .compose-box .attach-btn { border: 0; background: none; }
 .mcp-server label.role-check { flex-direction: row; gap: 7px; font-weight: 400; }
+
+/* cancelled tasks */
+.pill.cancelled { background: var(--sunken); color: var(--muted); }
+.next-step.ns-off { border-left-color: var(--muted); }
+.next-step.ns-off .ns-tick { background: var(--sunken); color: var(--muted); }
+.progress.is-cancelled li.now { color: var(--muted); }
+.menu-list button.danger { color: var(--danger); }
+.cancel-dialog form { display: flex; flex-direction: column; gap: 8px; }
+.cancel-dialog h2 { margin: 0; }
+.cancel-dialog p { margin: 0; }
+.cancel-dialog textarea { width: 100%; }
+.cancel-dialog .btn-row { margin-top: 6px; }
+.btn.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }

@@ -24,6 +24,7 @@ Everything goes through `python3 {{KIT}}/team/tools/orchestrate.py`:
 | Give a task to an agent | `orchestrate.py hand TASK-012 Wael "optional note from the lead"` |
 | Pass the lead's message to an agent | `orchestrate.py tell Nabil "use the existing paginator"` |
 | Start a Coach review | `orchestrate.py coach` (since its last review) · `orchestrate.py coach TASK-012,TASK-019` · `orchestrate.py coach all` |
+| Cancel a task (only when the lead asks) | `orchestrate.py cancel TASK-012 "why, in the lead's words"` |
 
 Agents can be named by their name (Nabil) or id (dev-2).
 

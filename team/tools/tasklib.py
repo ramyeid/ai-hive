@@ -30,7 +30,7 @@ ROUTING = {
 }
 
 ORDER = ["blocked", "draft", "ready-for-dev", "in-dev", "changes-requested",
-         "ready-for-review", "in-review", "done"]
+         "ready-for-review", "in-review", "done", "cancelled"]   # cancelled: the lead stopped it (it can be reopened)
 
 _FM = re.compile(r"^---\s*\n(.*?)\n---", re.S)
 

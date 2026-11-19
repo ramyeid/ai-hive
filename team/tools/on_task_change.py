@@ -106,6 +106,9 @@ def process(path: Path, actor: str | None = None) -> int:
             pass
 
     to = recipient(meta, status)
+    if status == "cancelled":   # whoever had it stops: tell them, nobody else
+        had = meta.get(HOLDER.get(previous or "", ""), "")
+        to = "@" + had if had else None
     if to:
         # A role name means its shared pool (.inbox/dev.md); an agent ID its own inbox.
         target = INBOX / "agents" / f"{to[1:]}.md" if to.startswith("@") else INBOX / f"{to}.md"

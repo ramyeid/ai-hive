@@ -279,8 +279,8 @@ function choiceOf(name) {
 const modelLabel = (name) => { const c = choiceOf(name); return `${providerOf(c.provider).label}, ${c.model || "default model"}`; };
 
 const ownerOf = (status) => (STAGES.find((s) => s.status === status) || { owner: "lead" }).owner;
-const stageLabel = (status) => (STAGES.find((s) => s.status === status) || { label: status === "blocked" ? "Blocked" : status }).label;
-const statusPill = (status) => `<span class="pill ${status === "blocked" ? "lead" : ownerOf(status)}">${esc(stageLabel(status))}</span>`;
+const stageLabel = (status) => (STAGES.find((s) => s.status === status) || { label: { blocked: "Blocked", cancelled: "Cancelled" }[status] || status }).label;
+const statusPill = (status) => `<span class="pill ${status === "blocked" ? "lead" : status === "cancelled" ? "cancelled" : ownerOf(status)}">${esc(stageLabel(status))}</span>`;
 
 function toolArg(name, input = {}) {
   if (name === "Team action") return input.summary || "";
@@ -733,9 +733,9 @@ const reviewLink = (t, primary = false, size = "small") => !t.from_commit ? ""
 // The one "next step" card, on Home, above a chat's message box and on the code review: whose turn it is (their
 // face, which opens their chat), the task, one line of why, one button, at most a link. Pink when someone is
 // waiting on your answer, green for the next step; "ns-bar" lays it out in one line.
-function nextStep({ tone = "ns-next", who = "", task = null, title = "", said = "", button = "", link = "", layout = "ns-card" }) {
+function nextStep({ tone = "ns-next", who = "", task = null, title = "", said = "", button = "", link = "", layout = "ns-card", icon = "✓" }) {
   const face = who && state.agents[who] ? `<a class="ns-face" href="#/agents/${esc(who)}" title="Open ${esc(personOf(who))}'s chat">${avatar(who)}</a>`
-    : `<span class="ns-face ns-tick" aria-hidden="true">✓</span>`;
+    : `<span class="ns-face ns-tick" aria-hidden="true">${icon}</span>`;
   const head = task ? `<a href="#/tasks/${esc(task.id)}">${esc(task.id)}</a> ${esc(title || task.title)}` : esc(title);
   return `<article class="next-step ${tone} ${layout}" role="status">${face}<div class="ns-text"><div class="ns-title">${head}</div>${said ? `<div class="ns-said">${said}</div>` : ""}</div>${
     button || link ? `<div class="ns-acts">${button}${link}</div>` : ""}</article>`;
@@ -851,7 +851,7 @@ async function Tasks() {
       <select id="task-project" aria-label="Project">${option("", "All projects", taskFilter.project)}${projects.map((p) => option(p, p, taskFilter.project)).join("")}</select>
       <select id="task-agent" aria-label="Agent">${option("", "Anyone", taskFilter.agent)}${agentIds().filter((n) => ["techlead", "dev", "reviewer"].includes(roleOf(n))).map((n) => option(n, nameOf(n), taskFilter.agent)).join("")}</select>
       <input type="text" id="task-q" placeholder="Search tasks" value="${esc(taskFilter.q)}" aria-label="Search tasks">
-      ${view === "list" ? `<select id="task-status" aria-label="Status">${option("open", "Open tasks", taskFilter.status)}${option("all", "All tasks", taskFilter.status)}${option("blocked", "Blocked", taskFilter.status)}${STAGES.map((s) => option(s.status, s.label, taskFilter.status)).join("")}</select>` : ""}
+      ${view === "list" ? `<select id="task-status" aria-label="Status">${option("open", "Open tasks", taskFilter.status)}${option("all", "All tasks", taskFilter.status)}${option("blocked", "Blocked", taskFilter.status)}${STAGES.map((s) => option(s.status, s.label, taskFilter.status)).join("")}${option("cancelled", "Cancelled", taskFilter.status)}</select>` : ""}
       <span class="segmented" role="group" aria-label="View">${[["board", "Board"], ["list", "List"]].map(([v, l]) =>
         `<button class="btn small" data-action="board-view" data-view="${v}" aria-pressed="${v === view}">${l}</button>`).join("")}</span>
       <a class="btn primary" href="#/agents/${techlead}">New task</a></div>`;
@@ -866,7 +866,7 @@ async function Tasks() {
     return head + `<div class="board">${cols}</div>`;
   }
 
-  const shown = matching.filter((t) => taskFilter.status === "all" || (taskFilter.status === "open" ? t.status !== "done" : t.status === taskFilter.status));
+  const shown = matching.filter((t) => taskFilter.status === "all" || (taskFilter.status === "open" ? !["done", "cancelled"].includes(t.status) : t.status === taskFilter.status));
   const unlinked = (await api("/api/costs")).unlinked;
   return head + `${costText(unlinked) ? `<p class="muted">Conversations not linked to any task: ${esc(costText(unlinked))}. <a href="#/history">See Activity</a></p>` : ""}
     ${shown.length ? `<div class="table-wrap"><table>
@@ -920,10 +920,22 @@ async function TaskChat(r) {
 const PROGRESS = [["draft", "Draft"], ["ready-for-dev", "Ready for dev"], ["in-dev", "In dev"], ["ready-for-review", "Ready for review"], ["in-review", "In review"], ["done", "Done"]];
 
 function progressLine(t) {
-  const where = t.status === "changes-requested" ? "in-dev" : t.status === "blocked" ? (t.activity.find((a) => a.to !== "blocked")?.to || "draft") : t.status;
+  const stoppedAt = t.status === "cancelled" ? (t.cancelled_from || t.activity.find((a) => a.to === "cancelled")?.from || "draft") : "";
+  const where = t.status === "changes-requested" ? "in-dev" : t.status === "blocked" ? (t.activity.find((a) => a.to !== "blocked")?.to || "draft")
+    : t.status === "cancelled" ? ({ "changes-requested": "in-dev", blocked: "draft" }[stoppedAt] || stoppedAt) : t.status;
   const at = PROGRESS.findIndex(([k]) => k === where);
-  return `<ol class="progress ${t.status === "blocked" ? "is-blocked" : ""}" aria-label="Progress">${PROGRESS.map(([k, label], i) =>
-    `<li class="${i < at ? "done" : i === at ? "now" : ""}" ${i === at ? 'aria-current="step"' : ""}>${i === at && t.status === "changes-requested" ? "Rework" : i === at && t.status === "blocked" ? `${label} · blocked` : label}</li>`).join("")}</ol>`;
+  const note = { blocked: "blocked", cancelled: "cancelled" }[t.status];
+  return `<ol class="progress ${note ? `is-${note}` : ""}" aria-label="Progress">${PROGRESS.map(([k, label], i) =>
+    `<li class="${i < at ? "done" : i === at ? "now" : ""}" ${i === at ? 'aria-current="step"' : ""}>${i === at && t.status === "changes-requested" ? "Rework" : i === at && note ? `${label} · ${note}` : label}</li>`).join("")}</ol>`;
+}
+
+// Why and when the lead cancelled a task: the spec's last "## Cancelled" section.
+function cancelledNote(t) {
+  const m = (t.markdown || "").match(/## Cancelled\s*\n([^\n]*)\s*$/);
+  const line = m ? m[1] : t.cancelled;
+  const why = (line.match(/: (.*)$/) || [])[1] || "";
+  return nextStep({ layout: "ns-bar ns-off", icon: "✕", title: `Cancelled${t.cancelled ? ` on ${t.cancelled}` : ""}`, said: esc(why === "No reason given." ? "No reason given. Its branch and worktree are kept." : `${why} Its branch and worktree are kept.`),
+    button: `<button class="btn small" data-action="reopen-task" data-task="${esc(t.id)}">Reopen</button>` });
 }
 
 async function TaskDetail(r) {
@@ -946,15 +958,17 @@ async function TaskDetail(r) {
       + `<p><a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts} draft${lr.drafts === 1 ? "" : "s"})` : ""}</a></p>`;
   } else body = `<article class="prose">${md(t.markdown)}</article>`;
   return `<div class="task-head"><div class="title"><small>${esc(t.id)} · ${esc(t.project_name)}</small><h1>${esc(t.title)}</h1>
-      <p class="muted">${statusPill(t.status)} with ${esc(holderText(t).replace(/^You/, "you"))}</p></div>
+      <p class="muted">${statusPill(t.status)}${t.status === "cancelled" ? "" : ` with ${esc(holderText(t).replace(/^You/, "you"))}`}</p></div>
       <div class="btn-row">
-        ${handCandidates(t).length ? handChoice(t, 2, "") + (t.from_commit ? `<a class="act-link" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : "")
+        ${t.status === "cancelled" ? "" : handCandidates(t).length ? handChoice(t, 2, "") + (t.from_commit ? `<a class="act-link" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : "")
           : t.from_commit ? `<a class="btn primary" href="${reviewHref(t.id)}">Review the code${lr.drafts ? ` (${lr.drafts})` : ""}</a>` : ""}
         ${holder && !handCandidates(t).includes(t.assignee) ? (t.status === "blocked" ? answerButton(t.assignee, "") : chatLink(t.assignee)) : ""}
         <details class="menu"><summary class="btn" aria-label="More">⋯</summary><div class="menu-list">
           <button data-action="follow-up" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-project="${esc(t.project)}">Ask the Tech Lead for a follow-up</button>
           ${agentIds().filter((n) => ["techlead", "dev", "reviewer"].includes(roleOf(n))).map((n) => `<button data-action="handoff" data-agent="${n}" data-task="${esc(t.id)}" data-title="${esc(t.title)}">Draft a message to ${esc(nameOf(n))}</button>`).join("")}
+          ${["done", "cancelled"].includes(t.status) ? "" : `<button class="danger" data-action="cancel-task" data-task="${esc(t.id)}" data-title="${esc(t.title)}" data-holder="${esc(t.assignee && state.agents[t.assignee] ? personOf(t.assignee) : "")}">Cancel this task…</button>`}
         </div></details></div></div>
+    ${t.status === "cancelled" ? cancelledNote(t) : ""}
     ${progressLine(t)}
     <div class="task-layout">
       <div><nav class="tabs" aria-label="Task">${tabs.map(([k, label]) => `<a href="#/tasks/${esc(t.id)}${k === "spec" ? "" : `?tab=${k}`}" ${k === tab ? 'aria-current="page"' : ""}>${esc(label)}</a>`).join("")}</nav>${body}</div>
@@ -3624,6 +3638,28 @@ const actions = {
     if (!confirm(`Disconnect ${name} and forget its token? Agents stop using it from their next conversation.`)) return;
     const done = await act(() => api(`/api/connectors/${el.dataset.cid}`, { method: "DELETE" }), `${name} disconnected.`);
     if (done) render(true);
+  },
+  // Cancelling asks why (optional), says what happens, and can be undone with Reopen.
+  "cancel-task": (el) => {
+    let d = document.getElementById("cancel-dialog");
+    if (!d) { d = document.createElement("dialog"); d.id = "cancel-dialog"; d.className = "info-dialog cancel-dialog"; document.body.appendChild(d); }
+    const who = el.dataset.holder;
+    d.innerHTML = `<form method="dialog"><h2>Cancel ${esc(el.dataset.task)}?</h2><p class="muted">${esc(el.dataset.title)}</p>
+      <p>${who ? `${esc(who)} stops working on it and is told why. ` : ""}It leaves the board and Home, and its ticket (if it has one) hears about it. Its branch and worktree are kept, and you can reopen it later.</p>
+      <label for="cancel-reason">Why <span class="muted">(optional)</span></label>
+      <textarea id="cancel-reason" rows="3" placeholder="For example: not needed any more, the client dropped it"></textarea>
+      <div class="btn-row"><button class="btn danger-fill" value="cancel">Cancel the task</button><button class="btn" value="keep">Keep it</button></div></form>`;
+    d.onclose = async () => {
+      if (d.returnValue !== "cancel") return;
+      const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/cancel`, { method: "POST", body: { reason: document.getElementById("cancel-reason").value } }));
+      if (done) { toast(done.message); refreshCounts(); render(true); }
+    };
+    d.showModal();
+    document.getElementById("cancel-reason").focus();
+  },
+  "reopen-task": async (el) => {
+    const done = await act(() => api(`/api/tasks/${encodeURIComponent(el.dataset.task)}/reopen`, { method: "POST" }));
+    if (done) { toast(done.message); refreshCounts(); render(true); }
   },
   "connector-test": async (el) => {
     el.disabled = true; el.textContent = "Testing…";

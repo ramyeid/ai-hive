@@ -496,6 +496,9 @@ def branches() -> list[dict]:
             groups.setdefault((meta["project"], meta["branch"]), []).append(meta)
     out = []
     for (project, branch), tasks in groups.items():
+        tasks = [m for m in tasks if m.get("status") != "cancelled"]   # a cancelled task's work isn't up for review
+        if not tasks:
+            continue
         tasks.sort(key=lambda m: int(re.sub(r"\D", "", m.get("id", "0")) or 0))
         active = [m for m in tasks if m.get("status") in ACTIVE]
         current = (active or [m for m in tasks if m.get("dev")] or tasks)[-1]

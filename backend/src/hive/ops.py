@@ -5,6 +5,7 @@ taps) and by links sent to the lead. Nothing here hands work on by itself: the l
 """
 from __future__ import annotations
 
+import asyncio
 import os
 
 from . import board, store
@@ -89,7 +90,7 @@ def agents(manager) -> list[dict]:
 def status(manager) -> dict:
     """The board in short: every open task, who has it, what waits on the lead, and the team."""
     tasks = board.list_tasks()
-    open_tasks = [t for t in tasks if t["status"] != "done"]
+    open_tasks = [t for t in tasks if t["status"] not in ("done", "cancelled")]
     rows = [{"id": t["id"], "title": t["title"], "status": t["status"], "project": t["project_name"],
              "with": label(t["assignee"]) if t["assignee"] else "", "link": links(t["id"])["task"]} for t in open_tasks]
     waiting = [{"id": t["id"], "title": t["title"], "status": t["status"], "next": WHO_TAKES.get(t["status"], "lead"),
@@ -194,6 +195,61 @@ async def hand(manager, task_id: str, agent_id: str, note: str = "") -> str:
         text += f"\n\nA note from the lead: {note.strip()}"
     await tell(manager, agent_id, text)
     return f"Handed {t['id']} to {label(agent_id)}."
+
+
+def check_cancel(task_id: str) -> dict:
+    t = _task(task_id)
+    if t["status"] in ("done", "cancelled"):
+        raise OpsError(f"{t['id']} is already {t['status']}." + (" Merge it or leave it; there's nothing to cancel."
+                                                                 if t["status"] == "done" else ""))
+    return t
+
+
+async def cancel(manager, task_id: str, reason: str = "") -> str:
+    """Stop a task for good (it can be reopened): whoever is on it stops and is told; its branch and worktree stay."""
+    import on_task_change   # the team's tools (board.py put them on the path)
+    from tasklib import find_task, lock, set_fields
+    t = check_cancel(task_id)
+    holder = t["assignee"]
+    path = find_task(t["id"])
+    with lock():
+        set_fields(path, status="cancelled", cancelled=store.now()[:10], cancelled_from=t["status"])
+        text = path.read_text(encoding="utf-8").rstrip("\n")
+        note = reason.strip() or "No reason given."
+        path.write_text(f"{text}\n\n## Cancelled\n{store.now()[:10]}, by the lead, from {t['status']}: {note}\n", encoding="utf-8")
+    on_task_change.process(path, actor="lead")
+    said = f"Cancelled {t['id']} ({t['title']})."
+    runner = manager.agents.get(holder)
+    if runner and runner.status in ("working", "waiting") and _busy_with(holder, [t]) == t["id"]:
+        await runner.interrupt()
+        for _ in range(40):   # let its turn end before telling it why
+            if runner.status not in ("working", "waiting"):
+                break
+            await asyncio.sleep(0.25)
+    if runner and runner.status == "idle":
+        try:
+            await runner.send(f"The lead cancelled {t['id']} ({t['title']}): {note} Stop working on it and don't change "
+                              f"its files any further. Its branch and worktree stay as they are.")
+            said += f" {label(holder)} stopped and was told why."
+        except Exception:   # noqa: BLE001 (its inbox has the news anyway)
+            pass
+    return said
+
+
+async def reopen(manager, task_id: str) -> str:
+    """Bring a cancelled task back: ready for a dev if its spec was approved, otherwise a draft for the Tech Lead."""
+    import on_task_change
+    from tasklib import find_task, lock, set_fields
+    t = _task(task_id)
+    if t["status"] != "cancelled":
+        raise OpsError(f"{t['id']} isn't cancelled (it's {t['status']}).")
+    to = "ready-for-dev" if t["approved"] else "draft"
+    path = find_task(t["id"])
+    with lock():
+        set_fields(path, status=to, cancelled="", cancelled_from="")
+    if on_task_change.process(path, actor="lead") == 2:   # the readiness check sent it back to draft
+        return f"Reopened {t['id']} as a draft: its spec no longer passes the readiness check, so it's with the Tech Lead."
+    return f"Reopened {t['id']}: {'ready for a dev' if to == 'ready-for-dev' else 'a draft, with the Tech Lead'}."
 
 
 async def coach(manager, scope: str = "") -> str:

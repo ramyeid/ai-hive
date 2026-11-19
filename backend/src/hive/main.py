@@ -81,10 +81,10 @@ class ReviewSubmit(BaseModel):
 
 
 class TeamAction(BaseModel):
-    action: str             # start | stop | tell | hand | coach
+    action: str             # start | stop | tell | hand | coach | cancel
     agent: str = ""         # id or name
     task: str = ""
-    text: str = ""          # tell: the message; hand: a note for the agent; coach: what to review
+    text: str = ""          # tell: the message; hand: a note for the agent; coach: what to review; cancel: why
 
 
 class SlackBody(BaseModel):
@@ -742,7 +742,10 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
         act = body.action
         if act == "coach":
             return f"Start a Coach review ({body.text or 'since its last review'})", lambda: ops.coach(manager, body.text)
-        agent = _ops(ops.find_agent, body.agent)
+        if act == "cancel":
+            agent = ""
+        else:
+            agent = _ops(ops.find_agent, body.agent)
         if act == "start":
             return f"Start {ops.label(agent)}", lambda: ops.start(manager, agent)
         if act == "stop":
@@ -757,7 +760,11 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
             note = f"\n\nWith this note: {body.text.strip()}" if body.text.strip() else ""
             return (f"Hand {t['id']} ({t['title']}) to {ops.label(agent)}{note}",
                     lambda: ops.hand(manager, t["id"], agent, body.text))
-        raise HTTPException(400, "Actions: start, stop, tell, hand, coach.")
+        if act == "cancel":
+            t = _ops(ops.check_cancel, body.task)
+            return (f"Cancel {t['id']} ({t['title']})" + (f"\n\nBecause: {body.text.strip()}" if body.text.strip() else ""),
+                    lambda: ops.cancel(manager, t["id"], body.text))
+        raise HTTPException(400, "Actions: start, stop, tell, hand, coach, cancel.")
 
     @app.post("/api/orchestrator/act")
     async def orchestrator_act(body: TeamAction):
@@ -882,6 +889,20 @@ def create_app(manager: AgentManager | None = None, slack_bridge: SlackBridge | 
     async def hand_task(task_id: str, agent: str):
         try:
             return {"message": await ops.hand(manager, task_id, agent)}
+        except ops.OpsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/tasks/{task_id}/cancel")
+    async def cancel_task(task_id: str, body: dict = Body(default={})):
+        try:
+            return {"message": await ops.cancel(manager, task_id, str(body.get("reason") or ""))}
+        except ops.OpsError as exc:
+            raise HTTPException(409, str(exc))
+
+    @app.post("/api/tasks/{task_id}/reopen")
+    async def reopen_task(task_id: str):
+        try:
+            return {"message": await ops.reopen(manager, task_id)}
         except ops.OpsError as exc:
             raise HTTPException(409, str(exc))
 
